@@ -3,7 +3,7 @@ import { AppService } from '../app.service';
 describe('AppService user-data/timestamp retention', () => {
   function makeService(overrides: Record<string, unknown> = {}): any {
     const service = Object.assign(Object.create(AppService.prototype), {
-      userDataService: { removeRedundantData: jest.fn().mockResolvedValue({ deletedCount: 3 }) },
+      userDataService: {},
       timestampService: { clear: jest.fn().mockResolvedValue({}) },
       logger: { log: jest.fn(), error: jest.fn() },
       ...overrides,
@@ -13,12 +13,11 @@ describe('AppService user-data/timestamp retention', () => {
 
   // Owner rule 2026-10-26 "never delete records from db" (decision 2026-11-08, item 6): the nightly job no longer
   // deletes idle never-paid userData rows. Only the timestamps heartbeat clear remains.
-  it('never calls the userData delete sweep', async () => {
+  it('clears only the timestamps heartbeat (userDataService untouched)', async () => {
     const service = makeService();
 
     await (service as any).runUserDataRetention();
 
-    expect(service.userDataService.removeRedundantData).not.toHaveBeenCalled();
     expect(service.timestampService.clear).toHaveBeenCalledTimes(1);
     expect(service.logger.error).not.toHaveBeenCalled();
   });

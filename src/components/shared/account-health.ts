@@ -12,16 +12,17 @@
  *     CLIENT-SIDE deadline, so a stalled socket cannot hold anything;
  *   - a failure is logged once at warn (mobile masked) and dropped.
  *
- * CMS producer: the swap SpamBot probe persist (clients/client.service.ts isSpamSafeForSwap, source 'cms-probe'). The
- * pool health-check stamps (lastChecked / lastHealthCheckAttemptAt) are not health facts and stay on the pool docs.
+ * CMS producer: BufferClientService.update() / create() whenever a spam field is written (PATCH / PUT /bufferclients;
+ * the swap SpamBot probe in clients/client.service.ts isSpamSafeForSwap passes by 'cms:swap-probe'). The pool
+ * health-check stamps (lastChecked / lastHealthCheckAttemptAt) are not health facts and stay on the pool docs.
  *
  * Two times (tg-platform docs/design/2026-10-30-unified-account-health.md §2.5 / C17): `verdictAt` = this verdict's
  * time and the stale-write guard (applied only when the stored verdictAt is <= the incoming one, or absent);
  * `spamCheckedAt` = the time the status last changed (kept while a verdict repeats the stored status, so a repeat harsh
  * does not restart the 30-day rest). The update is an aggregation pipeline because it reads the stored status. A newer
  * stored doc makes the guarded upsert hit E11000 on `_id`; the writer retries once without upsert (match = it lost an
- * insert race and is applied; no match = 'stale', not logged). `daysLeftBy` names the app whose daysLeft encoding is
- * stored; a verdict without daysLeft (this probe) unsets both.
+ * insert race and is applied; no match = 'stale', not logged). daysLeft is not stored (2026-11-08): it is derived
+ * from status + limitedUntil; old docs keep their daysLeft / daysLeftBy values, nothing unsets them.
  *
  * No secondary index (lookups by `_id`). A write creates the collection.
  * MIRROR: the write shape (ACCOUNT_HEALTH_VERSION, field names, statuses, buildAccountHealthWrite) must stay identical
@@ -51,8 +52,6 @@ export interface AccountHealthVerdictInput {
   verdictAt: AccountHealthTime;
   /** 'tg-aut' | 'promote' | 'cms-probe' (the existing spamCheckSource / tg::acct source values). */
   spamCheckSource: string | null | undefined;
-  /** The writing app's daysLeft encoding (-1 healthy). Absent = unset on the stored doc. */
-  daysLeft?: number | null;
 }
 
 export interface AccountHealthInput {
@@ -135,18 +134,10 @@ export function buildAccountHealthWrite(input: AccountHealthInput, now: Date): A
     spamCheckBy: { $literal: by },
     updatedAt: now,
   };
-  const update: Record<string, unknown>[] = [{ $set: set }];
-  const daysLeft = typeof verdict.daysLeft === 'number' && Number.isFinite(verdict.daysLeft) ? Math.trunc(verdict.daysLeft) : null;
-  if (daysLeft !== null) {
-    set.daysLeft = daysLeft;
-    set.daysLeftBy = { $literal: spamCheckSource };
-  } else {
-    update.push({ $unset: ['daysLeft', 'daysLeftBy'] });
-  }
   return {
     // `verdictAt: null` also matches a doc without the field.
     filter: { _id: mobile, $or: [{ verdictAt: { $lte: verdictAt } }, { verdictAt: null }] },
-    update,
+    update: [{ $set: set }],
   };
 }
 

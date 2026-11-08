@@ -335,21 +335,6 @@ describe('UserDataService', () => {
         });
     });
 
-    describe('removeRedundantData', () => {
-        it('deletes stale free users', async () => {
-            const old = Date.now() - 70 * 24 * 60 * 60 * 1000;
-            await model.create(buildUserData({ lastMsgTimeStamp: old, payAmount: 0, canReply: 1 }));
-            await model.create(buildUserData({ lastMsgTimeStamp: Date.now(), payAmount: 0, canReply: 1 }));
-            const res = await service.removeRedundantData();
-            expect(res.deletedCount).toBe(1);
-        });
-        it('throws InternalServerError on failure', async () => {
-            const spy = jest.spyOn(model, 'deleteMany').mockImplementationOnce(() => ({ exec: () => Promise.reject(new Error('boom')) }) as any);
-            await expect(service.removeRedundantData()).rejects.toBeInstanceOf(InternalServerErrorException);
-            spy.mockRestore();
-        });
-    });
-
     describe('resetUserCounts', () => {
         it('resets counts', async () => {
             await model.create(buildUserData({ profile: 'p1', chatId: 'c1', totalCount: 99, paidReply: true }));

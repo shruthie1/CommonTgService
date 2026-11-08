@@ -1,5 +1,6 @@
 // accountHealth producers in CMS (tg-platform docs/design/2026-11-07-account-collection-split.md, S2 + "S2 review
-// fixes"): the swap SpamBot probe persist (ClientService.isSpamSafeForSwap) is mirrored; the pool health-check stamps
+// fixes"): the swap SpamBot probe persist (ClientService.isSpamSafeForSwap) is mirrored by BufferClientService.update
+// (buffer-clients/__tests__/buffer-update-account-health.spec.ts), named cms:swap-probe; the pool health-check stamps
 // (BaseClientService.performHealthCheck) are NOT accountHealth fields any more and write nothing there. Dual-write: the
 // existing pool write is unchanged; the mirror is fire-and-forget and never throws or delays.
 jest.mock('telegram/Helpers', () => ({ ...jest.requireActual('telegram/Helpers'), sleep: jest.fn(async () => undefined) }));
@@ -52,23 +53,20 @@ describe('accountHealth: CMS swap SpamBot probe (cms:swap-probe)', () => {
 
   beforeEach(() => mockProbe.mockReset());
 
-  it('a definitive verdict is mirrored with verdictAt = the spamCheckedAt of the bufferClients write', async () => {
+  it('a definitive verdict: BufferClientService.update gets (mobile, patch, { accountHealthBy: cms:swap-probe }); the probe itself writes nothing to accountHealth', async () => {
     const until = new Date('2026-11-10T00:00:00.000Z');
     mockProbe.mockResolvedValue({ status: 'limited', limitedUntil: until });
     const updateOne = jest.fn().mockResolvedValue({ upsertedCount: 1 });
     const { service, bufferClientService } = makeService(updateOne);
     await service.isSpamSafeForSwap(candidate, budget(), {});
     await flush();
-    const patch = bufferClientService.update.mock.calls[0][1];
-    expect(updateOne).toHaveBeenCalledTimes(1);
-    const [filter, update, options] = updateOne.mock.calls[0];
-    expect(filter._id).toBe('919000000021');
-    expect(options).toEqual({ upsert: true, maxTimeMS: 2_500 });
-    expect(update[0].$set).toMatchObject({
-      spamStatus: { $literal: 'limited' }, limitedUntil: until, spamCheckSource: { $literal: 'cms-probe' }, spamCheckBy: { $literal: 'cms:swap-probe' },
-    });
-    expect(update[0].$set.verdictAt).toEqual(patch.spamCheckedAt);
-    expect(update[1]).toEqual({ $unset: ['daysLeft', 'daysLeftBy'] });
+    expect(bufferClientService.update).toHaveBeenCalledTimes(1);
+    const [mobile, patch, opts] = bufferClientService.update.mock.calls[0];
+    expect(mobile).toBe('919000000021');
+    expect(patch).toMatchObject({ spamStatus: 'limited', limitedUntil: until, spamCheckSource: 'cms-probe' });
+    expect(patch.spamCheckedAt).toBeInstanceOf(Date);
+    expect(opts).toEqual({ accountHealthBy: 'cms:swap-probe' });
+    expect(updateOne).not.toHaveBeenCalled();
   });
 
   it('an inconclusive probe (unknown) mirrors nothing (the pool doc is not written either)', async () => {
@@ -81,21 +79,11 @@ describe('accountHealth: CMS swap SpamBot probe (cms:swap-probe)', () => {
     expect(updateOne).not.toHaveBeenCalled();
   });
 
-  it('a failing or stalled mirror never throws and never delays the swap decision', async () => {
-    for (const updateOne of [jest.fn().mockRejectedValue(new Error('mongo down')), jest.fn(() => new Promise(() => {}))]) {
-      mockProbe.mockResolvedValue({ status: 'free', limitedUntil: null });
-      const { service } = makeService(updateOne);
-      let result: unknown;
-      expect(await within500(service.isSpamSafeForSwap(candidate, budget(), {}).then((r: unknown) => { result = r; }))).toBe('done');
-      expect(result).toBe(true);
-    }
-  });
-
-  it('when the bufferClients write fails, nothing is mirrored (accountHealth never gets ahead of the old field)', async () => {
+  it('when the bufferClients write fails, the probe swallows it and writes nothing to accountHealth', async () => {
     mockProbe.mockResolvedValue({ status: 'harsh', limitedUntil: null });
     const updateOne = jest.fn();
     const { service } = makeService(updateOne, jest.fn().mockRejectedValue(new Error('write failed')));
-    await service.isSpamSafeForSwap(candidate, budget(), {});
+    await expect(service.isSpamSafeForSwap(candidate, budget(), {})).resolves.toBeDefined();
     await flush();
     expect(updateOne).not.toHaveBeenCalled();
   });

@@ -25,7 +25,7 @@ const PERMANENT_ERRORS = [
   'PHONE_NUMBER_BANNED',
   'PHONE_NUMBER_INVALID',
   // NOTE: FROZEN_* is treated as permanent here to stay consistent with the rest of
-  // the platform (session.service, organic-activity, getUserFromSession all do the
+  // the platform (session.service, organic-activity and degraded-swap do the
   // same, and buildPermanentAccountReason enriches it with appeal metadata). Telegram
   // "frozen" states can sometimes be appealed/temporary — if that classification is
   // ever revisited, it must be changed in ALL those places together, not just here.

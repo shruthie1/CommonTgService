@@ -254,8 +254,6 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             const newUser = new this.promoteClientModel(promoteClientData);
             return newUser.save();
         }));
-        // S3 snapshot facets (additive): the saved doc is the full snapshot; fire-and-forget.
-        this.mirrorAccountFacets(result, 'cms:promote-create');
         // accountRoleEvents (S1, additive): a pool doc created here (POST /promoteclients, createOrUpdate's create branch)
         // is an enrolment. An old main's pool return goes to bufferClients only, never here. Fire-and-forget; never
         // throws or delays the create.
@@ -326,9 +324,6 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         if (!updatedUser) {
             throw new NotFoundException(`PromoteClient with mobile ${mobile} not found`);
         }
-        // S3 snapshot facets (additive): every base-client flow writes through here. Mirrors the AFTER doc;
-        // fire-and-forget, never changes the result.
-        this.mirrorAccountFacets(updatedUser, 'cms:promote-update');
         return updatedUser;
     }
 

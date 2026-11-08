@@ -58,6 +58,7 @@ import {
 } from '../shared/base-client.service';
 import { ClientHelperUtils } from '../shared/client-helper.utils';
 import { withEnrollmentLock } from '../shared/enrollment-lock';
+import { accountHealthCollectionOf, recordAccountHealthSoon } from '../shared/account-health';
 import { describeClaimHolder, withPoolClaim } from '../shared/onboarding/pool-claim';
 import { BUFFER_PROFILE, ONBOARDING_PACING, isHealthyForLegacyCap } from '../shared/onboarding/pool-profile';
 import { enrolPoolClientFromUser, type EnrolmentPort } from '../shared/onboarding/enrolment';
@@ -564,8 +565,8 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             };
             return this.bufferClientModel.create({ ...createData });
         }));
-        // S3 snapshot facets (additive): the created doc is the full snapshot; fire-and-forget.
-        this.mirrorAccountFacets(result, 'cms:buffer-create');
+        // accountHealth S2 (additive): a create that carries a verdict (PUT createOrUpdate's create branch) mirrors it.
+        this.mirrorVerdictToAccountHealth(result, 'cms:buffer-create');
         // accountRoleEvents (S1, additive): a pool doc created here (POST /bufferclients, createOrUpdate's create branch,
         // the old main's first return) is an enrolment. Fire-and-forget; never throws or delays the create.
         // The pool return (client.service returnOldClientToBufferPool) suppresses it: it writes `returned` itself.
@@ -612,7 +613,26 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         return !!(await this.bufferClientModel.findOne({ mobile: canonicalMobile }, { _id: 1 }).lean().exec());
     }
 
-    async update(mobile: string, updateClientDto: BaseClientUpdate): Promise<BufferClientDocument> {
+    private static readonly SPAM_FIELDS = ['spamStatus', 'limitedUntil', 'spamCheckedAt', 'spamCheckSource'] as const;
+
+    /**
+     * accountHealth S2: mirror the pool verdict of `doc` (the AFTER doc of a write). The one CMS pool -> accountHealth
+     * path (PATCH / PUT /bufferclients, the swap SpamBot probe). Skips a doc without spamStatus or spamCheckedAt
+     * (nothing the builder could guard on); a doc without spamCheckSource is mirrored as 'cms-patch'.
+     * Fire-and-forget; never throws, never delays.
+     */
+    private mirrorVerdictToAccountHealth(doc: unknown, by: string): void {
+        try {
+            const d = (doc && typeof (doc as any).toObject === 'function' ? (doc as any).toObject() : doc) as Record<string, any> | null;
+            if (!d?.spamStatus || !d.spamCheckedAt) return;
+            recordAccountHealthSoon(accountHealthCollectionOf(this.bufferClientModel), {
+                mobile: d.mobile, by,
+                verdict: { spamStatus: d.spamStatus, limitedUntil: d.limitedUntil ?? null, verdictAt: d.spamCheckedAt, spamCheckSource: d.spamCheckSource ?? 'cms-patch' },
+            }, { logger: this.logger });
+        } catch { /* best-effort; the pool write already happened */ }
+    }
+
+    async update(mobile: string, updateClientDto: BaseClientUpdate, opts?: { accountHealthBy?: string }): Promise<BufferClientDocument> {
         const canonicalMobile = this.canonicalMobile(mobile);
         const updateData: BaseClientUpdate & { mobile?: string } = { ...updateClientDto };
         // `channels` is a count: never persist a negative or fractional one (a -13 reached prod once).
@@ -639,9 +659,11 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         if (!updatedBufferClient) {
             throw new NotFoundException(`BufferClient with mobile ${mobile} not found`);
         }
-        // S3 snapshot facets (additive): every base-client flow writes through here (status, warmup phases / steps,
-        // health-check stamps, username). Mirrors the AFTER doc; fire-and-forget, never changes the result.
-        this.mirrorAccountFacets(updatedBufferClient, 'cms:buffer-update');
+        // accountHealth S2 (additive): a write of any spam field mirrors the AFTER doc's verdict (a PATCH of only
+        // spamStatus re-applies at the stored spamCheckedAt; the builder applies an equal verdictAt, last writer wins).
+        if (BufferClientService.SPAM_FIELDS.some((k) => k in updateData)) {
+            this.mirrorVerdictToAccountHealth(updatedBufferClient, opts?.accountHealthBy ?? 'cms:buffer-update');
+        }
         return updatedBufferClient;
     }
 

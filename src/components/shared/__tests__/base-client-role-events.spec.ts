@@ -186,8 +186,8 @@ describe('accountRoleEvents: pool create (POST /bufferclients, /promoteclients a
       bufferClientModel: { create: jest.fn(save) },
       promoteClientModel,
       recordRoleEvent: (BaseClientService.prototype as any).recordRoleEvent,
-      // S3 facet hook (a real prototype method in production); this fake db has no updateOne, so facet writes skip.
-      mirrorAccountFacets: (BaseClientService.prototype as any).mirrorAccountFacets,
+      // accountHealth hook (a real private method of BufferClientService, covered by buffer-update-account-health.spec.ts).
+      mirrorVerdictToAccountHealth: jest.fn(),
     };
   }
 

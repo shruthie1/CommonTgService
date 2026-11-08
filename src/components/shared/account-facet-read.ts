@@ -2,7 +2,7 @@
  * Reader switch of the account collection split (tg-platform docs/design/2026-11-07-account-collection-split.md, S2
  * "Readers to switch"; reader ids R1-R16 are that table's). One env flag per facet, read per call (no DB read):
  *
- *   ACCOUNT_HEALTH_READ / ACCOUNT_WARMUP_READ / ACCOUNT_MEMBERSHIP_READ / ACCOUNT_IDENTITY_READ
+ *   ACCOUNT_HEALTH_READ (the only facet; the S3 facets warmup / membership / identity were retired 2026-11-08)
  *     off (default; unset, empty or ANY other value = off, fail closed): today's reads only, the facet collection
  *         is never queried.
  *     shadow: the reader returns the old value; the facet doc is read in the background (no added latency) and the
@@ -24,14 +24,11 @@
  */
 import { maskMobile } from '../monitor/monitor-util';
 
-export type AccountFacetName = 'health' | 'warmup' | 'membership' | 'identity';
+export type AccountFacetName = 'health';
 export type AccountFacetReadMode = 'off' | 'shadow' | 'on';
 
 export const ACCOUNT_FACET_READ_ENV: Readonly<Record<AccountFacetName, string>> = {
   health: 'ACCOUNT_HEALTH_READ',
-  warmup: 'ACCOUNT_WARMUP_READ',
-  membership: 'ACCOUNT_MEMBERSHIP_READ',
-  identity: 'ACCOUNT_IDENTITY_READ',
 };
 
 export const ACCOUNT_FACET_READ_MAX_TIME_MS = 2_000;
@@ -191,7 +188,9 @@ export function chooseAccountHealthView(old: AccountHealthView, facet: Record<st
   if (status === 'limited' && view.limitedUntilMs !== old.limitedUntilMs) {
     return verdictAtMs > oldAt ? { kind: 'newerInHealth', view } : { kind: 'mismatch', view: old };
   }
-  return { kind: 'equal', view };
+  // Tie rule (MIRROR of tg-db): equal verdict + status keeps the POOL limitedUntil for harsh (stricter at a tie);
+  // free -> null (a pool limitedUntil next to a free verdict is stale); limited -> the facet value (equal here).
+  return { kind: 'equal', view: status === 'harsh' ? { ...view, limitedUntilMs: old.limitedUntilMs } : view };
 }
 
 function sameView(a: AccountHealthView, b: AccountHealthView): boolean {

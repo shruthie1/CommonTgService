@@ -86,10 +86,10 @@ describe('spam-aware setupClient swap', () => {
       expect(bufferClientService.update).toHaveBeenNthCalledWith(1, '901', expect.objectContaining({
         spamStatus: 'limited', limitedUntil: until, spamCheckSource: 'cms-probe',
         spamCheckedAt: expect.any(Date), availableDate: until.toISOString().slice(0, 10),
-      }));
+      }), { accountHealthBy: 'cms:swap-probe' });
       expect(bufferClientService.update).toHaveBeenNthCalledWith(2, '902', expect.objectContaining({
         spamStatus: 'free', limitedUntil: null, spamCheckSource: 'cms-probe',
-      }));
+      }), { accountHealthBy: 'cms:swap-probe' });
     });
 
     test('harsh candidate is skipped and persisted without touching availableDate', async () => {
@@ -137,7 +137,7 @@ describe('spam-aware setupClient swap', () => {
       const stale = cand('920', { spamStatus: 'harsh', spamCheckedAt: new Date(Date.now() - 31 * DAY) });
       expect((await (makeService() as any).findSafeSetupBufferCandidate([stale], 'main-session')).mobile).toBe('920');
       expect(mockProbe).toHaveBeenCalledTimes(1);
-      expect(bufferClientService.update).toHaveBeenCalledWith('920', expect.objectContaining({ spamStatus: 'free' }));
+      expect(bufferClientService.update).toHaveBeenCalledWith('920', expect.objectContaining({ spamStatus: 'free' }), { accountHealthBy: 'cms:swap-probe' });
     });
 
     test('connect-failed probe rejects the candidate', async () => {

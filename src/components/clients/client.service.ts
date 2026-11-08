@@ -54,7 +54,6 @@ import { openSwapEpisode, SwapEpisodeCollection, SwapEpisodeControlCollection } 
 import { openParkedEpisodeMobiles, parkedCanonicalMobile, ParkedEpisodeFindCollection, ParkedGuardCollection } from './parked-session-guard';
 import { maskMobile } from '../monitor/monitor-util';
 import { accountRoleEventsCollectionOf, AccountRoleEventInput, AccountRoleReasonCode, recordAccountRoleEventSoon } from './account-role-events';
-import { accountHealthCollectionOf, recordAccountHealthSoon } from '../shared/account-health';
 import {
   ACCOUNT_HEALTH_READ_COLLECTION, AccountFacetReadMode, AccountHealthView, accountFacetReadCollectionOf, accountFacetReadMode, healthViewFromPool,
   poolHealthFields, resolveAccountHealthView, resolveAccountHealthViews, resolveAccountHealthViewsByReader,
@@ -1360,15 +1359,6 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       // (clientId + clients.swappedAt ms) links this pair with the old main's return in handleReplacedClient.
       this.recordMainChangeEvents(clientId, existingMobile, newMobile, 'cms:cutover', reason, degradedPlan,
         this.cutoverRoleEventOpId(clientId, committedClient?.swappedAt) ?? randomUUID());
-      // S3 snapshot facets (additive): the cutover wrote the buffer docs inside its transaction (setPrimaryInUse incl.
-      // the stale in-use revoke, degraded reassignClientId), so re-read this client's buffer docs + both mobiles after
-      // the commit and mirror them. Fire-and-forget; never throws or delays the swap.
-      try {
-        this.bufferClientService.mirrorAccountFacetsByQuery?.(
-          { $or: [{ clientId }, { mobile: { $in: [newMobile, existingMobile].filter((m): m is string => typeof m === 'string' && !!m) } }] },
-          'cms:cutover',
-        );
-      } catch { /* best-effort; the cutover is committed */ }
       this.logger.info(`[${clientId}] Cutover committed`, {
         existingMobile: maskMobile(existingMobile),
         newMobile: maskMobile(newMobile),
@@ -2080,16 +2070,9 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       patch.availableDate = candidate.availableDate && candidate.availableDate > limitDate ? candidate.availableDate : limitDate;
     }
     try {
-      await this.bufferClientService.update(candidate.mobile, patch);
-      // accountHealth (S2 dual-write, MIRROR of the bufferClients verdict above; its spamCheckedAt is the mirror's
-      // verdictAt, accountHealth derives its own status-change spamCheckedAt). Only after the pool write succeeded, so
-      // the mirror never gets ahead of the old field. Fire-and-forget; never throws or delays.
-      try {
-        recordAccountHealthSoon(accountHealthCollectionOf(this.clientModel), {
-          mobile: candidate.mobile, by: 'cms:swap-probe',
-          verdict: { spamStatus: patch.spamStatus, limitedUntil: patch.limitedUntil, verdictAt: patch.spamCheckedAt, spamCheckSource: patch.spamCheckSource },
-        }, { logger: this.logger });
-      } catch { /* best-effort mirror */ }
+      // accountHealth (S2): BufferClientService.update mirrors the AFTER doc's verdict once the pool write succeeded
+      // (never ahead of the old field), named cms:swap-probe. Fire-and-forget; never throws or delays.
+      await this.bufferClientService.update(candidate.mobile, patch, { accountHealthBy: 'cms:swap-probe' });
     } catch (error) {
       this.logger.warn(`[${budget.clientId}] Failed to persist SpamBot result for ${maskMobile(candidate.mobile)}: ${parseError(error, '', false).message}`);
     }

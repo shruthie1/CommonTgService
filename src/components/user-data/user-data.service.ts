@@ -266,39 +266,6 @@ export class UserDataService {
         return this.userDataModel.find({ totalCount: { $gt: threshold } }).sort({ totalCount: -1 }).lean().exec();
     }
 
-    async removeRedundantData(): Promise<{ deletedCount: number }> {
-        // 30 days in milliseconds
-        const twoMonths = Date.now() - 60 * 24 * 60 * 60 * 1000;
-
-        try {
-            // payAmount is a LIVE ENTITLEMENT BALANCE, not a payment history: it decays to 0 as
-            // service is delivered, so `payAmount: 0` alone also matches people who really paid.
-            // Once tg-platform starts populating the lifetime fields, deleting on payAmount alone
-            // would destroy the only record that a past payer ever paid. Measured 2026-10-02: this
-            // filter matches 0 rows today, so adding these guards changes nothing now and prevents
-            // silent loss later. highestPayAmount/paidCount are the pre-existing equivalents.
-            const result = await this.userDataModel
-                .deleteMany({
-                    lastMsgTimeStamp: { $lt: twoMonths },
-                    payAmount: 0,
-                    canReply: 1,
-                    $and: [
-                        { $or: [{ lifetimePaid: { $exists: false } }, { lifetimePaid: { $lte: 0 } }] },
-                        { $or: [{ firstPaidAt: { $exists: false } }, { firstPaidAt: null }] },
-                        { $or: [{ highestPayAmount: { $exists: false } }, { highestPayAmount: { $lte: 0 } }] },
-                        { $or: [{ paidCount: { $exists: false } }, { paidCount: { $lte: 0 } }] },
-                        { $or: [{ lifetimeCredits: { $exists: false } }, { lifetimeCredits: { $lte: 0 } }] },
-                        { $or: [{ lastPaidAt: { $exists: false } }, { lastPaidAt: null }] },
-                    ],
-                })
-                .exec();
-
-            return { deletedCount: result.deletedCount ?? 0 };
-        } catch (error) {
-            throw new InternalServerErrorException(parseError(error));
-        }
-    }
-
     async resetUserCounts(profile: string, chatId: string): Promise<UserDataDocument> {
         return this.userDataModel
             .findOneAndUpdate(

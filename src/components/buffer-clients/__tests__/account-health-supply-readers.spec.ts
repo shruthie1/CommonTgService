@@ -141,4 +141,26 @@ describe('R4 adjustSupplyDateForPoolState (via calculateAvailabilityBasedNeedsFo
     const missing = makeService(pool(), {});
     expect(await adjustments(missing.service)).toBeNull();
   });
+
+  it('tie rule: harsh past the rest with a stale future pool limitedUntil, same verdict in accountHealth: on defers it as off does', async () => {
+    const checked = new Date(Date.now() - 40 * DAY);
+    const harshPool = () => [{ ...pool()[0], spamStatus: 'harsh', spamCheckedAt: checked, limitedUntil: new Date(Date.now() + 5 * DAY) }];
+    const facet = { [MOBILE]: { spamStatus: 'harsh', limitedUntil: null, verdictAt: checked, spamCheckedAt: checked } };
+    const off = makeService(harshPool(), facet);
+    expect(await adjustments(off.service)).toMatchObject({ excluded: 0, deferred: 1 });
+    process.env.ACCOUNT_HEALTH_READ = 'on';
+    const on = makeService(harshPool(), facet);
+    expect(await adjustments(on.service)).toMatchObject({ excluded: 0, deferred: 1 });
+  });
+
+  it('tie rule: free with a stale future pool limitedUntil, same verdict in accountHealth: on follows the free verdict (no deferral)', async () => {
+    const checked = new Date(Date.now() - DAY);
+    const freePool = () => [{ ...pool()[0], spamCheckedAt: checked, limitedUntil: new Date(Date.now() + 5 * DAY) }];
+    const facet = { [MOBILE]: { spamStatus: 'free', limitedUntil: null, verdictAt: checked, spamCheckedAt: checked } };
+    const off = makeService(freePool(), facet);
+    expect(await adjustments(off.service)).toMatchObject({ excluded: 0, deferred: 1 });
+    process.env.ACCOUNT_HEALTH_READ = 'on';
+    const on = makeService(freePool(), facet);
+    expect(await adjustments(on.service)).toBeNull();
+  });
 });

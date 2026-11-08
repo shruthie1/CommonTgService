@@ -18,23 +18,22 @@ const dup = () => Object.assign(new Error('E11000 duplicate key error collection
 const statusSince = (status: string, at: Date) => ({ $cond: [{ $eq: ['$spamStatus', { $literal: status }] }, { $ifNull: ['$spamCheckedAt', at] }, at] });
 
 describe('buildAccountHealthWrite', () => {
-  it('verdict: guarded on verdictAt (<= incoming or absent); spamCheckedAt moves only on a status change; daysLeft + daysLeftBy kept', () => {
+  it('verdict: guarded on verdictAt (<= incoming or absent); spamCheckedAt moves only on a status change; a legacy daysLeft on the input is never written (2026-11-08)', () => {
     const w = buildAccountHealthWrite({
       mobile: '+919000000001', by: 'tg-aut:spambot',
       verdict: { spamStatus: 'limited', limitedUntil: T1.getTime() + 86_400_000, verdictAt: T1.getTime(), spamCheckSource: 'tg-aut', daysLeft: 2 },
-    }, NOW);
+    } as any, NOW);
     expect(w).toEqual({
       filter: { _id: '919000000001', $or: [{ verdictAt: { $lte: T1 } }, { verdictAt: null }] },
       update: [{ $set: {
         v: 1, spamStatus: { $literal: 'limited' }, limitedUntil: new Date(T1.getTime() + 86_400_000),
         spamCheckedAt: statusSince('limited', T1), verdictAt: T1,
         spamCheckSource: { $literal: 'tg-aut' }, spamCheckBy: { $literal: 'tg-aut:spambot' }, updatedAt: NOW,
-        daysLeft: 2, daysLeftBy: { $literal: 'tg-aut' },
       } }],
     });
   });
 
-  it('verdict without daysLeft unsets daysLeft + daysLeftBy; free / harsh store limitedUntil null', () => {
+  it('verdict without daysLeft: one $set stage, no $unset (old daysLeft / daysLeftBy stay); free / harsh store limitedUntil null', () => {
     const w = buildAccountHealthWrite({
       mobile: '919000000002', by: 'cms:swap-probe',
       verdict: { spamStatus: 'harsh', limitedUntil: T1, verdictAt: T1, spamCheckSource: 'cms-probe' },
@@ -44,8 +43,21 @@ describe('buildAccountHealthWrite', () => {
         v: 1, spamStatus: { $literal: 'harsh' }, limitedUntil: null, spamCheckedAt: statusSince('harsh', T1), verdictAt: T1,
         spamCheckSource: { $literal: 'cms-probe' }, spamCheckBy: { $literal: 'cms:swap-probe' }, updatedAt: NOW,
       } },
-      { $unset: ['daysLeft', 'daysLeftBy'] },
     ]);
+    expect(w.update).toHaveLength(1);
+  });
+
+  it('every write is exactly one $set stage with no daysLeft / daysLeftBy, whatever daysLeft the input carries', () => {
+    for (const daysLeft of [undefined, null, -1, 0, 5, 3.7, Number.NaN]) {
+      const w = buildAccountHealthWrite({
+        mobile: '919000000009', by: 'promote:harsh',
+        verdict: { spamStatus: 'harsh', verdictAt: T1, spamCheckSource: 'promote', daysLeft },
+      } as any, NOW)!;
+      expect(w.update).toHaveLength(1);
+      expect(Object.keys(w.update[0])).toEqual(['$set']);
+      expect(w.update[0].$set).not.toHaveProperty('daysLeft');
+      expect(w.update[0].$set).not.toHaveProperty('daysLeftBy');
+    }
   });
 
   it('no stamps: lastChecked / lastHealthCheckAttemptAt are not accountHealth fields', () => {

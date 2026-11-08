@@ -210,6 +210,41 @@ describe('R8/R9 readMainState + currentMeetsTier1', () => {
     expect(service.currentMeetsTier1(client, state)).toBe(true);
   });
 
+  describe('tie rule: same verdict time + status, pool doc with a stale future limitedUntil', () => {
+    const tie = (status: string) => {
+      const b = { ...buffer(), spamStatus: status, limitedUntil: new Date(Date.now() + 5 * DAY) };
+      const facet = { [MOBILE]: { spamStatus: status, limitedUntil: null, verdictAt: b.spamCheckedAt, spamCheckedAt: b.spamCheckedAt } };
+      return { b, facet };
+    };
+
+    it('free: off/shadow keep the pool answer (not tier 1); on follows the free verdict (tier 1), the limit is stale', async () => {
+      const { b, facet } = tie('free');
+      const off = makeService(facet);
+      off.service.bufferClientService.findOne = jest.fn(async () => b);
+      expect(off.service.currentMeetsTier1(client, await off.service.readMainState(client))).toBe(false);
+      process.env.ACCOUNT_HEALTH_READ = 'shadow';
+      const shadow = makeService(facet);
+      shadow.service.bufferClientService.findOne = jest.fn(async () => b);
+      expect(shadow.service.currentMeetsTier1(client, await shadow.service.readMainState(client))).toBe(false);
+      await flushAccountFacetShadowReads();
+      expect(accountFacetReadStats().health.R9).toMatchObject({ equal: 1, differs: 1 });
+      process.env.ACCOUNT_HEALTH_READ = 'on';
+      const on = makeService(facet);
+      on.service.bufferClientService.findOne = jest.fn(async () => b);
+      expect(on.service.currentMeetsTier1(client, await on.service.readMainState(client))).toBe(true);
+    });
+
+    it('harsh: on stays not tier 1 (as the pool answer)', async () => {
+      process.env.ACCOUNT_HEALTH_READ = 'on';
+      const { b, facet } = tie('harsh');
+      const { service } = makeService(facet);
+      service.bufferClientService.findOne = jest.fn(async () => b);
+      const state = await service.readMainState(client);
+      expect(state.tier1Health).toMatchObject({ source: 'accountHealth', spamStatus: 'harsh', limitedUntilMs: b.limitedUntil.getTime() });
+      expect(service.currentMeetsTier1(client, state)).toBe(false);
+    });
+  });
+
   it('on: _READERS=R9 switches only R9 (tier 1 sees harsh; limited stays the pool answer)', async () => {
     process.env.ACCOUNT_HEALTH_READ = 'on';
     process.env.ACCOUNT_HEALTH_READ_READERS = 'R9';
@@ -278,6 +313,20 @@ describe('reader allowlist and merge (MIRROR of tg-db; the tg-platform mirror te
     expect(r.kind).toBe('newerInHealth');
     expect(r.view.limitedUntilMs).toBe(until.getTime());
     expect(chooseAccountHealthView(healthViewFromPool({ spamStatus: 'harsh', spamCheckedAt: t1 }), { spamStatus: 'free', verdictAt: t1, spamCheckedAt: t1 }).kind).toBe('mismatch');
+  });
+
+  it('tie rule: equal verdict + status with a stale future pool limitedUntil: harsh keeps it, free drops it, limited uses the facet', () => {
+    const t1 = new Date('2026-11-01T00:00:00Z');
+    const stale = new Date('2026-12-01T00:00:00Z');
+    const harsh = chooseAccountHealthView(healthViewFromPool({ spamStatus: 'harsh', limitedUntil: stale, spamCheckedAt: t1 }),
+      { spamStatus: 'harsh', limitedUntil: null, verdictAt: t1, spamCheckedAt: new Date('2026-10-01T00:00:00Z') });
+    expect([harsh.kind, harsh.view.source, harsh.view.limitedUntilMs]).toEqual(['equal', 'accountHealth', stale.getTime()]);
+    const free = chooseAccountHealthView(healthViewFromPool({ spamStatus: 'free', limitedUntil: stale, spamCheckedAt: t1 }),
+      { spamStatus: 'free', limitedUntil: null, verdictAt: t1, spamCheckedAt: t1 });
+    expect([free.kind, free.view.limitedUntilMs]).toEqual(['equal', null]);
+    const lim = chooseAccountHealthView(healthViewFromPool({ spamStatus: 'limited', limitedUntil: stale, spamCheckedAt: t1 }),
+      { spamStatus: 'limited', limitedUntil: stale, verdictAt: t1, spamCheckedAt: t1 });
+    expect([lim.kind, lim.view.limitedUntilMs]).toEqual(['equal', stale.getTime()]);
   });
 });
 
