@@ -93,7 +93,6 @@ describe('PaymentProofsService list cache', () => {
         const [a, b] = await Promise.all([service.list({}, NOW), service.list({ limit: 1 }, NOW)]);
         expect(windowFinds()).toBe(1);
         expect(a.counts).toEqual(b.counts);
-        expect(a.reviewModel).toEqual(b.reviewModel);
         expect(b.items).toHaveLength(1);
     });
 

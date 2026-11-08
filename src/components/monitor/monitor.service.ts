@@ -221,16 +221,12 @@ export const PROMO_DAYS_HISTORY = 62;
 export const RANGE_CLOSED_FRESH_MS = HISTORY_FRESH_MS;
 /** Snapshot names of from..to ranges: '<page>:r:<from>:<to>[:<client>]'. */
 export const RANGE_PAGE_RE = /:r:(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})(?::|$)/;
-/** Fields only from..to responses carry; a legacy (period/days/window) response never has them. */
+/**
+ * Fields only from..to responses carry; a legacy (period/days/window) response never has them.
+ * amountBuckets is no longer built (2026-11-08: no client read it; 6.4 KB per fleet response) but stays listed so a
+ * snapshot persisted by an older build is still stripped from legacy responses.
+ */
 export const RANGE_ONLY_FIELDS = ['rangeKind', 'clientsDaily', 'amountBuckets'] as const;
-/** Payment-size buckets of /monitor/fleet amountBuckets (tier ladder; >= ₹1,000 is never credited). */
-export const CLIENT_AMOUNT_BUCKETS = [
-  { bucket: '<100', lo: 0, hi: 100 },
-  { bucket: '100-199', lo: 100, hi: 200 },
-  { bucket: '200-349', lo: 200, hi: 350 },
-  { bucket: '350-599', lo: 350, hi: 600 },
-  { bucket: '600-999', lo: 600, hi: 1000 },
-] as const;
 
 /** Range of a from..to snapshot name, else null. */
 export function rangeOfPage(name: string): DateRange | null {
@@ -263,13 +259,6 @@ export interface ClientDay {
   dms: number | null;
   sends: number | null;
   paidSameDay: number | null;
-}
-
-export interface AmountBucket {
-  clientId: string;
-  bucket: (typeof CLIENT_AMOUNT_BUCKETS)[number]['bucket'];
-  count: number;
-  revenue: number;
 }
 
 /** Paid chats: closed days are fixed once written (late sink rows aside), so up to 30 days are kept. */
@@ -428,7 +417,6 @@ export interface FleetResponse {
   /** from..to responses only (stripped from legacy period responses) */
   rangeKind?: RangeKind;
   clientsDaily?: ClientDay[];
-  amountBuckets?: AmountBucket[];
 }
 
 export interface ClientMeta {
@@ -1130,7 +1118,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     return `fleet:${presetOf(r, istDate(now)) ?? `r:${r.from}:${r.to}`}`;
   }
 
-  /** /monitor/fleet?from=&to=: the legacy fields plus rangeKind, clientsDaily and amountBuckets. */
+  /** /monitor/fleet?from=&to=: the legacy fields plus rangeKind and clientsDaily. */
   async fleetRange(r: DateRange): Promise<FleetResponse> {
     const page = this.fleetPage(r);
     const v = await this.snap<FleetResponse>(page);
@@ -1414,7 +1402,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * clientsDaily (client × IST day; one day = client × hour) and amountBuckets for the fleet window,
+   * clientsDaily (client × IST day; one day = client × hour) for the fleet window,
    * from the parts buildFleetW already loaded (no extra I/O). A field is left out when the credits (or,
    * for the daily rows, daily_client) part failed; notes then already carry "<part> unavailable".
    */
@@ -1437,28 +1425,14 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       cohYH: CohortRow[] | null;
     },
     notes: string[],
-  ): { clientsDaily?: ClientDay[]; amountBuckets?: AmountBucket[] } {
+  ): { clientsDaily?: ClientDay[] } {
     const today = w.today;
     const yday = addDays(today, -1);
     const all = w.kind === 'intraday' ? (p.payT?.rows ?? null) : w.kind === 'mixed' ? (p.payH && p.payT ? [...p.payH, ...p.payT.rows] : null) : p.payH;
     if (!all) return {};
     const credits = all.filter((c) => c.client && c.ms >= w.cur.start && c.ms < curEnd);
-    const out: { clientsDaily?: ClientDay[]; amountBuckets?: AmountBucket[] } = {};
+    const out: { clientsDaily?: ClientDay[] } = {};
     const sorted = [...ids].sort();
-
-    // amountBuckets: clean credits (payers' credits, under ₹1,000) per client and tier bucket
-    const bk = new Map<string, { count: number; revenue: number }>();
-    for (const c of credits) {
-      if (!c.clean) continue;
-      const b = CLIENT_AMOUNT_BUCKETS.find((x) => c.amount >= x.lo && c.amount < x.hi);
-      if (!b) continue;
-      const k = `${c.client}|${b.bucket}`;
-      const e = bk.get(k) ?? { count: 0, revenue: 0 };
-      e.count += 1;
-      e.revenue += c.revenue;
-      bk.set(k, e);
-    }
-    out.amountBuckets = sorted.flatMap((id) => CLIENT_AMOUNT_BUCKETS.map((b) => ({ clientId: id, bucket: b.bucket, ...(bk.get(`${id}|${b.bucket}`) ?? { count: 0, revenue: 0 }) })));
 
     const add = (m: Map<string, number>, k: string, v: number) => m.set(k, (m.get(k) ?? 0) + v);
     const rev = new Map<string, number>();

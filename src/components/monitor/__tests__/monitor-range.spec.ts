@@ -91,16 +91,16 @@ describe('/monitor/fleet?from=&to=', () => {
     expect(r.notes.some((n: string) => n.startsWith('clientsDaily'))).toBe(true);
     expect(rangeKind).toBe('days');
     expect(clientsDaily).toHaveLength(3 * 7);
-    expect(amountBuckets).toHaveLength(3 * 5);
+    expect(amountBuckets).toBeUndefined(); // no longer built (2026-11-08: no client read it)
     const t = await buildService().svc.fleetRange({ from: '2026-10-31', to: '2026-10-31' });
     const { rangeKind: k2, clientsDaily: cd2, amountBuckets: ab2 } = t as any;
     expect(strip(legacyOf(t))).toEqual(strip(await buildService().svc.fleet('today')));
     expect(k2).toBe('intraday');
     expect(cd2.every((x: any) => x.date === '2026-10-31' && typeof x.hour === 'number')).toBe(true);
-    expect(ab2).toHaveLength(15);
+    expect(ab2).toBeUndefined();
   });
 
-  it('clientsDaily and amountBuckets add up to the client totals', async () => {
+  it('clientsDaily adds up to the client totals', async () => {
     const r: any = await buildService().svc.fleetRange({ from: '2026-10-18', to: '2026-10-22' });
     expect(r.period).toBeNull();
     expect(r.previousRange).toEqual({ from: '2026-10-13', to: '2026-10-17' });
@@ -110,13 +110,7 @@ describe('/monitor/fleet?from=&to=', () => {
       expect(days.reduce((s: number, x: any) => s + x.revenue, 0)).toBe(c.revenue);
       expect(days.reduce((s: number, x: any) => s + x.newUsers, 0)).toBe(c.newUsers);
       expect(days.reduce((s: number, x: any) => s + x.payers, 0)).toBeGreaterThanOrEqual(c.payers);
-      const buckets = r.amountBuckets.filter((x: any) => x.clientId === c.clientId);
-      expect(buckets.map((b: any) => b.bucket)).toEqual(['<100', '100-199', '200-349', '350-599', '600-999']);
-      expect(buckets.reduce((s: number, x: any) => s + x.revenue, 0)).toBeLessThanOrEqual(c.revenue);
     }
-    // alpha1 pays 100 + 50 + 250 every day: 5 x (one <100, one 100-199, one 200-349)
-    const a = Object.fromEntries(r.amountBuckets.filter((x: any) => x.clientId === 'alpha1').map((x: any) => [x.bucket, x.count]));
-    expect(a).toEqual({ '<100': 5, '100-199': 5, '200-349': 5, '350-599': 0, '600-999': 0 });
   });
 
   it('mixed range: previous revenue is cut at the same time of day N days back', async () => {

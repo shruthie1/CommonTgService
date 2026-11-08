@@ -53,8 +53,6 @@ export interface ClassifiedProof {
     reviewed: boolean;
     /** The operator's stamp, if it still holds (see stampOf). */
     stamp: ReviewStamp | null;
-    /** In the review queue: set by buildReviewModel (classify alone leaves it false). */
-    review: boolean;
     flagged: boolean;
     credited: boolean;
     /** Review facts (buildReviewModel); defaults when the model did not run. */
@@ -144,7 +142,6 @@ export function classify(row: PaymentProofRow): ClassifiedProof {
         amount,
         reviewed: stamp !== null,
         stamp,
-        review: false,
         flagged: FLAGGED_OUTCOMES.has(outcome),
         credited,
         risk: 0,
@@ -259,29 +256,20 @@ function ordinal(n: number): string {
 }
 
 export interface ReviewItem { row: PaymentProofRow; c: ClassifiedProof }
-export interface ReviewModel {
-    options: ReviewOptions;
-    /** IST day -> lowest risk that entered without a strong signal (null = none did). */
-    thresholds: Record<string, number | null>;
-}
 
 /**
- * The review queue (redesign 2026-11-03: revenue correctness + long-term blocking, post-hoc only). Fills risk /
- * riskReasons / strong / repeat / review on every item, in place. Pass ALL rows of the collection (7-day TTL) so the
- * signals and per-day thresholds do not depend on the list filters. Pure and deterministic; no I/O.
- *
- * review = credited AND not reviewed AND chat not marked fake AND (strong signal OR (not a repeat AND amount >
- * alwaysAmount) OR (amount >= minAmount AND among the day's top max(0, dailyTarget - strong) other credited proofs by
- * (risk, amount) with risk >= riskFloor)). Over-alwaysAmount entries are on top of the target and are not strong.
- * Nothing uncredited enters (repeats, not_ours, not_receipt, old_time, over_limit, other, uncredited fakes = flagged).
+ * Review signals (redesign 2026-11-03: revenue correctness + long-term blocking, post-hoc only). Fills risk /
+ * riskReasons / baseRisk / strong / repeat / reusedFrom on every item, in place; the views (payment-proofs.views)
+ * rank on them. Pass ALL rows of the collection (7-day TTL) so the signals do not depend on the list filters. Pure and
+ * deterministic; no I/O. (The old per-day review queue, c.review + reviewModel.thresholds, was removed 2026-11-08:
+ * nothing read it since the views replaced the review page.)
  */
-export function buildReviewModel(items: ReviewItem[], isMarked: (chatId: string) => boolean, options: ReviewOptions = DEFAULT_REVIEW_OPTIONS): ReviewModel {
+export function buildReviewModel(items: ReviewItem[], isMarked: (chatId: string) => boolean, options: ReviewOptions = DEFAULT_REVIEW_OPTIONS): void {
     const asc = [...items].sort((a, b) => msOf(a.row) - msOf(b.row) || (String(a.row._id) < String(b.row._id) ? -1 : 1));
     const byChat = new Map<string, ReviewItem[]>();
     const shaChats = new Map<string, Set<string>>();
     const markedPayers = new Map<string, Set<string>>();
     const fakeRows = new Map<string, Set<ReviewItem>>();
-    const overAlways = new Set<ReviewItem>();
     // Reused receipts (owner 2026-11-04): a fraudster edits only the amount on an earlier genuine receipt, so the UTR
     // repeats. The EARLIEST row with a UTR (or the first chat to send an image) is the original and is never flagged
     // because of its later copies; a later row is a reuse copy when it is in another chat or reads another amount.
@@ -399,10 +387,9 @@ export function buildReviewModel(items: ReviewItem[], isMarked: (chatId: string)
             if (payer && [...(markedPayers.get(payer) ?? [])].some((c) => c !== chat)) add(RISK.markedPayer, 'Payer of a marked-fake chat', true);
 
             const amount = x.c.amount;
-            // Always reviewed, but not a fake signal: no risk points, strong stays false.
+            // A label only, not a fake signal: no risk points, strong stays false (the views list these as high value).
             if (!x.c.repeat && amount !== null && amount > options.alwaysAmount) {
                 reasons.push(`Over ₹${options.alwaysAmount}`);
-                overAlways.add(x);
             }
             if (amount !== null) {
                 const d = distOf(String(r.clientId));
@@ -429,32 +416,6 @@ export function buildReviewModel(items: ReviewItem[], isMarked: (chatId: string)
             x.c.baseReasons = baseReasons;
         }
     }
-
-    // Per IST day: strong + over-alwaysAmount entries + the top other ones up to the target. Ranked over every credited proof of the
-    // day (reviewed / marked included) so a click does not pull another proof in.
-    const days = new Map<string, ReviewItem[]>();
-    for (const x of asc) {
-        if (!x.c.credited) continue;
-        const d = istDay(msOf(x.row));
-        if (!days.has(d)) days.set(d, []);
-        days.get(d)!.push(x);
-    }
-    const thresholds: Record<string, number | null> = {};
-    for (const [d, list] of days) {
-        const strongN = list.filter((x) => x.c.strong).length;
-        const slots = Math.max(0, options.dailyTarget - strongN);
-        const ranked = list
-            .filter((x) => !x.c.strong && !overAlways.has(x) && (x.c.amount ?? 0) >= options.minAmount && x.c.risk >= options.riskFloor)
-            .sort((a, b) => b.c.risk - a.c.risk || (b.c.amount ?? 0) - (a.c.amount ?? 0) || (String(b.row._id) < String(a.row._id) ? -1 : 1))
-            .slice(0, slots);
-        thresholds[d] = ranked.length ? ranked[ranked.length - 1].c.risk : null;
-        const picked = new Set(ranked);
-        for (const x of list) {
-            x.c.review = !x.c.reviewed && !isMarked(String(x.row.chatId)) && (x.c.strong || overAlways.has(x) || picked.has(x));
-        }
-    }
-    for (const x of asc) if (!x.c.credited) x.c.review = false;
-    return { options, thresholds };
 }
 
 /** Opaque keyset cursor over (t desc, _id desc): t = createdAt ms. */

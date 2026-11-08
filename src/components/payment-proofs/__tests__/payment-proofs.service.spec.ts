@@ -21,7 +21,8 @@ let seq = 0;
 const proof = (over: Record<string, unknown>): any => ({
     _id: new Types.ObjectId(), chatId: '111', profile: 'ramya', clientId: 'ramya1', telegramMsgId: ++seq,
     decision: 'ACCEPT', reasons: [], mode: 'enforce', provider: 'tg-aut', source: 'local', createdAt: at(seq),
-    shadow: { big: 'x' }, imageHash: 'f'.repeat(64), servedSha: 'a'.repeat(64), ...over,
+    shadow: { big: 'x' }, imageHash: 'f'.repeat(64), servedSha: 'a'.repeat(64),
+    imageSha256: `sha-${seq}`, ocr: { app: 'gpay' }, time: { state: 'unknown' }, ...over,
 });
 
 describe('PaymentProofsService', () => {
@@ -93,10 +94,11 @@ describe('PaymentProofsService', () => {
         const byMsg = new Map(res.items.map((i) => [i.telegramMsgId, i]));
         expect([1, 2, 7].map((m) => byMsg.get(m)!.risk)).toEqual([85, 85, 70]);
         expect(byMsg.get(2)).toMatchObject({ strong: true, atRiskAmount: 350, repeat: false });
-        expect(byMsg.get(2)!.riskReasons).toContain('Chat sent a fake receipt');
         expect(byMsg.get(8)!.stamp).toEqual({ decision: 'fine', at: at(1).toISOString() });
         for (const i of res.items) expect(i).not.toHaveProperty('inReview');
-        expect(res.reviewModel.options).toEqual({ dailyTarget: 20, riskFloor: 25, minAmount: 100, alwaysAmount: 200 });
+        // not sent since 2026-11-08 (no reader): the old review queue model, riskReasons and the bulky row fields
+        expect(res).not.toHaveProperty('reviewModel');
+        for (const i of res.items) for (const k of ['riskReasons', 'imageSha256', 'ocr', 'time']) expect(i).not.toHaveProperty(k);
         expect((await service.list({ sort: 'time', state: 'all' }, NOW)).items.map((i) => i.telegramMsgId)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
         expect(res.nextCursor).toBeNull();
         expect(res.truncated).toBe(false);
@@ -114,8 +116,9 @@ describe('PaymentProofsService', () => {
         expect(byMsg.get(4)).toMatchObject({ outcome: 'fake_blocked', username: 'u222', fakePaymentAt: new Date(NOW - 3600_000) });
         // kavya/333 has no userData row: persona falls back to the proof's profile
         expect(byMsg.get(7)).toMatchObject({ proofId: 'kavya1-333-7', outcome: 'credited', legacy: false, fakeScore: 55, persona: 'kavya', username: null, complaintScore: null, clientHost: 'https://kavya1.paidgirls.site' });
-        // page items carry the full row (not just the slim classification fields)
-        expect(byMsg.get(6)).toMatchObject({ payeeName: 'X STORES', image: { host: 'ramya1', bytes: 1234 }, ocr: { app: 'phonepe', note: 'hi' }, verdict: { payee: 'foreign' }, mode: 'enforce' });
+        // page items carry the full row (not just the slim classification fields), minus the unread ocr / time / imageSha256 (2026-11-08)
+        expect(byMsg.get(6)).toMatchObject({ payeeName: 'X STORES', image: { host: 'ramya1', bytes: 1234 }, verdict: { payee: 'foreign' }, mode: 'enforce' });
+        expect(byMsg.get(6)).not.toHaveProperty('ocr');
         for (const i of items) {
             expect(i).not.toHaveProperty('shadow');
             expect(i).not.toHaveProperty('imageHash');
@@ -188,7 +191,6 @@ describe('PaymentProofsService', () => {
         const [copy, orig] = r.items; // newest first
         expect(orig).toMatchObject({ amount: 50, strong: false, reusedFrom: null });
         expect(copy).toMatchObject({ amount: 350, strong: true });
-        expect(copy.riskReasons).toContain('Reused UTR of an earlier receipt (₹50 before)');
         expect(copy.reusedFrom).toMatchObject({ proofId: orig.proofId, chatId: '555', amount: 50 });
     });
 

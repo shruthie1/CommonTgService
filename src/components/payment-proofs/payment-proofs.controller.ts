@@ -19,16 +19,13 @@ export class PaymentProofsController {
         description:
             'Since 2026-11-07 the only state is all and the only sort time; the per-state lists and the risk order were removed ' +
             '(the views replace them). counts: flagged, not_credited, credited, marked, reviewed, all. ' +
-            'review rule (revenue + long-term blocking, post-hoc; nothing in tg-aut reads it) = CREDITED AND not reviewed AND chat not ' +
-            'marked fake AND (strong fake signal OR (credited ₹ >= REVIEW_MIN_AMOUNT (100) AND among the IST day\'s top ' +
-            'REVIEW_DAILY_TARGET (20) minus strong, by risk, with risk >= REVIEW_RISK_FLOOR (25))). Strong: fake reason code, ' +
-            'fakeScore >= 40, fakeSignals, chat sent a fake receipt, same image in another chat (not the first chat), reused UTR of an ' +
-            'earlier receipt (another chat or amount; the earliest proof with a UTR is the original), same receipt credited before, ' +
-            'payer of a marked-fake chat. Uncredited proofs (repeats, not_ours, not_receipt, old_time, over_limit, uncredited ' +
-            'fakes) never enter review. Items carry risk (0-100), riskReasons, atRiskAmount, strong, repeat, reusedFrom; ' +
+            'Items carry risk (0-100), atRiskAmount, strong, repeat, reusedFrom (signals from the whole 7-day collection; ' +
+            'strong: fake reason code, fakeScore >= 40, fakeSignals, chat sent a fake receipt, same image in another chat, reused ' +
+            'UTR of an earlier receipt, same receipt credited before, payer of a marked-fake chat). Not sent since 2026-11-08 ' +
+            '(no reader): reviewModel, riskReasons, imageSha256, ocr, time. ' +
             'flagged = outcome fraud_ask|fake_blocked|cross_client; marked = chat has userData.fakePaymentAt; reviewed = a stamp that still holds (item.stamp). ' +
             'Rows without verdict (before tg-aut wrote one) get an outcome derived from servedAt / ask / decision (legacy: true). ' +
-            'counts cover since/client/chat/minAmount (not cursor); the review model always uses the whole 7-day collection.',
+            'counts cover since/client/chat/minAmount (not cursor).',
     })
     @ApiQuery({ name: 'since', required: false, description: 'ISO date; default now - 7 days (the TTL)' })
     @ApiQuery({ name: 'client', required: false, description: 'clientId' })

@@ -4,7 +4,7 @@ import { Model } from 'mongoose';
 import { UserData, UserDataDocument } from '../user-data/schemas/user-data.schema';
 import { PAYMENT_PROOF_MODEL, PaymentProofRow, ProofReview, REVIEW_DECISIONS, ReviewDecision } from './schemas/payment-proof.schema';
 import {
-    ClassifiedProof, PROOF_STATES, ProofCounts, ProofState, ReviewModel, addToCounts, buildReviewModel, classify,
+    ClassifiedProof, PROOF_STATES, ProofCounts, ProofState, addToCounts, buildReviewModel, classify,
     decodeCursor, emptyCounts, encodeCursor, isAfterCursor, parseProofId, proofIdOf, reviewOptionsFromEnv,
 } from './payment-proofs.classify';
 import { ChatUser, REVIEW_VIEWS, ReviewView, ReviewViews, buildViews, isHiddenEntry } from './payment-proofs.views';
@@ -38,8 +38,14 @@ export function listCacheMs(env: Record<string, string | undefined> = process.en
     return Number.isFinite(n) && n >= 0 ? n : DEFAULT_LIST_CACHE_MS;
 }
 
-/** Bulky / internal fields not sent to the UI (shadow vision run, perceptual hash, race-guard copies). */
-const ROW_PROJECTION = { shadow: 0, imageHash: 0, servedUtr: 0, servedSha: 0 } as const;
+/**
+ * Bulky / internal fields not sent to the UI (shadow vision run, perceptual hash, race-guard copies), plus fields the
+ * list stopped sending 2026-11-08 because no client reads them (imageSha256, ocr, time; classify reads them from the
+ * slim window read, not from these page rows).
+ */
+const ROW_PROJECTION = { shadow: 0, imageHash: 0, servedUtr: 0, servedSha: 0, imageSha256: 0, ocr: 0, time: 0 } as const;
+/** Row fields never put on a list item (the slim fallback row carries them). */
+type UnsentRowField = '_id' | 'imageSha256' | 'ocr' | 'time';
 /**
  * Only what classify() + paging need, for the whole-window read; the page's full rows are fetched by _id after.
  * Prod 2026-11-03 (laptop -> Atlas): 1,757 rows = 431 KB / ~5.0 s slim vs 914 KB / ~9.6 s with ROW_PROJECTION.
@@ -76,7 +82,7 @@ export interface ListQuery {
     sort?: string;
 }
 
-export interface ProofItem extends Omit<PaymentProofRow, '_id'> {
+export interface ProofItem extends Omit<PaymentProofRow, UnsentRowField> {
     _id: string;
     proofId: string;
     outcome: string;
@@ -88,7 +94,6 @@ export interface ProofItem extends Omit<PaymentProofRow, '_id'> {
     stamp: ClassifiedProof['stamp'];
     flagged: boolean;
     risk: number;
-    riskReasons: string[];
     atRiskAmount: number;
     strong: boolean;
     repeat: boolean;
@@ -105,8 +110,6 @@ export interface ListResult {
     items: ProofItem[];
     nextCursor: string | null;
     counts: ProofCounts;
-    /** The review rule's settings and per-IST-day risk threshold (whole collection, not the filters). */
-    reviewModel: ReviewModel;
     /** true when the window held more than MAX_WINDOW_ROWS rows (counts then cover only the newest ones). */
     truncated: boolean;
 }
@@ -131,7 +134,6 @@ interface WindowData {
     truncated: boolean;
     chats: Map<string, ChatEntry>;
     everything: { row: PaymentProofRow; c: ClassifiedProof }[];
-    reviewModel: ReviewModel;
     views: ReviewViews;
 }
 
@@ -196,7 +198,7 @@ export class PaymentProofsService {
     async list(q: ListQuery, now = Date.now()): Promise<ListResult> {
         const p = this.parseQuery(q, now);
         // Shared whole-window data (cached); since / client / chat / minAmount / paging are applied per request.
-        const { everything, chats, reviewModel, truncated } = await this.window(p.since, now);
+        const { everything, chats, truncated } = await this.window(p.since, now);
         const isMarked = (chatId: string) => !!chats.get(chatId)?.marked;
 
         const classified = everything.filter(({ row, c }) =>
@@ -230,10 +232,12 @@ export class PaymentProofsService {
         const items = page.map(({ row: slim, c }) => {
             // A row the TTL removed between the two reads keeps its slim fields.
             const row = full.get(String(slim._id)) ?? slim;
+            // not sent (no reader; ~25% of the list bytes): the slim fallback row still carries them
+            const { imageSha256: _sha, ocr: _ocr, time: _time, ...sent } = row;
             const chat = chats.get(String(row.chatId));
             const ud = chat?.rows.get(String(row.profile));
             return {
-                ...row,
+                ...sent,
                 _id: String(row._id),
                 proofId: c.proofId,
                 outcome: c.outcome,
@@ -244,7 +248,6 @@ export class PaymentProofsService {
                 stamp: c.stamp,
                 flagged: c.flagged,
                 risk: c.risk,
-                riskReasons: c.riskReasons,
                 atRiskAmount: c.atRiskAmount,
                 strong: c.strong,
                 repeat: c.repeat,
@@ -258,7 +261,7 @@ export class PaymentProofsService {
         });
         const last = page[page.length - 1];
         const nextCursor = more && last ? encodeCursor({ t: last.t, id: String(last.row._id) }) : null;
-        return { items, nextCursor, counts, reviewModel, truncated };
+        return { items, nextCursor, counts, truncated };
     }
 
     /** The shared whole-window data: cached, single-flight, stale-while-revalidate (see DEFAULT_LIST_CACHE_MS). */
@@ -317,9 +320,9 @@ export class PaymentProofsService {
     private derive(d: Pick<WindowData, 'loadedAt' | 'rows' | 'truncated' | 'chats'>): WindowData {
         const everything = d.rows.map((row) => ({ row, c: classify(row) }));
         const options = reviewOptionsFromEnv();
-        const reviewModel = buildReviewModel(everything, (chatId) => !!d.chats.get(chatId)?.marked, options);
+        buildReviewModel(everything, (chatId) => !!d.chats.get(chatId)?.marked, options);
         const users = new Map([...d.chats].map(([chatId, e]) => [chatId, [...e.rows.values()]]));
-        return { ...d, everything, reviewModel, views: buildViews(everything, users, options) };
+        return { ...d, everything, views: buildViews(everything, users, options) };
     }
 
     /**
