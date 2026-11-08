@@ -132,8 +132,10 @@ describe('AppService batched notices', () => {
     });
   });
 
-  describe('getPaymentStats stale-row reset', () => {
-    it('reports N reset rows as ONE notice and keeps the response unchanged', async () => {
+  // Owner decision 2026-11-08 (item 7): a stats read never writes. /paymentstats used to reset stale other-persona
+  // rows (money/entitlement fields + a fake lastMsgTimeStamp) and post a 'Reset userData' notice.
+  describe('getPaymentStats is read-only', () => {
+    it('leaves 25-day-stale other-persona rows untouched, sends no notice, and keeps the response unchanged', async () => {
       const stale = (profile: string) => ({
         profile, chatId: 'chat-1', canReply: 1, lastMsgTimeStamp: Date.now() - 25 * 24 * 3600 * 1000,
         callTime: 0, videos: [],
@@ -150,13 +152,8 @@ describe('AppService batched notices', () => {
 
       const resp = await service.getPaymentStats('chat-1', 'me');
 
-      expect(update).toHaveBeenCalledTimes(3);
-      expect(notice).toHaveBeenCalledTimes(1);
-      const input = notice.mock.calls[0][1];
-      expect(input.title).toBe('Reset userData');
-      expect(input.tables[0].rows.map((r: unknown[]) => r[0])).toEqual(['p1', 'p2', 'p3']);
-      expect(input.tables[0].columns[0]).toBe('Profile (3)');
-      expect(input.summary).toBeUndefined();
+      expect(update).not.toHaveBeenCalled();
+      expect(notice).not.toHaveBeenCalled();
       expect(resp).toEqual({ paid: 0, demoGiven: 0, secondShow: 0, fullShow: 0, latestCallTime: 0, canCall: true, videos: [] });
     });
   });

@@ -382,8 +382,15 @@ const AUTH_ALLOWLIST = {
   countries: ['singapore'],
   deviceModelSubstrings: ['oneplus 11', 'cli', 'linux', 'windows'],
   deviceModelSuffixes: ['-ssk'],
-  appNamePrefixes: ['lik', 'ramy', 'sru', 'shru', 'han'],
+  appNamePrefixes: ['lik', 'ram', 'sru', 'shru', 'han'],
 };
+
+// Owner decision 2026-11-08: tg and CMS share this rule. Prefixes match the app name with non-alphanumerics
+// stripped ("Ram s 1" -> "rams1"), so operator rams*/ramys sessions are kept; "Telegram ..." never starts with one.
+function ownedAppPrefix(appName: string): string | undefined {
+  const compactAppName = appName.replace(/[^a-z0-9]+/g, "");
+  return AUTH_ALLOWLIST.appNamePrefixes.find((prefix) => compactAppName.startsWith(prefix));
+}
 
 export function getAuthProtectionReason(auth: Api.Authorization): string | null {
   // Most reliable: exact apiId match against our registered credentials
@@ -402,7 +409,7 @@ export function getAuthProtectionReason(auth: Api.Authorization): string | null 
   const deviceSuffixMatch = AUTH_ALLOWLIST.deviceModelSuffixes.find(s => device.endsWith(s));
   if (deviceSuffixMatch) return `device_suffix:${deviceSuffixMatch}`;
 
-  const appPrefixMatch = AUTH_ALLOWLIST.appNamePrefixes.find(s => app.startsWith(s));
+  const appPrefixMatch = ownedAppPrefix(app);
   if (appPrefixMatch) return `app_prefix:${appPrefixMatch}`;
 
   return null;

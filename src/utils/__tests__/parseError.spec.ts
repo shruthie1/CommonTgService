@@ -292,6 +292,13 @@ describe('parseError', () => {
     expect(mockedNotice).not.toHaveBeenCalled();
   });
 
+  // Owner decision 2026-11-08 (item 8): tg wins; PEER_FLOOD is an expected account-limit outcome, not an app error.
+  test('does not send a notification for PEER_FLOOD', () => {
+    process.env.NODE_ENV = 'production';
+    parseError({ errorMessage: 'PEER_FLOOD', message: '400: PEER_FLOOD (caused by messages.SendMessage)' }, '919812345678', true);
+    expect(mockedNotice).not.toHaveBeenCalled();
+  });
+
   test('does not send a notification for 429 status', () => {
     process.env.NODE_ENV = 'production';
     parseError({ response: { status: 429, data: { message: 'rate limited' } } }, 'pfx', true);

@@ -11,16 +11,16 @@ describe('AppService user-data/timestamp retention', () => {
     return service;
   }
 
-  it('still clears timestamps when the userData sweep fails, and reports each step separately', async () => {
-    const service = makeService({
-      userDataService: { removeRedundantData: jest.fn().mockRejectedValue(new Error('sweep down')) },
-    });
+  // Owner rule 2026-10-26 "never delete records from db" (decision 2026-11-08, item 6): the nightly job no longer
+  // deletes idle never-paid userData rows. Only the timestamps heartbeat clear remains.
+  it('never calls the userData delete sweep', async () => {
+    const service = makeService();
 
     await (service as any).runUserDataRetention();
 
+    expect(service.userDataService.removeRedundantData).not.toHaveBeenCalled();
     expect(service.timestampService.clear).toHaveBeenCalledTimes(1);
-    const errors = service.logger.error.mock.calls.map(([message]: [string]) => message);
-    expect(errors).toEqual([expect.stringContaining('userData retention failed')]);
+    expect(service.logger.error).not.toHaveBeenCalled();
   });
 
   it('reports a timestamps clear failure as such, not as a userData failure', async () => {
@@ -33,6 +33,5 @@ describe('AppService user-data/timestamp retention', () => {
     const errors = service.logger.error.mock.calls.map(([message]: [string]) => message);
     expect(errors).toEqual([expect.stringContaining('timestamps clear failed')]);
     expect(errors.join(' ')).not.toMatch(/userData/i);
-    expect(service.logger.log).toHaveBeenCalledWith(expect.stringContaining('deleted=3'));
   });
 });

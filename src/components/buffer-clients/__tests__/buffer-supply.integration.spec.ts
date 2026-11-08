@@ -128,8 +128,9 @@ describe('buffer enrolment follows demand (integration)', () => {
         expect(enrolledFor('stocked-client')).toBe(0);
     });
 
-    it('limited accounts count only when they lift inside the 30-day window', async () => {
-        // 6 lift in 5 days (count), 4 lift in 45 days (do not), 10 harsh (do not): counted 6 -> need 4.
+    it('limited accounts are held (cap) but are not supply; ones lifting after 30 days are not even held', async () => {
+        // Owner 2026-11-08 (item 10): supply = usable only. 6 lift in 5 days (held, not supply), 4 lift in 45 days and
+        // 10 harsh (neither): counted 0, held 6 -> need = min(cap 15 - held 6, target 10 - 0) = 9.
         await seedGraduated('harsh-client', 6, { spamStatus: 'limited', limitedUntil: new Date(Date.now() + 5 * DAY), spamCheckedAt: new Date() }, '1555500');
         await seedGraduated('harsh-client', 4, { spamStatus: 'limited', limitedUntil: new Date(Date.now() + 45 * DAY), spamCheckedAt: new Date() }, '1555510');
         await seedGraduated('harsh-client', 10, { spamStatus: 'harsh', spamCheckedAt: new Date() }, '1555520');
@@ -137,7 +138,7 @@ describe('buffer enrolment follows demand (integration)', () => {
 
         await service.checkBufferClients();
 
-        expect(enrolledFor('harsh-client')).toBe(4);
+        expect(enrolledFor('harsh-client')).toBe(9);
         expect(enrolledFor('stocked-client')).toBe(0);
     });
 
@@ -177,8 +178,47 @@ describe('buffer enrolment follows demand (integration)', () => {
         expect(entry.excluded).toEqual({ harsh: 3, never_checked: 2 });
         expect(entry.needsSpamCheck.sort()).toEqual(['15563000000', '15563000001']);
         const table = service.buildSupplyPlanTable(plan)!;
-        expect(table.columns).toContain('Harsh');
-        expect(table.rows[0]).toEqual(['harsh-client', '0 (0f/0l/0w)', '3', '2', '0', '10/15', '10', '10']);
+        expect(table.columns).toEqual(['Client', 'Usable', 'Limited/Warming', 'Harsh', 'Unchecked', 'Swaps', 'Target/Cap', 'Need', 'Enrol']);
+        expect(table.rows[0]).toEqual(['harsh-client', '0', '0l/0w', '3', '2', '0', '10/15', '10', '10']);
+    });
+
+    /** Still warming (not graduated), so classifyBufferForCap returns kind 'pipeline'. */
+    async function seedWarming(clientId: string, count: number, prefix: string) {
+        await BufferClientModel.insertMany(Array.from({ length: count }, (_, i) => makeBufferClientData({
+            mobile: `${prefix}${String(i).padStart(4, '0')}`, clientId, status: 'active', warmupPhase: 'settling',
+            channels: 40, inUse: false, failedUpdateAttempts: 0, enrolledAt: new Date(Date.now() - 20 * DAY),
+        } as any)));
+    }
+
+    // Owner 2026-11-08 (item 10): live diagnoseEnrollment showed 16 of 20 clients with 0 usable accounts reporting
+    // "no deficit" because warming accounts counted as supply (e.g. 0 usable / 10 warming = counted 10 = target).
+    it('warming accounts are not supply: 0 usable + 10 warming still has a deficit, bounded by the held cap', async () => {
+        await seedWarming('harsh-client', 10, '1557100');
+        await seedWarming('stocked-client', 15, '1557200');
+
+        const plan = await service.buildBufferSupplyPlan(await clientService.findAll());
+        const warming = plan.entries.find((e) => e.clientId === 'harsh-client')!;
+        // need = min(cap 15 - held 10, max(target 10 - usable 0, windowNeed)) = 5
+        expect(warming).toMatchObject({ counted: 0, held: 10, target: 10, cap: 15, need: 5 });
+        expect(warming.countedByKind).toEqual({ usable: 0, limited_soon: 0, pipeline: 10 });
+        expect(plan.heldPerClient.get('harsh-client')).toBe(10);
+        // 15 warming = held at the cap: no pile-up of warming accounts.
+        expect(plan.entries.find((e) => e.clientId === 'stocked-client')).toMatchObject({ counted: 0, held: 15, need: 0 });
+        expect(service.buildSupplyPlanTable(plan)!.rows.find((r) => r[0] === 'harsh-client')!.slice(1, 3)).toEqual(['0', '0l/10w']);
+
+        await service.checkBufferClients();
+        expect(enrolledFor('harsh-client')).toBe(5);
+        expect(enrolledFor('stocked-client')).toBe(0);
+    });
+
+    it('diagnoseEnrollment reports usable as healthyCount and remaining capacity against held', async () => {
+        await seedWarming('harsh-client', 10, '1557300');
+        usersService.countDocuments = jest.fn(async () => 0);
+
+        const diag: any = await service.diagnoseEnrollmentDecision();
+        const decision = (diag.perClientDecisions ?? diag.clients ?? diag.decisions)
+            .find((d: any) => d.clientId === 'harsh-client');
+        expect(decision).toMatchObject({ healthyCount: 0, heldCount: 10, healthyCap: 15, remainingCapacity: 5, totalNeeded: 5 });
     });
 
     it('BUFFER_SUPPLY_MODE=legacy restores the old counting (harsh client stays blocked at 20/20)', async () => {

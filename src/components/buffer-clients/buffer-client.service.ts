@@ -88,7 +88,10 @@ import { maskMobile } from '../monitor/monitor-util';
 type ClientCount = { _id: string; count: number };
 type EnrollmentDecision = {
     clientId: string;
+    /** Dynamic mode: usable accounts only (owner 2026-11-08). Legacy: the old healthy count. */
     healthyCount: number;
+    /** Everything the client holds against its cap: usable + limited_soon + warming (dynamic); = healthyCount in legacy. */
+    heldCount: number;
     healthyCap: number;
     remainingCapacity: number;
     readyActive: number;
@@ -106,7 +109,10 @@ type EnrollmentDecision = {
 };
 type BufferSupplyPlanEntry = {
     clientId: string;
+    /** Supply: usable accounts only in dynamic mode (owner 2026-11-08); the old healthy count in legacy. */
     counted: number;
+    /** Per-client accumulation against the cap: usable + limited_soon + pipeline (dynamic); = counted in legacy. */
+    held: number;
     countedByKind: Record<CapCountedKind, number>;
     excluded: Partial<Record<CapExclusionReason, number>>;
     /** Graduated mobiles without a trusted SpamBot verdict (never checked / stale free). */
@@ -137,6 +143,8 @@ export type BufferSupplyPlan = {
     };
     entries: BufferSupplyPlanEntry[];
     countedPerClient: Map<string, number>;
+    /** What bounds new enrolments per client (cap - held); passed to the enrolment batch cap check. */
+    heldPerClient: Map<string, number>;
     capPerClient: Map<string, number>;
 };
 type ClientNeed = { clientId: string; totalNeeded: number; priority: number };
@@ -258,6 +266,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         const healthByDoc = healthViews ? new Map<unknown, AccountHealthView>(assigned.map((doc, i) => [doc, healthViews[i]])) : null;
 
         const countedPerClient = new Map<string, number>();
+        const heldPerClient = new Map<string, number>(); // usable + limited_soon + pipeline: per-client accumulation cap
         const capPerClient = new Map<string, number>();
         const perClient = new Map<string, {
             counted: Record<CapCountedKind, number>;
@@ -275,6 +284,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             if (config.mode === 'legacy') {
                 if (this.isHealthyBufferClientForCap(doc as Partial<BufferClientDocument>, now)) {
                     countedPerClient.set(doc.clientId, (countedPerClient.get(doc.clientId) || 0) + 1);
+                    heldPerClient.set(doc.clientId, (heldPerClient.get(doc.clientId) || 0) + 1);
                 }
                 continue;
             }
@@ -288,7 +298,10 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             );
             if ('kind' in verdict) {
                 bucket.counted[verdict.kind] += 1;
-                countedPerClient.set(doc.clientId, (countedPerClient.get(doc.clientId) || 0) + 1);
+                heldPerClient.set(doc.clientId, (heldPerClient.get(doc.clientId) || 0) + 1);
+                // Owner 2026-11-08 (item 10): supply = usable accounts only. Limited and warming accounts are shown
+                // separately and still count toward the per-client cap (held), so warming cannot pile up.
+                if (verdict.kind === 'usable') countedPerClient.set(doc.clientId, (countedPerClient.get(doc.clientId) || 0) + 1);
                 if (verdict.kind === 'pipeline') fleetWarming += 1;
             } else {
                 const reason = verdict.reason;
@@ -319,6 +332,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         for (const client of clients) {
             const availability = await this.calculateAvailabilityBasedNeedsForCurrentState(client.clientId);
             const counted = countedPerClient.get(client.clientId) || 0;
+            const held = heldPerClient.get(client.clientId) || 0;
             const bucket = perClient.get(client.clientId) || { counted: { usable: 0, limited_soon: 0, pipeline: 0 }, excluded: {}, needsSpamCheck: [] };
             if (config.mode === 'legacy') {
                 const cap = LEGACY_HEALTHY_CAP;
@@ -326,7 +340,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 const need = Math.min(availability.totalNeeded, remaining);
                 capPerClient.set(client.clientId, cap);
                 entries.push({
-                    clientId: client.clientId, counted, countedByKind: bucket.counted, excluded: bucket.excluded,
+                    clientId: client.clientId, counted, held, countedByKind: bucket.counted, excluded: bucket.excluded,
                     needsSpamCheck: [], consumed: 0, ratePerDay: 0, target: this.config.minTotalClients, cap,
                     windowNeed: availability.totalNeeded, need, allocated: 0, priority: availability.priority,
                     reason: need < availability.totalNeeded
@@ -338,14 +352,14 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             }
             const consumed = consumedPerClient.get(client.clientId) || 0;
             const target = computeClientSupplyTarget({ consumed, counted }, config);
-            const remaining = Math.max(0, target.cap - counted);
+            const remaining = Math.max(0, target.cap - held);
             const need = Math.min(remaining, Math.max(target.need, availability.totalNeeded));
             capPerClient.set(client.clientId, target.cap);
             entries.push({
-                clientId: client.clientId, counted, countedByKind: bucket.counted, excluded: bucket.excluded,
+                clientId: client.clientId, counted, held, countedByKind: bucket.counted, excluded: bucket.excluded,
                 needsSpamCheck: bucket.needsSpamCheck, consumed, ratePerDay: target.ratePerDay, target: target.target,
                 cap: target.cap, windowNeed: availability.totalNeeded, need, allocated: 0, priority: availability.priority,
-                reason: `supply ${counted}/${target.target} (cap ${target.cap}; ${consumed} swaps in ${config.consumptionWindowDays}d)`,
+                reason: `supply ${counted} usable/${target.target} (+${bucket.counted.limited_soon} limited, ${bucket.counted.pipeline} warming; held ${held}/cap ${target.cap}; ${consumed} swaps in ${config.consumptionWindowDays}d)`,
                 availability,
             });
         }
@@ -381,7 +395,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             || b.need - a.need
             || a.priority - b.priority
             || a.clientId.localeCompare(b.clientId));
-        return { mode: config.mode, invalidConfig: invalid, config, fleet, entries: ordered, countedPerClient, capPerClient };
+        return { mode: config.mode, invalidConfig: invalid, config, fleet, entries: ordered, countedPerClient, heldPerClient, capPerClient };
     }
 
     /** Ops audit line per client + one fleet line. grep "Buffer supply plan". */
@@ -393,6 +407,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             this.logger.info(`[${entry.clientId}] Buffer supply plan`, {
                 mode: plan.mode,
                 counted: entry.counted,
+                held: entry.held,
                 countedByKind: entry.countedByKind,
                 excluded: entry.excluded,
                 needsSpamCheck: entry.needsSpamCheck,
@@ -895,10 +910,11 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         let totalSlotsNeeded = 0;
         for (const entry of plan.entries) {
             const availabilityNeeds = entry.availability;
-            const remainingCapacity = Math.max(0, entry.cap - entry.counted);
+            const remainingCapacity = Math.max(0, entry.cap - entry.held);
             const decision: EnrollmentDecision = {
                 clientId: entry.clientId,
                 healthyCount: entry.counted,
+                heldCount: entry.held,
                 healthyCap: entry.cap,
                 remainingCapacity,
                 readyActive: availabilityNeeds.readyActive,
@@ -928,7 +944,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 allocations.push({ clientId: entry.clientId, allocated: entry.allocated, priority: entry.priority });
                 totalSlotsNeeded += entry.allocated;
             } else if (wanted > 0 && remainingCapacity <= 0) {
-                decision.blockedReason = `healthy cap reached (${entry.counted}/${entry.cap})`;
+                decision.blockedReason = `healthy cap reached (${entry.held}/${entry.cap} held, ${entry.counted} usable)`;
             } else if (entry.need > 0) {
                 decision.blockedReason = `fleet enrolment budget exhausted (${plan.fleet.budget} this run)`;
             } else {
@@ -1247,7 +1263,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         };
         if (clientNeedingBufferClients.length > 0 && totalSlotsNeeded > 0) {
             try {
-                dynamicCreateResult = await this.addNewUserstoBufferClientsDynamic([], goodIds, clientNeedingBufferClients, supplyPlan.countedPerClient, supplyPlan.capPerClient);
+                dynamicCreateResult = await this.addNewUserstoBufferClientsDynamic([], goodIds, clientNeedingBufferClients, supplyPlan.heldPerClient, supplyPlan.capPerClient);
             } catch (error) {
                 const errMsg = parseError(error, 'addNewUserstoBufferClientsDynamic').message;
                 this.logger.error(`Dynamic buffer enrollment failed: ${errMsg}`);
@@ -1345,7 +1361,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 priority: entry.priority,
             }));
         if (needs.length === 0) return;
-        await this.addNewUserstoBufferClientsDynamic(badIds, goodIds, needs, plan.countedPerClient, plan.capPerClient);
+        await this.addNewUserstoBufferClientsDynamic(badIds, goodIds, needs, plan.heldPerClient, plan.capPerClient);
     }
 
     async addNewUserstoBufferClientsDynamic(
@@ -1564,7 +1580,8 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         if (!plan.entries.length) return null;
         const rows = plan.entries.map((e) => [
             e.clientId,
-            `${e.counted} (${e.countedByKind.usable}f/${e.countedByKind.limited_soon}l/${e.countedByKind.pipeline}w)`,
+            String(e.counted),
+            `${e.countedByKind.limited_soon}l/${e.countedByKind.pipeline}w`,
             String(e.excluded.harsh || 0),
             String((e.excluded.never_checked || 0) + (e.excluded.stale_free || 0)),
             String(e.consumed),
@@ -1578,7 +1595,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             : `budget ${fleet.budget}, 7d enrolled ${fleet.enrolledLast7d}/${fleet.weeklyCeiling}, warming ${fleet.fleetWarming}/${fleet.pipelineCapacity}`;
         return {
             title: `Supply plan (${budgetNote})`,
-            columns: ['Client', 'Counted f/l/w', 'Harsh', 'Unchecked', 'Swaps', 'Target/Cap', 'Need', 'Enrol'],
+            columns: ['Client', 'Usable', 'Limited/Warming', 'Harsh', 'Unchecked', 'Swaps', 'Target/Cap', 'Need', 'Enrol'],
             rows,
         };
     }

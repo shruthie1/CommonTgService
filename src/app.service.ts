@@ -218,21 +218,12 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Nightly retention. The two steps are independent: a failed userData sweep
-   * must not skip the timestamps clear, and each failure is reported as itself.
+   * Nightly retention: clears the timestamps heartbeat only. The userData step
+   * (removeRedundantData: idle never-paid rows) was removed 2026-11-08 under the
+   * owner rule 2026-10-26 "never delete records from db".
    */
   private async runUserDataRetention(): Promise<void> {
-    this.logger.log('Starting UMS user-data/timestamp retention');
-    try {
-      const res = await this.userDataService.removeRedundantData();
-      this.logger.log(
-        `Completed UMS userData retention: deleted=${res.deletedCount}`,
-      );
-    } catch (e) {
-      this.logger.error(
-        `UMS userData retention failed: ${parseError(e, 'userData retention', false).message}`,
-      );
-    }
+    this.logger.log('Starting UMS timestamp retention (userData delete disabled: never delete records)');
     try {
       await this.timestampService.clear();
       this.logger.log('Completed UMS timestamps clear');
@@ -490,8 +481,10 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
 
   async getPaymentStats(chatId: string, profile: string) {
     // Both params scope the userData filters below. A missing chatId reaches Mongo as
-    // {"profile":{"$exists":true}} (mongoose drops undefined keys): every user's rows, with the
-    // stale-row reset writing to them. vcui always sends both (from its /:profile/:chatId route).
+    // {"profile":{"$exists":true}} (mongoose drops undefined keys): every user's rows.
+    // vcui always sends both (from its /:profile/:chatId route).
+    // Read-only since 2026-11-08 (owner decision, item 7): the stale other-persona reset that wrote
+    // payAmount/demoGiven/secondShow/highestPayAmount and a fake lastMsgTimeStamp was removed.
     if (!isNonBlankString(chatId) || !isNonBlankString(profile)) {
       throw new BadRequestException('chatId and profile are required');
     }
@@ -505,9 +498,6 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       videos: [],
     };
     const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
-    const twentyDays = Date.now() - 20 * 24 * 60 * 60 * 1000;
-    // Stale other-persona rows reset by this request: reported once, after the loop.
-    const resets: unknown[][] = [];
 
     try {
       const query1 = {
@@ -544,37 +534,11 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
               resp.latestCallTime = doc.callTime;
             }
             resp.videos.push(...doc.videos);
-          } else {
-            if (doc.lastMsgTimeStamp < twentyDays) {
-              resets.push([
-                doc.profile,
-                doc.chatId,
-                getReadableTimeDifference(doc.lastMsgTimeStamp, Date.now()),
-              ]);
-              await this.userDataService.update(doc.profile, doc.chatId, {
-                payAmount: 0,
-                demoGiven: false,
-                secondShow: false,
-                highestPayAmount: 0,
-                lastMsgTimeStamp: Date.now(),
-              });
-            }
           }
         }
       }
     } catch (error) {
       parseError(error);
-    }
-    if (resets.length) {
-      try {
-        await sendBotNotice('pppl', {
-          severity: 'warning',
-          title: 'Reset userData',
-          tables: [{ columns: [`Profile (${resets.length})`, 'Chat', 'Last message'], rows: resets }],
-        });
-      } catch (error) {
-        parseError(error, 'Resetting UserData notification failed', false);
-      }
     }
     console.log(resp);
     return resp;
@@ -1292,24 +1256,6 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     for (const job of this.scheduledJobs) job.cancel();
     RedisClient.stopPing();
   }
-}
-
-function getReadableTimeDifference(ms1: number, ms2: number): string {
-  const diff = Math.abs(ms1 - ms2); // get absolute difference
-  const seconds = Math.floor(diff / 1000);
-
-  const days = Math.floor(seconds / (3600 * 24));
-  const hours = Math.floor((seconds % (3600 * 24)) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = seconds % 60;
-
-  let result = [];
-  if (days > 0) result.push(`${days}d`);
-  if (hours > 0) result.push(`${hours}h`);
-  if (minutes > 0) result.push(`${minutes}m`);
-  if (secs > 0 || result.length === 0) result.push(`${secs}s`);
-
-  return result.join(' ');
 }
 
 function isNonBlankString(value: unknown): value is string {

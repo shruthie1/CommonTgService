@@ -32,7 +32,8 @@ const DEFAULT_ERROR_CONFIG: ErrorHandlingConfig = {
     /INPUT_USER_DEACTIVATED/i,
     /too many req/i,
     /could not find/i,
-    /ECONNREFUSED/i
+    /ECONNREFUSED/i,
+    /PEER_FLOOD/i
   ],
   defaultStatus: 500,
   defaultMessage: 'An unknown error occurred',

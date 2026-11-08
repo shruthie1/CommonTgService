@@ -70,8 +70,8 @@ describe('GET /paymentstats query params', () => {
       { chatId: '12345', profile: { $exists: true, $ne: 'shruthi' }, payAmount: { $gte: 10 } },
       { chatId: '12345', profile: { $exists: true, $ne: 'shruthi' } },
     ]);
-    expect(update).toHaveBeenCalledTimes(1);
-    expect(update.mock.calls[0].slice(0, 2)).toEqual(['nidhi', '12345']);
+    // Owner decision 2026-11-08 (item 7): read-only. The 25-day-stale 'nidhi' row is no longer reset.
+    expect(update).not.toHaveBeenCalled();
   });
 
   it.each([

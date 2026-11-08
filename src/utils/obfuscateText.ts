@@ -15,7 +15,7 @@ const DEFAULT_CONFIG: Required<ObfuscationOptions> = {
     preserveNumbers: false,
     preserveSpecialChars: true,
     useInvisibleChars: false, // ⚠️ safer for Telegram!
-    maintainFormatting: true,
+    maintainFormatting: false,
     randomSeed: null,
     maxInvisibleCharsPerWord: 2,
     customSafeBlocks: [],
@@ -49,7 +49,7 @@ interface ObfuscationOptions {
 }
 
 interface BatchResult {
-    config: ObfuscationConfig;
+    config: Required<ObfuscationOptions>;
     result: string;
     analysisStats: TextAnalysis;
 }
@@ -128,51 +128,25 @@ const invisibleChars: readonly string[] = [
     '\uFEFF', // Zero Width No-Break Space
 ] as const;
 
-// Configuration class for obfuscation settings
-class ObfuscationConfig {
-    public readonly substitutionRate: number;
-    public readonly invisibleCharRate: number;
-    public readonly preserveCase: boolean;
-    public readonly preserveNumbers: boolean;
-    public readonly preserveSpecialChars: boolean;
-    public readonly useInvisibleChars: boolean;
-    public readonly maintainFormatting: boolean;
-    public readonly randomSeed: number | null;
-    public readonly maxInvisibleCharsPerWord: number;
-    public readonly customSafeBlocks: readonly string[];
-    public readonly intensityVariation: boolean;
+// Default safe blocks (text that shouldn't be obfuscated)
+const defaultSafeBlocks: readonly string[] = [
+    '𝗩𝗲𝗱𝗶𝗼 𝗖𝗮𝗹𝗹 𝗗𝗲𝗺𝗼 𝗔𝘃𝗶𝗹𝗯𝗹𝗲',
+    '━━━━━━━━━━━━━━━━━━━━━━━━',
+    '🔥🔥  T O D A Y \' S   O F F E R  🔥🔥',
+    '🇻 🇮 🇩 🇪 🇴  🇨 🇦 𝗟 𝗟 ',
+    '𝗠𝗢𝗢𝗗', '𝗨𝗡𝗗𝗜', '𝗜𝗗𝗘', '𝗜𝗥𝗨𝗞𝗞𝗨',
+    '𝗛𝗔𝗜', '𝗛𝗔𝗜𝗥', '𝗛𝗔𝗜𝗥𝗘', '𝗗𝗠', '𝗖𝗛𝗘𝗬𝗬𝗜',
+    '𝗕𝗢𝗬𝗦', '𝗚𝗔𝗥𝗔𝗠', '𝗛𝗨𝗠𝗔𝗜𝗥𝗔𝗠', '𝗛𝗔𝗜𝗥𝗘𝗦𝗦', '𝗔𝗥𝗘𝗔𝗦',
+    '𝗖𝗔𝗟𝗟', '𝗢𝗡𝗟𝗬', '𝗗𝗔𝗥𝗟𝗜𝗡𝗚',
+    '𝗝𝗢𝗜𝗡', '𝗙𝗔𝗦𝗧', '𝗧𝗜𝗠𝗘', '𝗡𝗢', '𝗛𝗔𝗜',
+    '𝗟𝗘𝗧𝗦', '𝗛𝗔𝗩𝗘', '𝗛𝗢𝗧', '𝗩𝗜𝗗𝗘𝗢', '𝗖𝗔𝗟𝗟'
+] as const;
 
-    constructor(options: ObfuscationOptions = {}) {
-        const config = { ...DEFAULT_CONFIG, ...options };
-
-        this.substitutionRate = config.substitutionRate;
-        this.invisibleCharRate = config.invisibleCharRate;
-        this.preserveCase = config.preserveCase;
-        this.preserveNumbers = config.preserveNumbers;
-        this.preserveSpecialChars = config.preserveSpecialChars;
-        this.useInvisibleChars = config.useInvisibleChars;
-        this.maintainFormatting = config.maintainFormatting;
-        this.randomSeed = config.randomSeed;
-        this.maxInvisibleCharsPerWord = config.maxInvisibleCharsPerWord;
-        this.customSafeBlocks = Object.freeze([...config.customSafeBlocks]);
-        this.intensityVariation = config.intensityVariation;
-    }
-
-    public toJSON(): ObfuscationOptions {
-        return {
-            substitutionRate: this.substitutionRate,
-            invisibleCharRate: this.invisibleCharRate,
-            preserveCase: this.preserveCase,
-            preserveNumbers: this.preserveNumbers,
-            preserveSpecialChars: this.preserveSpecialChars,
-            useInvisibleChars: this.useInvisibleChars,
-            maintainFormatting: this.maintainFormatting,
-            randomSeed: this.randomSeed,
-            maxInvisibleCharsPerWord: this.maxInvisibleCharsPerWord,
-            customSafeBlocks: [...this.customSafeBlocks],
-            intensityVariation: this.intensityVariation
-        };
-    }
+/**
+ * Get configuration with defaults applied
+ */
+function getConfig(options: ObfuscationOptions = {}): Required<ObfuscationOptions> {
+    return { ...DEFAULT_CONFIG, ...options };
 }
 
 // Seeded random number generator for reproducible results
@@ -211,7 +185,6 @@ class SeededRandom {
 }
 
 // Enhanced random selection with weighted preferences
-/* istanbul ignore next -- unused internal helper: obfuscateText uses SeededRandom.choice; getRandom has no caller/export */
 function getRandom<T>(arr: readonly T[], weights?: WeightArray | null): T {
     if (arr.length === 0) {
         throw new Error('Cannot select from empty array');
@@ -242,30 +215,17 @@ function getRandom<T>(arr: readonly T[], weights?: WeightArray | null): T {
     return arr[arr.length - 1];
 }
 
-// Default safe blocks (text that shouldn't be obfuscated)
-const defaultSafeBlocks: readonly string[] = [
-    '𝗩𝗲𝗱𝗶𝗼 𝗖𝗮𝗹𝗹 𝗗𝗲𝗺𝗼 𝗔𝘃𝗶𝗹𝗯𝗹𝗲',
-    '━━━━━━━━━━━━━━━━━━━━━━━━',
-    '🔥🔥  T O D A Y \' S   O F F E R  🔥🔥',
-    '🇻 🇮 🇩 🇪 🇴  🇨 🇦 𝗟 𝗟 ',
-    '𝗠𝗢𝗢𝗗', '𝗨𝗡𝗗𝗜', '𝗜𝗗𝗘', '𝗜𝗥𝗨𝗞𝗞𝗨',
-    '𝗛𝗔𝗜', '𝗛𝗔𝗜𝗥', '𝗛𝗔𝗜𝗥𝗘', '𝗗𝗠', '𝗖𝗛𝗘𝗬𝗬𝗜',
-    '𝗕𝗢𝗬𝗦', '𝗚𝗔𝗥𝗔𝗠', '𝗛𝗨𝗠𝗔𝗜𝗥𝗔𝗠', '𝗛𝗔𝗜𝗥𝗘𝗦𝗦', '𝗔𝗥𝗘𝗔𝗦',
-    '𝗖𝗔𝗟𝗟', '𝗡𝗢𝗪', '𝗗𝗔𝗥𝗟𝗜𝗡𝗚',
-    '𝗝𝗢𝗜𝗡', '𝗙𝗔𝗦𝗧', '𝗧𝗜𝗠𝗘', '𝗡𝗢', '𝗛𝗔𝗜',
-    '𝗟𝗘𝗧𝗦', '𝗛𝗔𝗩𝗘', '𝗛𝗢𝗧', '𝗩𝗜𝗗𝗘𝗢', '𝗖𝗔𝗟𝗟'
-] as const;
-
 /**
  * Main obfuscation function with enhanced features
  * @param text - The text to obfuscate
  * @param config - Configuration options
  * @returns Obfuscated text
  */
-export function obfuscateText(text: string, config: ObfuscationOptions | ObfuscationConfig = {}): string {
-    const settings = config instanceof ObfuscationConfig ? config : new ObfuscationConfig(config);
+export function obfuscateText(text: string, config: ObfuscationOptions = {}): string {
+    const settings = getConfig(config);
     const random = new SeededRandom(settings.randomSeed);
     const safeBlocks = [...defaultSafeBlocks, ...settings.customSafeBlocks];
+    const maintainFormatting = settings.maintainFormatting;
 
     const specialCharCache = new Map<string, string>(); // ✅ Cache special char replacements
 
@@ -273,16 +233,16 @@ export function obfuscateText(text: string, config: ObfuscationOptions | Obfusca
     const lines = text.split('\n');
 
     for (let j = 0; j < lines.length; j++) {
-        const line = lines[j].replace(/\*\*/g, '');
+        const line = maintainFormatting ? lines[j] : lines[j].replace(/\*\*/g, '');
 
         if (line.trim() === '') {
-            obfuscated += '\n';
+            obfuscated += '\n\n';
             continue;
         }
 
         const isSafe = safeBlocks.some((safe: string) => line.includes(safe));
         if (isSafe) {
-            obfuscated += line + '\n';
+            obfuscated += line + '\n\n';
             continue;
         }
 
@@ -362,7 +322,7 @@ export function obfuscateText(text: string, config: ObfuscationOptions | Obfusca
             }
         }
 
-        obfuscated += settings.maintainFormatting ? `**${newLine}**\n` : newLine + '\n';
+        obfuscated += maintainFormatting ? newLine + '\n\n' : `**${newLine}**\n\n`;
     }
 
     return obfuscated.trim();
@@ -481,8 +441,7 @@ export function attemptReverseFuzzy(obfuscatedText: string): string {
     // Character-by-character replacement with similarity scoring
     let result = '';
 
-    for (let i = 0; i < cleaned.length; i++) {
-        const char = cleaned[i];
+    for (const char of cleaned) {
         let bestMatch = char;
         let found = false;
 
@@ -590,10 +549,10 @@ function escapeRegExp(str: string): string {
  * @param configArray - Array of configuration objects
  * @returns Array of batch results
  */
-export function batchObfuscate(text: string, configArray: (ObfuscationOptions | ObfuscationConfig)[]): BatchResult[] {
+export function batchObfuscate(text: string, configArray: ObfuscationOptions[]): BatchResult[] {
     return configArray.map(config => {
-        const configObj = config instanceof ObfuscationConfig ? config : new ObfuscationConfig(config);
-        const result = obfuscateText(text, configObj);
+        const configObj = getConfig(config);
+        const result = obfuscateText(text, config);
         const analysisStats = analyzeText(result);
 
         return {
@@ -617,18 +576,19 @@ export function generateVariants(
     variants: number = 5
 ): string[] {
     const results: string[] = [];
-    const config = new ObfuscationConfig(baseConfig);
+    const baseSettings = getConfig(baseConfig);
 
     for (let i = 0; i < variants; i++) {
         const intensity = (i + 1) / variants;
-        const variantConfig = new ObfuscationConfig({
-            ...config.toJSON(),
+        const variantOptions = {
+            ...baseSettings,
             substitutionRate: intensity * 0.8,
             invisibleCharRate: intensity * 0.15,
             randomSeed: Math.floor(Math.random() * 1000000)
-        });
+        };
+        const variantSettings = getConfig(variantOptions);
 
-        results.push(obfuscateText(text, variantConfig));
+        results.push(obfuscateText(text, variantSettings));
     }
 
     return results;
@@ -653,16 +613,17 @@ export function validateConfig(config: ObfuscationOptions): void {
     }
 }
 
-// Export configuration class and utilities
+// Export utilities
 export {
-    ObfuscationConfig,
     SeededRandom,
     homoglyphMap,
+    defaultSafeBlocks,
     numberMap,
     specialCharMap,
     invisibleChars,
     type HomoglyphMap,
     type TextAnalysis,
     type ObfuscationOptions,
-    type BatchResult
+    type BatchResult,
+    getConfig
 };

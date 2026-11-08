@@ -1,5 +1,6 @@
 import { Logger } from '../logger';
 import { parseError } from '../parseError';
+import { redactSecretText } from '../redact-secrets';
 
 // Shape of a GramJS StringSession: "1" + base64 of dc/ip/port/256-byte auth key (~350 chars).
 const SESSION = '1' + 'BQANOTEuMTA4LjU2LjE0MAG7'.repeat(15) + 'Ab+/cD==';
@@ -48,6 +49,15 @@ describe('secret redaction in logs (PENDING 24-5)', () => {
     const tgErr = Object.assign(new Error('x'), { errorMessage: `AUTH_KEY_UNREGISTERED ${SESSION}` });
     expect(parseError(tgErr, 'p', false).message).not.toContain(SESSION);
     expect(parseError(tgErr, 'p', false).message).toContain('AUTH_KEY_UNREGISTERED');
+  });
+
+  // Owner decision 2026-11-08 (item 8): only the token secret is hidden; the leading digits (bot id, or a mobile
+  // written straight before ':') are kept, so a mobile is never lost from a log line.
+  test('bot-token redaction keeps the leading digits and hides only the secret', () => {
+    const secret = 'AAH' + 'x'.repeat(32);
+    expect(redactSecretText(`bot7012345678:${secret}/getMe`)).toBe('bot7012345678:[redacted-token]/getMe');
+    expect(redactSecretText(`919812345678:${secret}`)).toBe('919812345678:[redacted-token]');
+    expect(redactSecretText('919812345678: Error checking connection :: PEER_FLOOD')).toBe('919812345678: Error checking connection :: PEER_FLOOD');
   });
 
   test('short ordinary text is untouched', () => {

@@ -124,6 +124,19 @@ describe('getAuthProtectionReason', () => {
     test('protects app prefix', () => {
         expect(getAuthProtectionReason(makeAuth({ appName: 'likki app' }))).toBe('app_prefix:lik');
     });
+    // Owner decision 2026-11-08 (item 8): unified on the tg rule. Prefix 'ram' (not 'ramy') matched on the app name
+    // with non-alphanumerics stripped, so operator rams* sessions are kept; third-party Telegram clients are not.
+    test('protects operator rams*/ramys app names with the compact ram prefix', () => {
+        expect(getAuthProtectionReason(makeAuth({ appName: 'rams123' }))).toBe('app_prefix:ram');
+        expect(getAuthProtectionReason(makeAuth({ appName: 'ramys' }))).toBe('app_prefix:ram');
+        expect(getAuthProtectionReason(makeAuth({ appName: 'Ra-m s 1' }))).toBe('app_prefix:ram');
+        expect(getAuthProtectionReason(makeAuth({ appName: 'Shru thi' }))).toBe('app_prefix:shru');
+    });
+    test('does not protect Telegram or third-party client names', () => {
+        for (const appName of ['Telegram Android', 'Telegram Android X', 'Telegram Desktop', 'Nekogram', 'Nicegram', 'Plus Messenger', 'Swiftgram']) {
+            expect(getAuthProtectionReason(makeAuth({ appName, deviceModel: 'foo', country: 'India' }))).toBeNull();
+        }
+    });
     test('returns null for unprotected', () => {
         expect(getAuthProtectionReason(makeAuth({ appName: 'random', deviceModel: 'foo', country: 'India' }))).toBeNull();
     });

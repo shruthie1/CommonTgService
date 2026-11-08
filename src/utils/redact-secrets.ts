@@ -13,8 +13,11 @@ const SECRET_KEYS = new Set([
 
 /** GramJS StringSession: "1" followed by ~350 base64 chars. 200+ never occurs in ordinary text. */
 const SESSION_LIKE = /\b1[A-Za-z0-9+/_-]{200,}={0,2}/g;
-/** Telegram bot token: <bot id>:<35-char secret>. */
-const BOT_TOKEN_LIKE = /(?<!\d)\d{6,12}:[A-Za-z0-9_-]{30,}/g; // also inside ".../bot<token>/..."
+/**
+ * Telegram bot token: <bot id>:<35-char secret>. Only the secret is replaced: the leading digits (a bot id, which
+ * is not secret, or a mobile written straight before ':') are kept, so a mobile is never lost (2026-11-08).
+ */
+const BOT_TOKEN_LIKE = /(?<!\d)(\d{6,12}):[A-Za-z0-9_-]{30,}/g; // also inside ".../bot<token>/..."
 
 export const REDACTED = '[redacted]';
 
@@ -24,5 +27,5 @@ export function isSecretKey(key: string): boolean {
 
 export function redactSecretText<T>(text: T): T {
     if (typeof text !== 'string') return text;
-    return text.replace(SESSION_LIKE, '[redacted-session]').replace(BOT_TOKEN_LIKE, '[redacted-token]') as unknown as T;
+    return text.replace(SESSION_LIKE, '[redacted-session]').replace(BOT_TOKEN_LIKE, '$1:[redacted-token]') as unknown as T;
 }

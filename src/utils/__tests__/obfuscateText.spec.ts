@@ -7,7 +7,8 @@ import {
   batchObfuscate,
   generateVariants,
   validateConfig,
-  ObfuscationConfig,
+  getConfig,
+  defaultSafeBlocks,
   SeededRandom,
   homoglyphMap,
   numberMap,
@@ -68,22 +69,27 @@ describe('SeededRandom', () => {
   });
 });
 
-describe('ObfuscationConfig', () => {
+// Owner decision 2026-11-08 (item 8): CMS takes the tg-platform copy as-is (plain getConfig, tg meaning of
+// maintainFormatting: default false = strip ** and bold-wrap each line; true = keep text as written; \n\n separators).
+describe('getConfig', () => {
   test('applies defaults', () => {
-    const c = new ObfuscationConfig();
+    const c = getConfig();
     expect(c.substitutionRate).toBe(0.4);
     expect(c.preserveSpecialChars).toBe(true);
     expect(c.useInvisibleChars).toBe(false);
-    expect(Object.isFrozen(c.customSafeBlocks)).toBe(true);
+    expect(c.maintainFormatting).toBe(false);
   });
 
-  test('overrides via options and round-trips through toJSON', () => {
-    const c = new ObfuscationConfig({ substitutionRate: 0.7, customSafeBlocks: ['XYZ'], intensityVariation: true });
+  test('overrides via options', () => {
+    const c = getConfig({ substitutionRate: 0.7, customSafeBlocks: ['XYZ'], intensityVariation: true });
     expect(c.substitutionRate).toBe(0.7);
-    const json = c.toJSON();
-    expect(json.substitutionRate).toBe(0.7);
-    expect(json.customSafeBlocks).toEqual(['XYZ']);
-    expect(json.intensityVariation).toBe(true);
+    expect(c.customSafeBlocks).toEqual(['XYZ']);
+    expect(c.intensityVariation).toBe(true);
+  });
+
+  test('safe blocks carry the tg word list (bold ONLY, not NOW)', () => {
+    expect(defaultSafeBlocks).toContain('𝗢𝗡𝗟𝗬');
+    expect(defaultSafeBlocks).not.toContain('𝗡𝗢𝗪');
   });
 });
 
@@ -99,13 +105,18 @@ describe('obfuscateText', () => {
     expect(out).toBe('**hello**');
   });
 
-  test('maintainFormatting false omits the ** markers', () => {
-    const out = obfuscateText('hello', { randomSeed: 1, substitutionRate: 0, maintainFormatting: false });
+  test('maintainFormatting true keeps the text as written (no ** wrap)', () => {
+    const out = obfuscateText('hello', { randomSeed: 1, substitutionRate: 0, maintainFormatting: true });
     expect(out).toBe('hello');
   });
 
+  test('joins lines with a blank line', () => {
+    expect(obfuscateText('a\nb', { randomSeed: 1, substitutionRate: 0 })).toBe('**a**\n\n**b**');
+    expect(obfuscateText('a\nb', { randomSeed: 1, substitutionRate: 0, maintainFormatting: true })).toBe('a\n\nb');
+  });
+
   test('substitutes characters when substitutionRate is 1', () => {
-    const out = obfuscateText('abc', { randomSeed: 5, substitutionRate: 1, maintainFormatting: false });
+    const out = obfuscateText('abc', { randomSeed: 5, substitutionRate: 1, maintainFormatting: true });
     // every letter should differ from the original ASCII
     expect(out).not.toBe('abc');
     expect(out.length).toBeGreaterThanOrEqual(3);
@@ -123,32 +134,32 @@ describe('obfuscateText', () => {
   });
 
   test('respects customSafeBlocks', () => {
-    const out = obfuscateText('KEEPME', { randomSeed: 1, substitutionRate: 1, customSafeBlocks: ['KEEPME'], maintainFormatting: false });
+    const out = obfuscateText('KEEPME', { randomSeed: 1, substitutionRate: 1, customSafeBlocks: ['KEEPME'], maintainFormatting: true });
     expect(out).toBe('KEEPME');
   });
 
-  test('strips existing ** markers from input', () => {
-    const out = obfuscateText('**bold**', { randomSeed: 1, substitutionRate: 0, maintainFormatting: false });
-    expect(out).toBe('bold');
+  test('strips existing ** markers from input before wrapping (default)', () => {
+    const out = obfuscateText('**bold** text', { randomSeed: 1, substitutionRate: 0 });
+    expect(out).toBe('**bold text**');
   });
 
   test('preserveCase keeps uppercase substitutes uppercase', () => {
-    const out = obfuscateText('A', { randomSeed: 3, substitutionRate: 1, preserveCase: true, maintainFormatting: false });
+    const out = obfuscateText('A', { randomSeed: 3, substitutionRate: 1, preserveCase: true, maintainFormatting: true });
     expect(out).toBe(out.toUpperCase());
   });
 
   test('substitutes numbers when not preserved', () => {
-    const out = obfuscateText('123', { randomSeed: 9, substitutionRate: 1, preserveNumbers: false, maintainFormatting: false });
+    const out = obfuscateText('123', { randomSeed: 9, substitutionRate: 1, preserveNumbers: false, maintainFormatting: true });
     expect(out).not.toBe('123');
   });
 
   test('preserveNumbers keeps digits intact', () => {
-    const out = obfuscateText('123', { randomSeed: 9, substitutionRate: 1, preserveNumbers: true, maintainFormatting: false });
+    const out = obfuscateText('123', { randomSeed: 9, substitutionRate: 1, preserveNumbers: true, maintainFormatting: true });
     expect(out).toBe('123');
   });
 
   test('substitutes special chars when preserveSpecialChars is false', () => {
-    const out = obfuscateText('!!!!!!!!!!', { randomSeed: 2, substitutionRate: 1, preserveSpecialChars: false, maintainFormatting: false });
+    const out = obfuscateText('!!!!!!!!!!', { randomSeed: 2, substitutionRate: 1, preserveSpecialChars: false, maintainFormatting: true });
     // at least the structure is preserved length-wise
     expect(out.length).toBeGreaterThanOrEqual(10);
   });
@@ -160,7 +171,7 @@ describe('obfuscateText', () => {
       useInvisibleChars: true,
       invisibleCharRate: 1,
       maxInvisibleCharsPerWord: 2,
-      maintainFormatting: false,
+      maintainFormatting: true,
     });
     const hasInvisible = invisibleChars.some((c) => out.includes(c));
     expect(hasInvisible).toBe(true);
@@ -172,10 +183,6 @@ describe('obfuscateText', () => {
     expect(a).toBe(b);
   });
 
-  test('accepts a pre-built ObfuscationConfig instance', () => {
-    const cfg = new ObfuscationConfig({ randomSeed: 1, substitutionRate: 0 });
-    expect(obfuscateText('hi', cfg)).toBe('**hi**');
-  });
 });
 
 describe('analyzeText', () => {
@@ -256,12 +263,12 @@ describe('batchObfuscate', () => {
   test('produces one result per config with analysis stats', () => {
     const results = batchObfuscate('hello', [
       { randomSeed: 1, substitutionRate: 0 },
-      new ObfuscationConfig({ randomSeed: 2, substitutionRate: 1 }),
+      { randomSeed: 2, substitutionRate: 1 },
     ]);
     expect(results).toHaveLength(2);
     expect(results[0].result).toBe('**hello**');
     expect(results[0].analysisStats.totalChars).toBeGreaterThan(0);
-    expect(results[1].config).toBeInstanceOf(ObfuscationConfig);
+    expect(results[1].config.substitutionRate).toBe(1);
   });
 });
 
