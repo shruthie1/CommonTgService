@@ -104,8 +104,7 @@ export interface ProofItem extends Omit<PaymentProofRow, '_id'> {
 export interface ListResult {
     items: ProofItem[];
     nextCursor: string | null;
-    /** counts.reviewAmount = credited ₹ of the review-rule proofs (same filters); kept for tg-chats' pre-views page. */
-    counts: ProofCounts & { reviewAmount: number };
+    counts: ProofCounts;
     /** The review rule's settings and per-IST-day risk threshold (whole collection, not the filters). */
     reviewModel: ReviewModel;
     /** true when the window held more than MAX_WINDOW_ROWS rows (counts then cover only the newest ones). */
@@ -206,12 +205,11 @@ export class PaymentProofsService {
             && (!p.chat || String(row.chatId) === p.chat)
             && (p.minAmount === null || (c.amount !== null && c.amount >= p.minAmount)));
 
-        const counts = { ...emptyCounts(), reviewAmount: 0 };
+        const counts = emptyCounts();
         const inPage: { row: PaymentProofRow; c: ClassifiedProof; marked: boolean; t: number }[] = [];
         for (const x of classified) {
             const marked = isMarked(String(x.row.chatId));
             addToCounts(counts, x.c, marked);
-            if (x.c.review) counts.reviewAmount += x.c.atRiskAmount;
             // rows are already (createdAt desc, _id desc), the page order.
             const t = new Date(x.row.createdAt).getTime();
             if (p.cursor && !isAfterCursor(t, String(x.row._id), p.cursor)) continue;

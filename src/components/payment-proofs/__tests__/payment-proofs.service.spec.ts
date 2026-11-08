@@ -85,10 +85,10 @@ describe('PaymentProofsService', () => {
         ]);
     }
 
-    it('lists every proof newest first (default state=all); counts keep every key; review = credited proofs at risk', async () => {
+    it('lists every proof newest first (default state=all); counts keep every key', async () => {
         await seed();
         const res = await service.list({}, NOW);
-        expect(res.counts).toEqual({ review: 3, reviewAmount: 390, flagged: 2, not_credited: 4, credited: 4, marked: 1, reviewed: 1, all: 8 });
+        expect(res.counts).toEqual({ flagged: 2, not_credited: 4, credited: 4, marked: 1, reviewed: 1, all: 8 });
         expect(res.items.map((i) => i.telegramMsgId)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
         const byMsg = new Map(res.items.map((i) => [i.telegramMsgId, i]));
         expect([1, 2, 7].map((m) => byMsg.get(m)!.risk)).toEqual([85, 85, 70]);
@@ -136,11 +136,10 @@ describe('PaymentProofsService', () => {
         expect(s.items.map((i) => i.telegramMsgId)).toEqual([1, 2, 3, 4]);
         const m = await service.list({ minAmount: '100', state: 'all' }, NOW);
         expect(m.items.map((i) => i.telegramMsgId)).toEqual([2, 6, 8]);
-        expect(m.counts).toMatchObject({ all: 3, credited: 2, review: 1, reviewAmount: 350 });
+        expect(m.counts).toMatchObject({ all: 3, credited: 2 });
         // the review model sees the whole collection: msg 1 stays strong although its chat's fake (msg 3) is filtered out
         const recent = await service.list({ since: at(1.5).toISOString() }, NOW);
         expect(recent.items.map((i) => i.telegramMsgId)).toEqual([1]);
-        expect((await service.list({ client: 'kavya1' }, NOW)).counts).toMatchObject({ review: 1, reviewAmount: 20 });
         const old = await service.list({ since: new Date(NOW - 9 * 86400_000).toISOString(), state: 'all' }, NOW);
         expect(old.counts.all).toBe(9);
     });
@@ -174,9 +173,8 @@ describe('PaymentProofsService', () => {
         const all = await service.list({ state: 'all' }, NOW);
         const resend = all.items.filter((i) => i.chatId === '444' && !i.servedAt);
         expect(resend.map((i) => i.repeat)).toEqual([true, true]);
-        // only the five FAKE_TEXT credits are in review: not the credited original nor its re-sends
-        expect(all.counts.review).toBe(5);
-        expect(all.counts.reviewAmount).toBe(50 + 51 + 52 + 53 + 54);
+        // only the five FAKE_TEXT credits are strong: not the credited original nor its re-sends
+        expect(all.items.filter((i) => i.strong).map((i) => i.chatId).sort()).toEqual(['50', '51', '52', '53', '54']);
         const risk = Buffer.from(JSON.stringify({ t: 1400, id: String(all.items[0]._id), s: 'r' }), 'utf8').toString('base64url');
         await expect(service.list({ limit: 2, cursor: risk }, NOW)).rejects.toBeInstanceOf(BadRequestException);
     });
@@ -190,7 +188,6 @@ describe('PaymentProofsService', () => {
         const [copy, orig] = r.items; // newest first
         expect(orig).toMatchObject({ amount: 50, strong: false, reusedFrom: null });
         expect(copy).toMatchObject({ amount: 350, strong: true });
-        expect(r.counts).toMatchObject({ review: 1, reviewAmount: 350 });
         expect(copy.riskReasons).toContain('Reused UTR of an earlier receipt (₹50 before)');
         expect(copy.reusedFrom).toMatchObject({ proofId: orig.proofId, chatId: '555', amount: 50 });
     });

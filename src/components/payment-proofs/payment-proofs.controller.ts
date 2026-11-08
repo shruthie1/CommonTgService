@@ -18,7 +18,7 @@ export class PaymentProofsController {
         summary: 'Every payment screenshot (state=all, newest first): filtered, cursor-paged, with counts and userData/client join',
         description:
             'Since 2026-11-07 the only state is all and the only sort time; the per-state lists and the risk order were removed ' +
-            '(the views replace them). counts keep their per-state keys and reviewAmount. ' +
+            '(the views replace them). counts: flagged, not_credited, credited, marked, reviewed, all. ' +
             'review rule (revenue + long-term blocking, post-hoc; nothing in tg-aut reads it) = CREDITED AND not reviewed AND chat not ' +
             'marked fake AND (strong fake signal OR (credited ₹ >= REVIEW_MIN_AMOUNT (100) AND among the IST day\'s top ' +
             'REVIEW_DAILY_TARGET (20) minus strong, by risk, with risk >= REVIEW_RISK_FLOOR (25))). Strong: fake reason code, ' +
@@ -26,7 +26,6 @@ export class PaymentProofsController {
             'earlier receipt (another chat or amount; the earliest proof with a UTR is the original), same receipt credited before, ' +
             'payer of a marked-fake chat. Uncredited proofs (repeats, not_ours, not_receipt, old_time, over_limit, uncredited ' +
             'fakes) never enter review. Items carry risk (0-100), riskReasons, atRiskAmount, strong, repeat, reusedFrom; ' +
-            'counts.review = proofs the rule picks, counts.reviewAmount = their credited ₹. ' +
             'flagged = outcome fraud_ask|fake_blocked|cross_client; marked = chat has userData.fakePaymentAt; reviewed = a stamp that still holds (item.stamp). ' +
             'Rows without verdict (before tg-aut wrote one) get an outcome derived from servedAt / ask / decision (legacy: true). ' +
             'counts cover since/client/chat/minAmount (not cursor); the review model always uses the whole 7-day collection.',

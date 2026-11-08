@@ -14,8 +14,8 @@ import { PaymentProofRow, ProofOutcome, ReviewDecision } from './schemas/payment
 /** GET /payment-proofs (no view) lists every proof; the per-state lists were removed 2026-11-07 (views replace them). */
 export const PROOF_STATES = ['all'] as const;
 export type ProofState = (typeof PROOF_STATES)[number];
-/** Keys of the list's counts: kept because tg-chats' pre-views review page still reads counts[state]. */
-export const COUNT_STATES = ['review', 'flagged', 'not_credited', 'credited', 'marked', 'reviewed', 'all'] as const;
+/** Keys of the list's counts (counts.review / reviewAmount removed 2026-11-08 with the old review page). */
+export const COUNT_STATES = ['flagged', 'not_credited', 'credited', 'marked', 'reviewed', 'all'] as const;
 export type CountState = (typeof COUNT_STATES)[number];
 export type ProofCounts = Record<CountState, number>;
 
@@ -160,7 +160,6 @@ export function classify(row: PaymentProofRow): ClassifiedProof {
 
 export function inState(c: ClassifiedProof, marked: boolean, state: CountState): boolean {
     switch (state) {
-        case 'review': return c.review;
         case 'flagged': return c.flagged;
         case 'not_credited': return !c.credited;
         case 'credited': return c.credited;
@@ -171,7 +170,7 @@ export function inState(c: ClassifiedProof, marked: boolean, state: CountState):
 }
 
 export function emptyCounts(): ProofCounts {
-    return { review: 0, flagged: 0, not_credited: 0, credited: 0, marked: 0, reviewed: 0, all: 0 };
+    return { flagged: 0, not_credited: 0, credited: 0, marked: 0, reviewed: 0, all: 0 };
 }
 
 export function addToCounts(counts: ProofCounts, c: ClassifiedProof, marked: boolean): void {

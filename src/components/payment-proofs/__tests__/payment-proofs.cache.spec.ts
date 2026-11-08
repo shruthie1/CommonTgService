@@ -110,10 +110,9 @@ describe('PaymentProofsService list cache', () => {
 
     it('(c) stampChat() is reflected by the next list without a window re-read', async () => {
         const before = await service.list({}, NOW);
-        expect(before.counts.review).toBe(2);
+        expect(before.counts.reviewed).toBe(0);
         await service.stampChat('111', { decision: 'fine', proofIds: ['ramya1-111-2'] }, new Date(NOW));
         const after = await service.list({}, NOW);
-        expect(after.counts.review).toBe(1);
         expect(after.counts.reviewed).toBe(1);
         expect(after.items.find((i) => i.telegramMsgId === 2)?.stamp).toEqual({ decision: 'fine', at: new Date(NOW).toISOString() });
         expect(windowFinds()).toBe(1);
