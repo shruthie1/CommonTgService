@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
-import { Document } from 'mongoose';
+import { Document, Schema as MongooseSchema } from 'mongoose';
 
 export type Stat2Document = Stat2 & Document;
 
@@ -53,6 +53,18 @@ export class Stat2 {
   @ApiProperty({ description: 'Paid channel-attribution credit timestamp', required: false })
   @Prop({ type: Number, required: false })
   paymentAttributionCreditedAt?: number;
+
+  // F10 (data-model review 2026-11-08): written only by tg-platform through the raw driver (tg-db stats.repository.ts
+  // markDailyPaid); CMS never writes them. Declared additively (optional, no default, no validator) so the schema
+  // documents the stored shape. dailyRevenueCounted is Mixed, not Number: a Number path cast-fails on hydration of a
+  // NaN value, and Mixed never casts, so existing reads cannot change. Canonical type: number.
+  /** IST day key (YYYY-MM-DD) of the last counted payment. */
+  @Prop({ type: String, required: false })
+  dailyPaidCountedAt?: string;
+
+  /** Revenue already counted for dailyPaidCountedAt (canonical: number). */
+  @Prop({ type: MongooseSchema.Types.Mixed, required: false })
+  dailyRevenueCounted?: number;
 }
 
 export const StatSchema = SchemaFactory.createForClass(Stat2);

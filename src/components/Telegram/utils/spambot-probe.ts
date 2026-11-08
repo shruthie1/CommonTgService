@@ -89,16 +89,33 @@ export function parseLimitedUntil(text: string, now: Date = new Date()): Date | 
   return null;
 }
 
+/*
+ * SpamBot reply phrases, checked in this order: a dated limit, then an indefinite (harsh) limit, then
+ * "good news". A limit statement always wins over a "good news" phrase in the same reply, and a readable
+ * release date wins over the harsh wording (a dated limit is never recorded as indefinite).
+ * MIRROR: tg-platform packages/tg-core/src/telegram-utils/spam-bot-probe.ts classifySpamBotMessage uses the
+ * same three lists in the same order. Shared fixture: __tests__/spambot-replies.fixture.json (same file in
+ * tg-platform tests/unit/packages/tg-core/telegram-utils/); tg-platform spam-bot-classifier-mirror.test.mjs
+ * compares the lists and runs this classifier over that fixture.
+ */
+export const SPAMBOT_LIMITED_PHRASES = ['limited until', 'automatically released', 'released on'];
+export const SPAMBOT_HARSH_PHRASES = ['trigger a harsh', 'harsh response', 'while the account is limited'];
+export const SPAMBOT_FREE_PHRASES = ['good news'];
+
+/** Lower case, whitespace runs (line breaks included) collapsed to one space. */
+export function normalizeSpamBotText(text: string): string {
+  return (text || '').toLowerCase().replace(/\s+/g, ' ');
+}
+
+const hasAnyPhrase = (normalized: string, phrases: readonly string[]) => phrases.some((p) => normalized.includes(p));
+
 export function classifySpamBotReply(text: string, now: Date = new Date()): SpamProbeResult {
   const reply = (text || '').trim();
-  const lower = reply.toLowerCase();
+  const normalized = normalizeSpamBotText(reply);
   const snippet = reply.slice(0, 300);
   if (!reply) return { status: 'unknown', limitedUntil: null };
 
-  if (lower.includes('good news')) {
-    return { status: 'free', limitedUntil: null, replyText: snippet };
-  }
-  if (lower.includes('limited until') || lower.includes('automatically released')) {
+  if (hasAnyPhrase(normalized, SPAMBOT_LIMITED_PHRASES)) {
     const until = parseLimitedUntil(reply, now);
     if (until) return { status: 'limited', limitedUntil: until, replyText: snippet };
     // Dated limit whose date we could not read: still limited, so keep it out of the swap path.
@@ -108,8 +125,11 @@ export function classifySpamBotReply(text: string, now: Date = new Date()): Spam
       replyText: snippet,
     };
   }
-  if (lower.includes('harsh response') || lower.includes('while the account is limited')) {
+  if (hasAnyPhrase(normalized, SPAMBOT_HARSH_PHRASES)) {
     return { status: 'harsh', limitedUntil: null, replyText: snippet };
+  }
+  if (hasAnyPhrase(normalized, SPAMBOT_FREE_PHRASES)) {
+    return { status: 'free', limitedUntil: null, replyText: snippet };
   }
   return { status: 'unknown', limitedUntil: null, replyText: snippet };
 }

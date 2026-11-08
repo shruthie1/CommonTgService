@@ -46,6 +46,9 @@ export class PromoteClient {
   clientId?: string;
 
   @ApiProperty({ description: 'Operational status for the record.'})
+  // F10: no enum on purpose (buffer has ['active','inactive']). tg-platform writes this field through the raw driver
+  // and older rows may hold other strings; adding an enum would make CMS saves of those rows fail validation. Count
+  // the live values before ever restricting it.
   @Prop({ required: false, default: 'active' })
   status: ClientStatusType;
 

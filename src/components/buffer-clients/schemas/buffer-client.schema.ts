@@ -173,6 +173,8 @@ export class BufferClient {
   spamCheckedAt?: Date;
 
   @ApiPropertyOptional({ description: 'Which component wrote the spam state.', enum: ['tg-aut', 'cms-probe'] })
+  // 'promote' is an accountHealth / tg::acct source only: no writer puts it on bufferClients (tg-aut recordSpamStatus
+  // hardcodes 'tg-aut', CMS setupClient writes 'cms-probe'), so it is not in this enum (F10, checked 2026-11-08).
   @Prop({ required: false, type: String, enum: ['tg-aut', 'cms-probe'] })
   spamCheckSource?: SpamCheckSource;
 

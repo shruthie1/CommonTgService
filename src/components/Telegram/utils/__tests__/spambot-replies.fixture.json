@@ -1,0 +1,47 @@
+{
+  "_comment": "Shared @SpamBot reply fixture. MIRROR: identical copy in CommonTgService src/components/Telegram/utils/__tests__/spambot-replies.fixture.json (tg-platform spam-bot-classifier-mirror.test.mjs checks they match). verdict: free | limited (dated, or a release notice with an unreadable date) | harsh (indefinite) | unknown. limitedUntilMinute: UTC ISO to the minute, only where the year is explicit (both parsers agree), read at `now`. source: where the text was found; 'synthetic' = order or whitespace guard, not a real reply.",
+  "now": "2026-10-10T08:00:00.000Z",
+  "cases": [
+    { "text": "Good news, no limits are currently applied to your account. You’re free as a bird!", "verdict": "free", "source": "real: CMS spambot-probe.spec FREE, tg system-message-handler HEALTHY_TEXT, tg spam-bot-probe.test" },
+    { "text": "Good news, no limits are currently applied to your account. You're free as a bird!", "verdict": "free", "source": "tg account-health.test GOOD_NEWS (straight apostrophe)" },
+    { "text": "Good news, no limits are currently applied to your account.", "verdict": "free", "source": "tg spam-bot-probe.test" },
+    { "text": "Good news — free as a bird", "verdict": "free", "source": "tg spam-bot-probe.test" },
+
+    { "text": "I’m afraid some Telegram users found your messages annoying and forwarded them to our team of moderators, who have confirmed the report. Unfortunately, your account is now limited until 12 Oct 2026, 15:58 UTC.\n\nYour account will be automatically released on 12 Oct 2026, 15:58 UTC.", "verdict": "limited", "limitedUntilMinute": "2026-10-12T15:58", "source": "real: tg system-message-handler DATED_TEXT" },
+    { "text": "I’m afraid some Telegram users found your messages annoying ... your account is now limited until 12 Oct 2026, 15:58 UTC.\n\nYour account will be automatically released on 12 Oct 2026, 15:58 UTC.", "verdict": "limited", "limitedUntilMinute": "2026-10-12T15:58", "source": "tg spam-bot-probe.test DATED" },
+    { "text": "Unfortunately, some phone numbers may trigger a harsh response from our anti-spam systems. Your account is limited until 12 Oct 2026, 15:58 UTC. While the account is limited, you will not be able to send messages to people who do not have your number in their contacts.", "verdict": "limited", "limitedUntilMinute": "2026-10-12T15:58", "source": "CMS spambot-probe.spec LIMITED_FULL" },
+    { "text": "Unfortunately, some actions can trigger a harsh response from our anti-spam systems. Your account is now limited until 12 Oct 2026, 15:58 UTC.", "verdict": "limited", "limitedUntilMinute": "2026-10-12T15:58", "source": "tg spam-bot-probe.test (date wins over harsh)" },
+    { "text": "Your account was limited. It will be automatically released on Oct 12, 2026.", "verdict": "limited", "limitedUntilMinute": "2026-10-12T23:59", "source": "CMS spambot-probe.spec LIMITED_AUTO" },
+    { "text": "Your account will be automatically released, limited until 26 Nov 2023, 15:58 UTC, please wait", "verdict": "limited", "limitedUntilMinute": "2023-11-26T15:58", "source": "tg system-message-handler.test" },
+    { "text": "Your account is limited until 21 Oct 2026, 09:14 UTC.", "verdict": "limited", "limitedUntilMinute": "2026-10-21T09:14", "source": "tg spam-bot-probe.test" },
+    { "text": "Your account will be automatically released on 12 Oct 2026, 15:58 UTC.", "verdict": "limited", "limitedUntilMinute": "2026-10-12T15:58", "source": "tg spam-bot-probe.test" },
+    { "text": "Your account is now limited until 12 Oct 2026, 15:58 UTC. It will be automatically released on that date.", "verdict": "limited", "limitedUntilMinute": "2026-10-12T15:58", "source": "tg account-health.test LIMITED_UNTIL" },
+    { "text": "Automatically released, limited until 20 Jun", "verdict": "limited", "source": "tg spam-bot-probe.test (yearless: parsers pick the year differently)" },
+    { "text": "Automatically released limited until 20 Jun, ok", "verdict": "limited", "source": "tg promote telegram-manager.test" },
+    { "text": "Your account is limited until 12 Oct", "verdict": "limited", "source": "CMS spambot-probe.spec" },
+    { "text": "Your account will be automatically released soon.", "verdict": "limited", "source": "tg account-health.test UNDATED (date unreadable)" },
+    { "text": "automatically released without a date", "verdict": "limited", "source": "tg system-message-handler.test (date unreadable)" },
+    { "text": "automatically released, limited until unknown-date, no setup", "verdict": "limited", "source": "tg system-message-handler.test (date unreadable)" },
+
+    { "text": "I’m very sorry that you had to contact me. Unfortunately, some actions can trigger a harsh response from our anti-spam systems. If you think your account was limited by mistake, you can submit a complaint to our moderators.\n\nWhile the account is limited, you will not be able to send messages to people who do not have your number in their phone contacts. However, when people contact you first, you can always reply to them.", "verdict": "harsh", "source": "real: tg system-message-handler HARSH_TEXT" },
+    { "text": "I’m very sorry that you had to contact me. Unfortunately, some actions can trigger a harsh response from our anti-spam systems. If you think your account was limited by mistake, you can submit a complaint to our moderators.", "verdict": "harsh", "source": "tg spam-bot-probe.test" },
+    { "text": "I’m very sorry that you had to contact me. Unfortunately, some actions can trigger a harsh response from our anti-spam systems.", "verdict": "harsh", "source": "tg spam-bot-probe.test" },
+    { "text": "Unfortunately, some phone numbers may trigger a harsh response from our anti-spam systems. While the account is limited, you will not be able to send messages to people who do not have your number in their contacts.", "verdict": "harsh", "source": "CMS spambot-probe.spec HARSH" },
+    { "text": "Unfortunately, some actions can trigger a harsh response from our anti-spam systems.", "verdict": "harsh", "source": "tg account-health.test HARSH" },
+    { "text": "Your account can trigger a harsh response from our anti-spam systems.", "verdict": "harsh", "source": "tg harsh-restart-promotion.test, promote telegram-manager.test" },
+    { "text": "Your behaviour can trigger a harsh response.", "verdict": "harsh", "source": "tg spam-bot-probe.test" },
+    { "text": "This can trigger a harsh limit", "verdict": "harsh", "source": "tg spam-bot-probe.test" },
+
+    { "text": "I'm afraid your account is now limited.", "verdict": "unknown", "source": "tg spam-bot-probe.test, promote telegram-manager.test (no date, no harsh phrase: not a real reply)" },
+    { "text": "I'm afraid your account is now limited. You can't message strangers.", "verdict": "unknown", "source": "tg system-message-handler.test" },
+    { "text": "Hello! Choose a language", "verdict": "unknown", "source": "CMS spambot-probe.spec" },
+    { "text": "Hello! Pick an option.", "verdict": "unknown", "source": "tg spam-bot-probe.test" },
+    { "text": "Please contact support", "verdict": "unknown", "source": "tg spam-bot-probe.test" },
+    { "text": "No limits are active.", "verdict": "unknown", "source": "tg spam-bot-probe.test" },
+    { "text": "", "verdict": "unknown", "source": "CMS spambot-probe.spec" },
+
+    { "text": "Good news, no limits are currently applied to your account. Your account is limited until 12 Oct 2026, 15:58 UTC.", "verdict": "limited", "limitedUntilMinute": "2026-10-12T15:58", "source": "synthetic: a 'good news' prefix must not hide a dated limit" },
+    { "text": "Good news! While the account is limited, you will not be able to send messages to people who do not have your number in their contacts.", "verdict": "harsh", "source": "synthetic: a 'good news' prefix must not hide an indefinite limit" },
+    { "text": "Your account is limited\nuntil 12 Oct 2026, 15:58 UTC.", "verdict": "limited", "limitedUntilMinute": "2026-10-12T15:58", "source": "synthetic: a line break inside a phrase still matches" }
+  ]
+}

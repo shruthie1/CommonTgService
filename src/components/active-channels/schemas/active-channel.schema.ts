@@ -60,6 +60,8 @@ export class ActiveChannel {
   banned?: boolean;
 
   @ApiProperty({ type: Number, required: false, nullable: true, default: null })
+  // Canonical type: epoch ms number. Only the CMS operator-ban path stamps it (Date.now()); tg-platform only writes
+  // null (insert default) or keeps the stored value. Do not change the mongoose type (F10).
   @Prop({ type: Number, default: null })
   bannedAt?: number | null;
 
