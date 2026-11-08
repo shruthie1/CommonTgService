@@ -577,7 +577,7 @@ const AMOUNT_BUCKETS: Array<{ bucket: string; lo: number; hi: number }> = [
 ];
 
 /**
- * Pool counts per clientId. total / eligible / harsh / warming = bufferClients; promote* = promoteClients.
+ * Pool counts per clientId. total / eligible / harsh / warming / active = bufferClients; promote* = promoteClients.
  * Key UNASSIGNED_POOL_KEY ('') = accounts with no clientId: kept for pool_snapshot, skipped by every
  * monitor page (they only ever showed assigned accounts).
  */
@@ -586,6 +586,7 @@ export type PoolCounts = {
   eligible: number;
   harsh: number;
   warming: number;
+  active: number;
   promoteActive: number;
   promoteTotal: number;
   promoteHarsh: number;
@@ -1063,7 +1064,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       // null / missing / '' clientId all land on the unassigned key
       const key = typeof id === 'string' && id ? id : UNASSIGNED_POOL_KEY;
       if (!out.has(key)) {
-        out.set(key, { total: 0, eligible: 0, harsh: 0, warming: 0, promoteActive: 0, promoteTotal: 0, promoteHarsh: 0, promoteWarming: 0 });
+        out.set(key, { total: 0, eligible: 0, harsh: 0, warming: 0, active: 0, promoteActive: 0, promoteTotal: 0, promoteHarsh: 0, promoteWarming: 0 });
       }
       return out.get(key)!;
     };
@@ -1073,6 +1074,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       c.eligible += num(b.eligible);
       c.harsh += num(b.harsh);
       c.warming += num(b.warming);
+      c.active += num(b.active);
     }
     for (const p of prom) {
       const c = get(p._id);

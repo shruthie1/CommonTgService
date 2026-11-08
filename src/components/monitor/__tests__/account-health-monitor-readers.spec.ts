@@ -71,13 +71,13 @@ describe('R11 monitor pool counts (harsh / eligible)', () => {
   const P = '919000000114'; // promote c1, free 2 d ago
   const at = (ms: number) => new Date(ms);
   // the $group output today's pipeline gives for these rows
-  const bufGroup = [{ _id: 'c1', total: 3, harsh: 1, warming: 0, eligible: 2 }];
+  const bufGroup = [{ _id: 'c1', total: 3, harsh: 1, warming: 0, eligible: 2, active: 2 }];
   const promGroup = [{ _id: 'c1', active: 1, total: 1, harsh: 0, warming: 0 }];
   // the per-row pipeline: Mongo-computed old flags (h harsh, sg spam gates, g other gates, w warming, a active)
   const bufRows = [
-    { c: 'c1', m: A, s: 'free', lu: null, at: at(now - 2 * DAY), h: false, sg: true, g: true, w: false },
-    { c: 'c1', m: B, s: 'harsh', lu: null, at: at(now - HOUR), h: true, sg: false, g: true, w: false },
-    { c: 'c1', m: C, h: false, sg: true, g: true, w: false },
+    { c: 'c1', m: A, s: 'free', lu: null, at: at(now - 2 * DAY), h: false, sg: true, g: true, a: true, w: false },
+    { c: 'c1', m: B, s: 'harsh', lu: null, at: at(now - HOUR), h: true, sg: false, g: true, a: true, w: false },
+    { c: 'c1', m: C, h: false, sg: true, g: true, a: false, w: false },
   ];
   const promRows = [{ c: 'c1', m: P, s: 'free', lu: null, at: at(now - 2 * DAY), h: false, a: true, w: false }];
   const newerHarsh = (): Docs => ({
@@ -86,7 +86,7 @@ describe('R11 monitor pool counts (harsh / eligible)', () => {
   });
   const run = (svc: any) => svc.poolByClient(now, TODAY, {});
   const counts = (pool: Map<string, any>) => pool.get('c1');
-  const OLD = { total: 3, eligible: 2, harsh: 1, warming: 0, promoteActive: 1, promoteTotal: 1, promoteHarsh: 0, promoteWarming: 0 };
+  const OLD = { total: 3, eligible: 2, harsh: 1, warming: 0, active: 2, promoteActive: 1, promoteTotal: 1, promoteHarsh: 0, promoteWarming: 0 };
 
   it('off (default): old $group counts, accountHealth never touched, no per-row read', async () => {
     const { svc, collection, healthFind, aggregates } = makeService({ bufGroup, promGroup, bufRows, promRows, health: newerHarsh() });

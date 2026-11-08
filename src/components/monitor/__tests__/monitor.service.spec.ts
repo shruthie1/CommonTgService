@@ -749,10 +749,10 @@ describe('MonitorService.fleetDetail', () => {
     const withUnassigned = (coll: string, op: string, arg: any): any[] => {
       if (coll === 'bufferClients') {
         return [
-          { _id: 'alpha1', total: 10, eligible: 2, harsh: 3, warming: 4 },
-          { _id: 'beta1', total: 4, eligible: 1, harsh: 0, warming: 1 },
-          { _id: null, total: 7, eligible: 0, harsh: 1, warming: 5 },
-          { _id: '', total: 1, eligible: 0, harsh: 0, warming: 1 },
+          { _id: 'alpha1', total: 10, eligible: 2, harsh: 3, warming: 4, active: 9 },
+          { _id: 'beta1', total: 4, eligible: 1, harsh: 0, warming: 1, active: 4 },
+          { _id: null, total: 7, eligible: 0, harsh: 1, warming: 5, active: 2 },
+          { _id: '', total: 1, eligible: 0, harsh: 0, warming: 1, active: 1 },
         ];
       }
       if (coll === 'promoteClients') {
@@ -764,8 +764,8 @@ describe('MonitorService.fleetDetail', () => {
     const r = await svc.buildFleetDetail(7, NOW);
     expect(r.pool).toEqual({ buffersEligible: 3, buffersTotal: 14, harsh: 3, promoteActive: 15 });
     const pool = await svc.poolSnapshot();
-    expect(pool.get('')).toEqual({ total: 8, eligible: 0, harsh: 1, warming: 6, promoteActive: 0, promoteTotal: 9, promoteHarsh: 2, promoteWarming: 9 });
-    expect(pool.get('alpha1')).toEqual({ total: 10, eligible: 2, harsh: 3, warming: 4, promoteActive: 12, promoteTotal: 13, promoteHarsh: 1, promoteWarming: 0 });
+    expect(pool.get('')).toEqual({ total: 8, eligible: 0, harsh: 1, warming: 6, active: 3, promoteActive: 0, promoteTotal: 9, promoteHarsh: 2, promoteWarming: 9 });
+    expect(pool.get('alpha1')).toEqual({ total: 10, eligible: 2, harsh: 3, warming: 4, active: 9, promoteActive: 12, promoteTotal: 13, promoteHarsh: 1, promoteWarming: 0 });
     // the same cached part: no second pool aggregation for the snapshot
     expect(mongoCalls.filter((m) => m.coll === 'bufferClients')).toHaveLength(1);
   });

@@ -15,8 +15,8 @@ import { MonitorService, Pool } from './monitor.service';
  *   A missing table (SQLSTATE 42P01) is skipped with a log.
  *
  * Column sources (pool 'b' = bufferClients, 'p' = promoteClients):
- *   total, harsh, warming: both pools. eligible: 'b' only (the buffer swap gates); 'p' has no
- *   eligibility definition, written 0. active: 'p' only (status 'active'); 'b' has no source, written 0.
+ *   total, harsh, warming, active (status 'active'): both pools. eligible: 'b' only (the buffer swap
+ *   gates); 'p' has no eligibility definition, written 0 (no source; no reader uses it).
  */
 export const POOL_SNAPSHOT_FLAG = 'POOL_SNAPSHOT_ENABLED';
 
@@ -50,10 +50,11 @@ export function poolSnapshotRows(pool: Pool): PoolSnapshotRow[] {
   const ids = [...pool.keys()].sort();
   for (const id of ids) {
     const c = pool.get(id)!;
-    rows.push({ pool: 'b', client_id: id, total: c.total, eligible: c.eligible, harsh: c.harsh, active: 0, warming: c.warming });
+    rows.push({ pool: 'b', client_id: id, total: c.total, eligible: c.eligible, harsh: c.harsh, active: c.active, warming: c.warming });
   }
   for (const id of ids) {
     const c = pool.get(id)!;
+    // promote eligible: no source (no promote eligibility definition) and never read; written 0
     rows.push({ pool: 'p', client_id: id, total: c.promoteTotal, eligible: 0, harsh: c.promoteHarsh, active: c.promoteActive, warming: c.promoteWarming });
   }
   return rows;

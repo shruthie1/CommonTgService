@@ -106,6 +106,8 @@ export function bufferPoolPipeline(now: number, todayIst: string, clientId?: str
         total: { $sum: 1 },
         harsh: HARSH_SUM,
         warming: WARMING_SUM,
+        // status 'active': the same expression as promotePoolPipeline (pool_snapshot 'b' active)
+        active: { $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] } },
         eligible: {
           $sum: {
             $cond: [{ $and: eligibleConds(now, todayIst) }, 1, 0],
@@ -157,7 +159,7 @@ export function promotePoolPipeline(clientId?: string): object[] {
 /**
  * R11, ACCOUNT_HEALTH_READ shadow / on only: one small row per pool doc (every doc the $group pipelines count, same
  * $match) with the spam fields and the old flags COMPUTED BY MONGO from the same expressions as bufferPoolPipeline:
- * h = harsh, sg = the two spam gates of eligible, g = the other eligible gates, w = warming. A row whose accountHealth
+ * h = harsh, sg = the two spam gates of eligible, g = the other eligible gates, a = status active, w = warming. A row whose accountHealth
  * verdict does not win keeps these flags, so on mode with no winning facet doc gives exactly the $group counts.
  */
 export function bufferPoolRowsPipeline(now: number, todayIst: string, clientId?: string): object[] {
@@ -175,6 +177,7 @@ export function bufferPoolRowsPipeline(now: number, todayIst: string, clientId?:
         h: HARSH_COND,
         sg: { $and: [conds[5], conds[6]] },
         g: { $and: [...conds.slice(0, 5), conds[7]] },
+        a: { $eq: ['$status', 'active'] },
         w: WARMING_COND,
       },
     },
@@ -223,7 +226,7 @@ export interface PoolHealthVerdict {
 }
 
 /**
- * R11 on: rows -> the $group output shapes ({_id, total, harsh, warming, eligible} buffer; {_id, active, total, harsh,
+ * R11 on: rows -> the $group output shapes ({_id, total, harsh, warming, eligible, active} buffer; {_id, active, total, harsh,
  * warming} promote). `verdicts[i]` belongs to rows[i]; a pool-sourced (or missing) verdict keeps the Mongo flags h / sg.
  * A winning accountHealth verdict decides harsh and the spam gates with today's rules: harsh rest 30 d anchored on the
  * LAST verdict (verdictAt; as R3 / R4, C17 not adopted), limit lifted when limitedUntil <= now. Every row is counted
@@ -240,7 +243,7 @@ export function poolCountsFromRows(
     const key = r.c ?? null;
     let g = out.get(key);
     if (!g) {
-      g = kind === 'buffer' ? { _id: key, total: 0, harsh: 0, warming: 0, eligible: 0 } : { _id: key, active: 0, total: 0, harsh: 0, warming: 0 };
+      g = kind === 'buffer' ? { _id: key, total: 0, harsh: 0, warming: 0, eligible: 0, active: 0 } : { _id: key, active: 0, total: 0, harsh: 0, warming: 0 };
       out.set(key, g);
     }
     const v = verdicts[i];
@@ -249,10 +252,8 @@ export function poolCountsFromRows(
     g.total++;
     if (harsh) g.harsh++;
     if (r.w === true) g.warming++;
-    if (kind === 'promote') {
-      if (r.a === true) (g.active as number)++;
-      return;
-    }
+    if (r.a === true) (g.active as number)++;
+    if (kind === 'promote') return;
     const spamGates = facet
       ? (!harsh || (v!.verdictAtMs ?? 0) <= now - 30 * DAY_MS) && !((v!.limitedUntilMs ?? 0) > now)
       : r.sg === true;
