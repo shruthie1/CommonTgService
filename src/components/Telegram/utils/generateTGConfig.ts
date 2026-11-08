@@ -6,6 +6,7 @@ import https from "https";
 import http from "http";
 import { Logger } from "../../../utils/logger";
 import { RedisClient } from "../../../utils/redisClient";
+import { maskMobile } from '../../monitor/monitor-util';
 
 const logger = new Logger("TGConfig");
 
@@ -253,7 +254,7 @@ async function _resolveProxyWithSource(mobile: string): Promise<{ proxy: ProxyIn
   // 1. Redis sticky cache
   const cached = await RedisClient.getObject<ProxyInterface>(mapKey);
   if (cached && cached.ip) {
-    logger.debug("Proxy cache hit", { mobile, ip: cached.ip, port: cached.port });
+    logger.debug("Proxy cache hit", { mobile: maskMobile(mobile), ip: cached.ip, port: cached.port });
     const proxy = { ...cached, socksType: 5 as const };
     _registerMobile(mobile, proxy);
     return { proxy, source: "redis_map" };
@@ -264,20 +265,20 @@ async function _resolveProxyWithSource(mobile: string): Promise<{ proxy: ProxyIn
   try {
     const proxy = await fetchNextProxy(clientId || undefined);
     try { await RedisClient.set(mapKey, proxy, 0); } catch (e: any) {
-      logger.warn("Redis SET failed for proxy map — using proxy anyway", { mobile, error: e.message });
+      logger.warn("Redis SET failed for proxy map — using proxy anyway", { mobile: maskMobile(mobile), error: e.message });
     }
-    logger.info("Assigned proxy via /next", { mobile, ip: proxy.ip, port: proxy.port, clientId: clientId || "none" });
+    logger.info("Assigned proxy via /next", { mobile: maskMobile(mobile), ip: proxy.ip, port: proxy.port, clientId: clientId || "none" });
     _registerMobile(mobile, proxy);
     return { proxy, source: "next_api" };
   } catch (err: any) {
-    logger.warn("IP Management /next failed", { mobile, error: err.message });
+    logger.warn("IP Management /next failed", { mobile: maskMobile(mobile), error: err.message });
   }
 
   // 3. Env fallback
   const envProxy = resolveProxyFromEnv();
   if (envProxy) {
     try { await RedisClient.set(mapKey, envProxy, 0); } catch { }
-    logger.info("Assigned proxy from env", { mobile, ip: envProxy.ip });
+    logger.info("Assigned proxy from env", { mobile: maskMobile(mobile), ip: envProxy.ip });
     _registerMobile(mobile, envProxy);
     return { proxy: envProxy, source: "env_fallback" };
   }
@@ -324,13 +325,13 @@ export async function rotateProxy(mobile: string): Promise<ProxyInterface> {
       if (proxyKey(candidate) !== currentKey) {
         try { await RedisClient.set(mapKey, candidate, 0); } catch { }
         await updateCachedProxy(mobile, candidate);
-        logger.info("Rotated proxy", { mobile, from: current?.ip, to: candidate.ip, port: candidate.port, attempt });
+        logger.info("Rotated proxy", { mobile: maskMobile(mobile), from: current?.ip, to: candidate.ip, port: candidate.port, attempt });
         _registerMobile(mobile, candidate);
         return candidate;
       }
-      logger.debug("Got same proxy from /next, retrying", { mobile, attempt, ip: candidate.ip });
+      logger.debug("Got same proxy from /next, retrying", { mobile: maskMobile(mobile), attempt, ip: candidate.ip });
     } catch (err: any) {
-      logger.warn("IP Management /next failed during rotation", { mobile, attempt, error: err.message });
+      logger.warn("IP Management /next failed during rotation", { mobile: maskMobile(mobile), attempt, error: err.message });
     }
   }
 
@@ -339,12 +340,12 @@ export async function rotateProxy(mobile: string): Promise<ProxyInterface> {
   if (envProxy && proxyKey(envProxy) !== currentKey) {
     try { await RedisClient.set(mapKey, envProxy, 0); } catch { }
     await updateCachedProxy(mobile, envProxy);
-    logger.info("Rotated proxy", { mobile, from: current?.ip, to: envProxy.ip, source: "env" });
+    logger.info("Rotated proxy", { mobile: maskMobile(mobile), from: current?.ip, to: envProxy.ip, source: "env" });
     _registerMobile(mobile, envProxy);
     return envProxy;
   }
 
-  logger.error("No alternative proxy available for rotation", { mobile, deadProxy: current?.ip });
+  logger.error("No alternative proxy available for rotation", { mobile: maskMobile(mobile), deadProxy: current?.ip });
   throw new Error(`No alternative proxy available for mobile ${mobile}`);
 }
 
@@ -353,7 +354,7 @@ export async function removeProxyMapping(mobile: string): Promise<void> {
   try { await RedisClient.del(mapKey); } catch { }
   await invalidateConfig(mobile);
   _unregisterMobile(mobile);
-  logger.info("Removed proxy mapping + invalidated config", { mobile });
+  logger.info("Removed proxy mapping + invalidated config", { mobile: maskMobile(mobile) });
 }
 
 // ════════════════════════════════════════════════════════════
@@ -390,7 +391,7 @@ function _registerMobile(mobile: string, proxy: ProxyInterface) {
     status: "healthy",
   });
 
-  logger.debug("Mobile registered for health monitoring", { mobile, ip: proxy.ip, port: proxy.port, totalTracked: _activeMap.size });
+  logger.debug("Mobile registered for health monitoring", { mobile: maskMobile(mobile), ip: proxy.ip, port: proxy.port, totalTracked: _activeMap.size });
 
   // Auto-start monitor on first registration (requires explicit opt-in)
   if (!_healthInterval && isProxyEnabled() && isHealthCheckEnabled()) {
@@ -403,7 +404,7 @@ function _registerMobile(mobile: string, proxy: ProxyInterface) {
 
 function _unregisterMobile(mobile: string) {
   _activeMap.delete(mobile);
-  logger.debug("Mobile unregistered", { mobile, totalTracked: _activeMap.size });
+  logger.debug("Mobile unregistered", { mobile: maskMobile(mobile), totalTracked: _activeMap.size });
 
   if (_activeMap.size === 0) {
     stopHealthMonitor();
@@ -446,7 +447,7 @@ function _startHealthMonitor(intervalMs: number) {
           m.lastLatency = result.latencyMs;
           m.status = "healthy";
         }
-        logger.debug(`✓ ${pKey} (${result.latencyMs}ms) — ${mobiles.map((m) => m.mobile).join(", ")}`);
+        logger.debug(`✓ ${pKey} (${result.latencyMs}ms) — ${mobiles.map((m) => maskMobile(m.mobile)).join(", ")}`);
         continue;
       }
 
@@ -482,7 +483,7 @@ async function _handleProxyDeath(deadProxy: ProxyInterface, affectedMobiles: Tra
 
   try {
     const deadKey = proxyKey(deadProxy);
-    logger.error(`PROXY DEAD: ${deadKey} — affects ${affectedMobiles.length} mobiles: ${affectedMobiles.map((m) => m.mobile).join(", ")}`);
+    logger.error(`PROXY DEAD: ${deadKey} — affects ${affectedMobiles.length} mobiles: ${affectedMobiles.map((m) => maskMobile(m.mobile)).join(", ")}`);
 
     // 1. Report to API
     const reported = await reportProxyInactive(deadProxy.ip, deadProxy.port);
@@ -493,7 +494,7 @@ async function _handleProxyDeath(deadProxy: ProxyInterface, affectedMobiles: Tra
       try {
         const newProxy = await rotateProxy(tracked.mobile);
         logger.info("Rotated mobile", {
-          mobile: tracked.mobile,
+          mobile: maskMobile(tracked.mobile),
           from: `${deadProxy.ip}:${deadProxy.port}`,
           to: `${newProxy.ip}:${newProxy.port}`,
         });
@@ -502,7 +503,7 @@ async function _handleProxyDeath(deadProxy: ProxyInterface, affectedMobiles: Tra
           try { _onRotatedCallback(tracked.mobile, deadProxy, newProxy, "health-monitor"); } catch { }
         }
       } catch (err: any) {
-        logger.error("Rotation failed for mobile — no alternative proxy", { mobile: tracked.mobile, error: err.message });
+        logger.error("Rotation failed for mobile — no alternative proxy", { mobile: maskMobile(tracked.mobile), error: err.message });
         if (_onAllFailedCallback) {
           try { _onAllFailedCallback(tracked.mobile); } catch { }
         }
@@ -551,12 +552,12 @@ export async function handleMobileProxyFailure(
 ): Promise<{ rotated: boolean; reportedToAPI: boolean }> {
   const tracked = _activeMap.get(mobile);
   if (!tracked) {
-    logger.warn("handleMobileProxyFailure called for untracked mobile", { mobile });
+    logger.warn("handleMobileProxyFailure called for untracked mobile", { mobile: maskMobile(mobile) });
     return { rotated: false, reportedToAPI: false };
   }
 
   logger.warn("Manual proxy failure reported", {
-    mobile,
+    mobile: maskMobile(mobile),
     proxy: proxyKey(tracked.proxy),
     error: error instanceof Error ? error.message : String(error || "unknown"),
   });
@@ -564,7 +565,7 @@ export async function handleMobileProxyFailure(
   // Verify: is the proxy actually dead?
   const health = await checkProxyHealth(tracked.proxy);
   if (health.healthy) {
-    logger.info("Proxy is healthy — error was not proxy-related", { mobile, latency: health.latencyMs });
+    logger.info("Proxy is healthy — error was not proxy-related", { mobile: maskMobile(mobile), latency: health.latencyMs });
     return { rotated: false, reportedToAPI: false };
   }
 
@@ -686,7 +687,7 @@ export async function generateTGConfig(
         if (cachedKey !== mapKey) {
           const reconciled = { ...cached, proxy: currentProxy };
           try { await RedisClient.set(redisKey, reconciled, ttl); } catch { }
-          logger.info("Reconciled stale proxy in config cache", { mobile, from: cachedKey, to: mapKey });
+          logger.info("Reconciled stale proxy in config cache", { mobile: maskMobile(mobile), from: cachedKey, to: mapKey });
           _registerMobile(mobile, currentProxy);
           return cachedToResult(reconciled);
         }
@@ -705,7 +706,7 @@ export async function generateTGConfig(
       const resolved = await _resolveProxyWithSource(mobile);
       proxy = resolved.proxy;
     } catch (err: any) {
-      logger.warn("No proxy available — proceeding without", { mobile, error: err.message });
+      logger.warn("No proxy available — proceeding without", { mobile: maskMobile(mobile), error: err.message });
     }
   }
 
@@ -716,10 +717,10 @@ export async function generateTGConfig(
 
   const toStore = tgConfigToCached(realisticConfig);
   try { await RedisClient.set(redisKey, toStore, ttl); } catch (e: any) {
-    logger.warn("Redis SET failed for config — using config anyway", { mobile, error: e.message });
+    logger.warn("Redis SET failed for config — using config anyway", { mobile: maskMobile(mobile), error: e.message });
   }
 
-  logger.info("Generated new TG config", { mobile, device: realisticConfig.deviceModel });
+  logger.info("Generated new TG config", { mobile: maskMobile(mobile), device: realisticConfig.deviceModel });
 
   return cachedToResult(toStore);
 }
@@ -729,7 +730,7 @@ async function updateCachedProxy(mobile: string, proxy: ProxyInterface | null, t
   const redisKey = `${CONFIG_PREFIX}${mobile}`;
   const cached = await RedisClient.getObject<CachedTGConfig>(redisKey);
   if (!cached || !cached._apiId) {
-    logger.debug("No cached config to update proxy on", { mobile });
+    logger.debug("No cached config to update proxy on", { mobile: maskMobile(mobile) });
     return;
   }
   if (proxy) {
@@ -738,20 +739,20 @@ async function updateCachedProxy(mobile: string, proxy: ProxyInterface | null, t
     delete cached.proxy;
   }
   try { await RedisClient.set(redisKey, cached, ttl); } catch (e: any) {
-    logger.warn("Redis SET failed updating proxy in config", { mobile, error: e.message });
+    logger.warn("Redis SET failed updating proxy in config", { mobile: maskMobile(mobile), error: e.message });
   }
-  logger.info("Updated proxy in cached config", { mobile, proxy: proxy ? `${proxy.ip}:${proxy.port}` : "none" });
+  logger.info("Updated proxy in cached config", { mobile: maskMobile(mobile), proxy: proxy ? `${proxy.ip}:${proxy.port}` : "none" });
 }
 
 /** Invalidate config cache entirely. Use resetMobileIdentity for full reset. */
 export async function invalidateConfig(mobile: string): Promise<void> {
   const redisKey = `${CONFIG_PREFIX}${mobile}`;
   try { await RedisClient.del(redisKey); } catch { }
-  logger.info("Config invalidated", { mobile });
+  logger.info("Config invalidated", { mobile: maskMobile(mobile) });
 }
 
 /** Full identity reset — new fingerprint + new proxy. */
 export async function resetMobileIdentity(mobile: string): Promise<void> {
   await removeProxyMapping(mobile);
-  logger.info("Full identity reset", { mobile });
+  logger.info("Full identity reset", { mobile: maskMobile(mobile) });
 }

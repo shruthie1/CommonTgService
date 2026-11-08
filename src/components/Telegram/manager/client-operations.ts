@@ -10,6 +10,7 @@ import { sendBotNotice } from '../../../utils/bot-notice';
 import { generateTGConfig } from '../utils/generateTGConfig';
 import { withTimeout } from '../../../utils/withTimeout';
 import { unregisterClient } from '../utils/connection-manager';
+import { maskMobile } from '../../monitor/monitor-util';
 
 export async function createClient(
     ctx: TgContext,
@@ -115,7 +116,7 @@ export async function destroyClient(ctx: TgContext, session: StringSession): Pro
 export function handleClientError(ctx: TgContext, error: Error): NodeJS.Timeout | null {
     const errorDetails = parseError(error, `${ctx.phoneNumber}: RPC Error`, false);
     if ((error.message && error.message == 'TIMEOUT') || contains(errorDetails.message, ['ETIMEDOUT'])) {
-        ctx.logger.error(ctx.phoneNumber, `Timeout error occurred for ${ctx.phoneNumber}`, error);
+        ctx.logger.error(ctx.phoneNumber, `Timeout error occurred for ${maskMobile(ctx.phoneNumber)}`, error);
         return setTimeout(async () => {
             if (ctx.client && !ctx.client.connected) {
                 ctx.logger.debug(ctx.phoneNumber, 'disconnecting client Connection Manually');
@@ -134,7 +135,7 @@ export async function handleIncomingEvent(ctx: TgContext, event: NewMessageEvent
     if (event.isPrivate) {
         if (event.message.chatId.toString() == '777000') {
             ctx.logger.info(ctx.phoneNumber, event.message.text.toLowerCase());
-            ctx.logger.info(ctx.phoneNumber, `Login Code received for - ${ctx.phoneNumber}\nActiveClientSetup - TelegramManager.activeClientSetup`);
+            ctx.logger.info(ctx.phoneNumber, `Login Code received for - ${maskMobile(ctx.phoneNumber)}\nActiveClientSetup - TelegramManager.activeClientSetup`);
             ctx.logger.info(ctx.phoneNumber, 'Date :', new Date(event.message.date * 1000));
             await sendBotNotice('notif', {
                 title: 'Login code',

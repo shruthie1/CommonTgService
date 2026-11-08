@@ -8,6 +8,7 @@ import { sleep } from 'telegram/Helpers';
 import { ClientHelperUtils } from '../client-helper.utils';
 import type { CheckEntry } from '../check-summary-notification';
 import type { EnrolmentLogger } from './enrolment';
+import { maskMobile } from '../../monitor/monitor-util';
 
 export interface ClientEnrolmentNeed {
     clientId: string;
@@ -160,7 +161,7 @@ export async function runEnrolmentBatch(input: EnrolmentBatchInput): Promise<{ c
         if (!document || !document.mobile || !document.tgId) continue;
         // Skip if already processed in this batch (dynamic in-flight tracking)
         if (enrolledThisRun.has(document.mobile)) {
-            input.logger.debug(`Skipping ${document.mobile}: already attempted in this enrollment run`);
+            input.logger.debug(`Skipping ${maskMobile(document.mobile)}: already attempted in this enrollment run`);
             continue;
         }
         enrolledThisRun.add(document.mobile);
@@ -175,7 +176,7 @@ export async function runEnrolmentBatch(input: EnrolmentBatchInput): Promise<{ c
             }
             attemptedCount++;
         } catch {
-            input.logger.error(`Error creating connection for ${document.mobile}`);
+            input.logger.error(`Error creating connection for ${maskMobile(document.mobile)}`);
             await sleep(ClientHelperUtils.gaussianRandom(12500, 1250, 10000, 15000));
             attemptedCount++;
         }

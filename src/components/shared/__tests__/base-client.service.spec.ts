@@ -404,7 +404,7 @@ describe('BaseClientService (real Mongo)', () => {
       await svc.callProcessJoinSeq();
 
       expect(handleError.mock.calls.filter((c: any[]) => String(c[1]).includes('Join Channel Error'))).toHaveLength(0);
-      const pending = `${doc.mobile} join request sent (pending approval) for @uapproval1`;
+      const pending = `••••${String(doc.mobile).slice(-4)} join request sent (pending approval) for @uapproval1`;
       expect(debug).toHaveBeenCalledWith(pending);
       expect(log).not.toHaveBeenCalledWith(pending);
     });

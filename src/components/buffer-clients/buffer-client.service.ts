@@ -83,6 +83,7 @@ import {
     LEGACY_HEALTHY_CAP,
     readBufferSupplyConfig,
 } from './buffer-supply';
+import { maskMobile } from '../monitor/monitor-util';
 
 type ClientCount = { _id: string; count: number };
 type EnrollmentDecision = {
@@ -452,7 +453,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     async updateUsername(doc: BufferClientDocument, client: Client, failedAttempts: number): Promise<number> {
         // If username is already stored in DB, skip entirely — no TG connection needed
         if (doc.username) {
-            this.logger.debug(`Username already set for ${doc.mobile}: @${doc.username}, skipping TG update`);
+            this.logger.debug(`Username already set for ${maskMobile(doc.mobile)}: @${doc.username}, skipping TG update`);
             await this.update(doc.mobile, {
                 usernameUpdatedAt: doc.usernameUpdatedAt || new Date(),
                 lastUpdateAttempt: new Date(),
@@ -476,7 +477,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 lastUpdateFailure: null,
                 organicActivityAt: new Date(),
             });
-            this.logger.debug(`Updated username for ${doc.mobile}`);
+            this.logger.debug(`Updated username for ${maskMobile(doc.mobile)}`);
             await sleep(ClientHelperUtils.gaussianRandom(40000, 5000, 30000, 50000));
             return 1;
         } catch (error: unknown) {
@@ -559,7 +560,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 reasonCode: 'enrolment', details: { availableDate: bufferClient.availableDate ?? null, status },
             });
         }
-        this.logger.log(`Buffer Client Created:\n\nMobile: ${canonicalMobile}`);
+        this.logger.log(`Buffer Client Created:\n\nMobile: ${maskMobile(canonicalMobile)}`);
         await this.sendAccountNotice(
             {
                 severity: 'success',
@@ -659,7 +660,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             if (!bufferClient) {
                 throw new NotFoundException(`BufferClient with mobile ${mobile} not found`);
             }
-            this.logger.log(`Removing BufferClient with mobile: ${canonicalMobile}`);
+            this.logger.log(`Removing BufferClient with mobile: ${maskMobile(canonicalMobile)}`);
             await sendBotNotice('notif', {
                 severity: 'warning',
                 title: 'Deleting buffer',
@@ -671,10 +672,10 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             await this.bufferClientModel.deleteOne({ mobile: canonicalMobile }).exec();
         } catch (error) {
             const errorDetails = parseError(error, `failed to delete BufferClient: ${mobile}`);
-            this.logger.error(`Error removing BufferClient with mobile ${mobile}: ${errorDetails.message}`);
+            this.logger.error(`Error removing BufferClient with mobile ${maskMobile(mobile)}: ${errorDetails.message}`);
             throw new HttpException(errorDetails.message, errorDetails.status);
         }
-        this.logger.log(`BufferClient with mobile ${mobile} removed successfully`);
+        this.logger.log(`BufferClient with mobile ${maskMobile(mobile)} removed successfully`);
     }
 
     async search(filter: SearchBufferClientDto): Promise<BufferClientDocument[]> {
@@ -722,7 +723,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         if ((result.matchedCount || 0) !== 1) {
             throw new ConflictException(`Buffer ${mobile} is no longer a free spare of ${fromClientId}`);
         }
-        this.logger.info(`Reassigned buffer ${mobile} from ${fromClientId} to ${toClientId} (degraded swap)`);
+        this.logger.info(`Reassigned buffer ${maskMobile(mobile)} from ${fromClientId} to ${toClientId} (degraded swap)`);
     }
 
     /**
@@ -794,7 +795,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
         if ((revoked.modifiedCount || 0) > 0) {
             this.logger.info(`Revoked stale in-use buffer ownership for ${clientId}`, {
-                keepMobile: mobile,
+                keepMobile: maskMobile(mobile),
                 revokedCount: revoked.modifiedCount,
             });
             // Do not perform an external bot call inside a Mongo transaction. The
@@ -832,7 +833,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         }
 
         this.logger.info(`Set primary in-use buffer client for ${clientId}`, {
-            mobile,
+            mobile: maskMobile(mobile),
         });
         return updatedBufferClient;
     }

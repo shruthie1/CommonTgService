@@ -16,6 +16,7 @@ import { UsersService } from '../users/users.service';
 import { ChannelCategory } from './channel-category.enum';
 import { formatClassicNotificationHtml, formatRichMessageHtml, notificationKeyboard } from '../../utils/rich-message';
 import type { RichNotificationInput } from '../../utils/rich-message';
+import { maskMobile } from '../monitor/monitor-util';
 
 /** Minimal fields the replacement flow needs from a dead bot (plain, not a Mongoose doc). */
 export interface DeadBotInfo {
@@ -1582,7 +1583,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                 const msg = err?.message || String(err);
                 // Account is BotFather-restricted → skip to the next candidate.
                 if (/BOTFATHER_CANNOT_CREATE|cannot create new bots|too many attempts/i.test(msg)) {
-                    console.warn(`[BotHealth] creator ${cand.mobile} cannot create bots — trying next candidate`);
+                    console.warn(`[BotHealth] creator ${maskMobile(cand.mobile)} cannot create bots — trying next candidate`);
                     continue;
                 }
                 // Flood on the account → abort entirely (don't hammer more accounts).
@@ -1590,7 +1591,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                     throw err;
                 }
                 // Other error (e.g. dead session, sync issue) → try the next candidate.
-                console.warn(`[BotHealth] createBot via ${cand.mobile} failed (${msg.slice(0, 80)}) — trying next`);
+                console.warn(`[BotHealth] createBot via ${maskMobile(cand.mobile)} failed (${msg.slice(0, 80)}) — trying next`);
                 continue;
             }
         }
@@ -1626,7 +1627,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                 { $set: { lifecycle: 'active_verified', lifecycleReason: 'channel-admin membership verified', lifecycleUpdatedAt: new Date(), lastAdminVerifiedAt: new Date(), status: 'active', lastValidatedAt: new Date(), repairAttempts: 0 }, $unset: { deadReason: '', nextRepairAt: '' } },
             ).exec();
             await this.refreshBotCache();
-            console.log(`[BotHealth] provisioned @${username} (${category}) via ${creator.mobile} — active`);
+            console.log(`[BotHealth] provisioned @${username} (${category}) via ${maskMobile(creator.mobile)} — active`);
             return { saved, username, active: true };
         } catch (err: any) {
             parseError(err, `[BotHealth] created @${username} but failed to add/verify in channel ${channelId} — left INACTIVE`, false);
@@ -1893,7 +1894,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             await this.humanDelay();
             try {
                 await this.telegramService.promoteBotInChannel(adminMobile, channelId, botId, botUsername, granted);
-                console.log(`[BotHealth] attempted add of @${botUsername} to channel ${channelId} via ${adminMobile}`);
+                console.log(`[BotHealth] attempted add of @${botUsername} to channel ${channelId} via ${maskMobile(adminMobile)}`);
                 return botId;
             } catch (err) {
                 lastErr = err;

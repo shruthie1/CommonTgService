@@ -106,9 +106,6 @@ export class UserData {
     @Prop({ required: true, default: 0 })
     attributionUpdatedAt: number;
 
-    @Prop({ required: false })
-    lastActiveTime?: Date;
-
 
     // ---- tg-platform-owned fields (written by tg-aut/tg-db creditPayment; CMS only declares them) ----
     // Declared (not `strict: false`) so Mongoose keeps them while still dropping arbitrary fields.

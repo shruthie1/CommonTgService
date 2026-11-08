@@ -1068,20 +1068,7 @@ export class FileService implements OnModuleInit {
     if (!fs.existsSync(thumbnailsPath)) {
       fs.mkdirSync(thumbnailsPath, { recursive: true });
     }
-    // Run initial cleanup when service starts
-    // this.cleanupFiles();
   }
-
-  // @Interval(3600000) // Run every hour
-  // private async cleanupFiles() {
-  //     try {
-  //         await FileCleanupUtil.cleanupTempFiles(this.config.storagePath);
-  //         await FileCleanupUtil.cleanupEmptyFolders(this.config.storagePath);
-  //         this.logger.log('Completed periodic file cleanup');
-  //     } catch (error) {
-  //         this.logger.error('Error during file cleanup:', error);
-  //     }
-  // }
 
   async copyFolder(sourceFolder: string, destinationFolder: string) {
     const sourcePath = this.getSafePath(this.config.storagePath, sourceFolder);

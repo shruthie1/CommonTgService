@@ -16,16 +16,21 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      TZ: Asia/Kolkata
     steps:
       - uses: actions/checkout@v4
 
+      # No `cache: npm` / `npm ci`: the GitHub repo tracks no package-lock.json (untracked in 8771146c), so
+      # setup-node's npm cache fails to resolve. Install the same way unified-workflow.yml does on GitHub.
+      # Node 24 + IST match the local runs where the full jest suite passes (Node 22 + UTC times out
+      # client.service.coverage.spec beforeAll).
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
+          node-version: 24
 
       - name: Install
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Typecheck
         run: npx tsc --noEmit -p tsconfig.json

@@ -24,6 +24,20 @@ describe('TelegramLogger', () => {
         expect(logSpy).toHaveBeenCalledWith('[900] op', { a: 1 });
     });
 
+    test('masks a phone-number tag to its last 4 digits, keeps word tags', () => {
+        const tl = new TelegramLogger('Svc');
+        tl.info('919876543210', 'op');
+        tl.warn('+919876543210', 'w');
+        tl.error('919876543210', 'op', new Error('boom'));
+        tl.log('system', 'l');
+        expect(logSpy).toHaveBeenCalledWith('[••••3210] op', undefined);
+        expect(warnSpy).toHaveBeenCalledWith('[••••3210] w', undefined);
+        expect(errorSpy).toHaveBeenCalledWith('[••••3210] op - boom', expect.any(String));
+        expect(logSpy).toHaveBeenCalledWith('[system] l', undefined);
+        const all = [...logSpy.mock.calls, ...warnSpy.mock.calls, ...errorSpy.mock.calls].map((c) => String(c[0])).join('\n');
+        expect(all).not.toContain('9876543210');
+    });
+
     test('error includes message and stack', () => {
         const tl = new TelegramLogger();
         const err = new Error('boom');

@@ -298,23 +298,6 @@ describe('UserDataService', () => {
         });
     });
 
-    describe('updateLastActive', () => {
-        it('returns the updated doc for an existing user', async () => {
-            await model.create(buildUserData({ profile: 'p1', chatId: 'c1' }));
-            const res = await service.updateLastActive('p1', 'c1');
-            expect(res.profile).toBe('p1');
-            expect(res.lastActiveTime).toBeInstanceOf(Date);
-        });
-    });
-
-    describe('findInactiveSince', () => {
-        it('finds docs with lastActiveTime before date', async () => {
-            await model.create(buildUserData({ profile: 'p1', chatId: 'c1', lastActiveTime: new Date('2000-01-01') }));
-            const res = await service.findInactiveSince(new Date('2010-01-01'));
-            expect(res.length).toBe(1);
-        });
-    });
-
     describe('findByPaymentRange', () => {
         it('filters by payAmount range', async () => {
             await model.create(buildUserData({ payAmount: 5 }));

@@ -8,6 +8,7 @@ import { sendBotNotice } from '../../../utils/bot-notice';
 import { generateTGConfig } from '../utils/generateTGConfig';
 import { getAuthProtectionReason, isAuthFingerprintMatch } from '../utils/tg-config';
 import { MailReader } from '../../../IMap/IMap';
+import { maskMobile } from '../../monitor/monitor-util';
 
 export function isOwnAuth(mobile: string, auth: Api.Authorization): boolean {
     // PRIMARY CHECK: Telegram flags the session making the API call as current.
@@ -72,7 +73,7 @@ export async function removeExternalLoginSessions(ctx: TgContext): Promise<void>
         if (!me) {
             throw new Error('Session verification failed after removeExternalLoginSessions — getMe returned null');
         }
-        ctx.logger.info(ctx.phoneNumber, `Session verified alive after external login cleanup (user: ${me.phone})`);
+        ctx.logger.info(ctx.phoneNumber, `Session verified alive after external login cleanup (user: ${maskMobile(me.phone)})`);
     } catch (verifyError) {
         ctx.logger.error(ctx.phoneNumber, 'CRITICAL: Our session may have been revoked during removeExternalLoginSessions!', verifyError);
         throw new Error(`Session self-check failed after removeExternalLoginSessions: ${verifyError}`);

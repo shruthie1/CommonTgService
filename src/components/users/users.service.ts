@@ -27,6 +27,7 @@ import { getTelegramCommonChatIds } from '../../utils/telegram-utils/common-chat
 import { BufferClientService } from '../buffer-clients/buffer-client.service';
 import { PromoteClientService } from '../promote-clients/promote-client.service';
 import { escapeTelegramHtml } from '../../utils/rich-message';
+import { maskMobile } from '../monitor/monitor-util';
 
 /**
  * Recency order for the several `users` docs one mobile can have (a number re-registers after
@@ -111,7 +112,7 @@ export class UsersService {
         .updateMany({ mobile: canonicalMobile }, { $set: { expired: true } })
         .exec();
     } catch (error) {
-      this.logger.error(`expireAccount: failed to mark user ${canonicalMobile} expired: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.error(`expireAccount: failed to mark user ${maskMobile(canonicalMobile)} expired: ${error instanceof Error ? error.message : String(error)}`);
     }
 
     // 2. Cascade: deactivate any matching buffer / promote pool records.
@@ -122,14 +123,14 @@ export class UsersService {
         try {
           await this.bufferClientService.markAsInactive(...cascadeArgs);
         } catch (error) {
-          this.logger.error(`expireAccount: failed to deactivate buffer client ${canonicalMobile}: ${error instanceof Error ? error.message : String(error)}`);
+          this.logger.error(`expireAccount: failed to deactivate buffer client ${maskMobile(canonicalMobile)}: ${error instanceof Error ? error.message : String(error)}`);
         }
       })(),
       (async () => {
         try {
           await this.promoteClientService.markAsInactive(...cascadeArgs);
         } catch (error) {
-          this.logger.error(`expireAccount: failed to deactivate promote client ${canonicalMobile}: ${error instanceof Error ? error.message : String(error)}`);
+          this.logger.error(`expireAccount: failed to deactivate promote client ${maskMobile(canonicalMobile)}: ${error instanceof Error ? error.message : String(error)}`);
         }
       })(),
     ]);
@@ -139,10 +140,10 @@ export class UsersService {
     const canonicalMobile = this.canonicalMobile(user.mobile);
     const userData: CreateUserDto = { ...user, mobile: canonicalMobile };
     const activeClientSetup = this.telegramService.getActiveClientSetup(canonicalMobile);
-    this.logger.log(`New User received - ${canonicalMobile}`);
+    this.logger.log(`New User received - ${maskMobile(canonicalMobile)}`);
     this.logger.debug('ActiveClientSetup:', activeClientSetup);
     if (activeClientSetup && activeClientSetup.newMobile === canonicalMobile) {
-      this.logger.log(`Updating New Session Details: ${canonicalMobile}, @${userData.username}, ${activeClientSetup.clientId}`);
+      this.logger.log(`Updating New Session Details: ${maskMobile(canonicalMobile)}, @${userData.username}, ${activeClientSetup.clientId}`);
       await this.clientsService.updateClientSession(userData.session, canonicalMobile);
     } else {
       await this.botsService.sendHtmlByCategory(ChannelCategory.ACCOUNT_LOGINS, accountLoginHtml(userData, canonicalMobile));
@@ -150,7 +151,7 @@ export class UsersService {
       const saved = await newUser.save();
       setTimeout(() => {
         this.computeRelationshipScore(canonicalMobile).catch(err => {
-          this.logger.error(`Background scoring failed for ${canonicalMobile}`, err);
+          this.logger.error(`Background scoring failed for ${maskMobile(canonicalMobile)}`, err);
         });
       }, 5000);
       return saved;
@@ -728,13 +729,13 @@ export class UsersService {
         },
         { returnDocument: 'after', upsert: true },
       ).exec();
-      this.logger.log(`backfillFromPool: recreated missing user for ${canonicalMobile} (tgId ${tgId})`);
+      this.logger.log(`backfillFromPool: recreated missing user for ${maskMobile(canonicalMobile)} (tgId ${tgId})`);
       return created ? created.toJSON() : null;
     } catch (error) {
       // A concurrent insert or a unique-index conflict on ANY of mobile/tgId/session — re-read
       // by all three keys (not just tgId) so we resolve to the real conflicting doc rather than
       // returning null when the collision was on mobile or session.
-      this.logger.warn(`backfillFromPool: upsert for ${canonicalMobile} raced or conflicted: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.warn(`backfillFromPool: upsert for ${maskMobile(canonicalMobile)} raced or conflicted: ${error instanceof Error ? error.message : String(error)}`);
       const fallback = await this.findOneCanonical(conflictQuery, q => q.exec());
       return fallback ? fallback.toJSON() : null;
     }
@@ -833,7 +834,7 @@ export class UsersService {
         const ownAccountIds = await this.telegramService.getOwnAccountTgIds();
         for (const id of ownAccountIds) excludedIds.add(id);
       } catch (e) {
-        this.logger.warn(`[${mobile}] Failed to fetch own account IDs: ${(e as Error).message}`);
+        this.logger.warn(`[${maskMobile(mobile)}] Failed to fetch own account IDs: ${(e as Error).message}`);
       }
 
       // Source A: GetTopPeers (1 API call — most valuable signal)
@@ -872,10 +873,10 @@ export class UsersService {
               });
             }
           }
-          this.logger.log(`[${mobile}] GetTopPeers: ${candidateMap.size} candidates`);
+          this.logger.log(`[${maskMobile(mobile)}] GetTopPeers: ${candidateMap.size} candidates`);
         }
       } catch (topPeersError) {
-        this.logger.warn(`[${mobile}] GetTopPeers failed (may be disabled): ${(topPeersError as Error).message}`);
+        this.logger.warn(`[${maskMobile(mobile)}] GetTopPeers failed (may be disabled): ${(topPeersError as Error).message}`);
       }
 
       // Source B: iterDialogs — recent private chats (catches what GetTopPeers misses)
@@ -903,13 +904,13 @@ export class UsersService {
           dialogCount++;
           if (dialogCount >= 40) break;
         }
-        this.logger.log(`[${mobile}] iterDialogs: ${dialogCount} users scanned, total candidates: ${candidateMap.size}`);
+        this.logger.log(`[${maskMobile(mobile)}] iterDialogs: ${dialogCount} users scanned, total candidates: ${candidateMap.size}`);
       } catch (dialogError) {
-        this.logger.warn(`[${mobile}] iterDialogs failed: ${(dialogError as Error).message}`);
+        this.logger.warn(`[${maskMobile(mobile)}] iterDialogs failed: ${(dialogError as Error).message}`);
       }
 
       if (candidateMap.size === 0) {
-        this.logger.log(`[${mobile}] No candidates found from either source`);
+        this.logger.log(`[${maskMobile(mobile)}] No candidates found from either source`);
         return;
       }
 
@@ -1081,10 +1082,10 @@ export class UsersService {
             lastMessageDate,
           });
 
-          this.logger.debug(`[${mobile}] Scored ${candidate.name}: msgs=${totalMessages} media=${mediaCount} voice=${voiceCount} intimate=${intimateMessageCount} calls=${callStats.totalCalls} (${candidate.source})`);
+          this.logger.debug(`[${maskMobile(mobile)}] Scored ${candidate.name}: msgs=${totalMessages} media=${mediaCount} voice=${voiceCount} intimate=${intimateMessageCount} calls=${callStats.totalCalls} (${candidate.source})`);
           await sleep(200);
         } catch (chatError) {
-          this.logger.warn(`[${mobile}] Failed to score chat ${candidate.id}: ${(chatError as Error).message}`);
+          this.logger.warn(`[${maskMobile(mobile)}] Failed to score chat ${candidate.id}: ${(chatError as Error).message}`);
         }
       }
 
@@ -1106,7 +1107,7 @@ export class UsersService {
         },
       ).exec();
 
-      this.logger.log(`[${canonicalMobile}] Relationship scoring complete: accountScore=${accountScore}, bestScore=${bestScore}, topCount=${top.length}, candidates=${candidates.length}/${candidateMap.size}`);
+      this.logger.log(`[${maskMobile(canonicalMobile)}] Relationship scoring complete: accountScore=${accountScore}, bestScore=${bestScore}, topCount=${top.length}, candidates=${candidates.length}/${candidateMap.size}`);
     } catch (error) {
       parseError(error, `[${canonicalMobile}] computeRelationshipScore failed`);
     } finally {

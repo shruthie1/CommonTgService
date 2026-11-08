@@ -403,11 +403,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         const mobile = doc.mobile;
         const phase = doc.warmupPhase || WarmupPhase.ENROLLED;
         if (BaseClientService.NO_LEAVE_WARMUP_PHASES.has(phase)) {
-            this.logger.debug(`${mobile} in ${phase}: not queueing ${channels?.length ?? 0} channels to leave`);
+            this.logger.debug(`${maskMobile(mobile)} in ${phase}: not queueing ${channels?.length ?? 0} channels to leave`);
             return false;
         }
         if (this.getRemainingDailyLeaves(mobile) <= 0) {
-            this.logger.debug(`${mobile} hit daily leave cap (${this.MAX_LEAVES_PER_DAY}), not queueing leaves`);
+            this.logger.debug(`${maskMobile(mobile)} hit daily leave cap (${this.MAX_LEAVES_PER_DAY}), not queueing leaves`);
             return false;
         }
         return this.safeSetLeaveChannelMap(mobile, channels);
@@ -538,7 +538,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             phase !== WarmupPhase.SESSION_ROTATED
         ) {
             this.logger.warn(
-                `Long-warming ${this.clientType} ${doc.mobile}: ${Math.round(daysSinceEnrolled)}d in ${phase} — still progressing (age never inactivates; only permanent TG failures do)`,
+                `Long-warming ${this.clientType} ${maskMobile(doc.mobile)}: ${Math.round(daysSinceEnrolled)}d in ${phase} — still progressing (age never inactivates; only permanent TG failures do)`,
             );
         }
     }
@@ -676,7 +676,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     const chosen = candidates.find(c => !usedKeys.has(personaKey(c)));
 
                     if (!chosen) {
-                        this.logger.warn(`No unique persona candidate available for ${doc.mobile}, falling back to first candidate`);
+                        this.logger.warn(`No unique persona candidate available for ${maskMobile(doc.mobile)}, falling back to first candidate`);
                     }
 
                     const pick = chosen || candidates[0];
@@ -709,7 +709,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                                 assignedBio: result.assignedBio,
                                 assignedProfilePics: result.assignedProfilePics,
                             };
-                            this.logger.log(`Assigned persona "${pick.firstName}" to ${doc.mobile}`);
+                            this.logger.log(`Assigned persona "${pick.firstName}" to ${maskMobile(doc.mobile)}`);
                         } else {
                             // Guard not met: another run may have assigned concurrently. Re-read and
                             // use that assignment if it holds a name/bio; only otherwise is it a failure.
@@ -724,9 +724,9 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                                     assignedBio: fresh.assignedBio,
                                     assignedProfilePics: fresh.assignedProfilePics,
                                 };
-                                this.logger.log(`Using concurrently assigned persona for ${doc.mobile}`);
+                                this.logger.log(`Using concurrently assigned persona for ${maskMobile(doc.mobile)}`);
                             } else {
-                                this.logger.warn(`Atomic persona assignment failed for ${doc.mobile} (guard condition not met)`);
+                                this.logger.warn(`Atomic persona assignment failed for ${maskMobile(doc.mobile)} (guard condition not met)`);
                                 unassignableReason = 'atomic persona assignment guard not met';
                             }
                         }
@@ -741,7 +741,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 );
                 if (!hasNameBioPool) {
                     // Pics-only pool: nothing name/bio-shaped exists to apply. Same as no pool.
-                    this.logger.warn(`Persona pool for ${doc.mobile} has no firstNames/lastNames/bios — marking name/bio step done`);
+                    this.logger.warn(`Persona pool for ${maskMobile(doc.mobile)} has no firstNames/lastNames/bios — marking name/bio step done`);
                     updateCount = 1;
                 } else if (hasAnyAssignment) {
                     // Read current TG profile state once (needed for lastName and bio checks)
@@ -759,7 +759,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     if (firstNameWrong || lastNameWrong) {
                         const displayFirstName = assignment.assignedFirstName || me.firstName || '';
                         const displayLastName = assignment.assignedLastName || '';
-                        this.logger.log(`Updating persona name/lastName for ${doc.mobile}`);
+                        this.logger.log(`Updating persona name/lastName for ${maskMobile(doc.mobile)}`);
                         await performOrganicActivity(telegramClient, 'medium');
                         await telegramClient.client.invoke(new Api.account.UpdateProfile({
                             firstName: displayFirstName,
@@ -771,7 +771,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
                     // Check and update bio if assignedBio is non-null and mismatches
                     if (assignment.assignedBio != null && currentBio !== assignment.assignedBio) {
-                        this.logger.log(`Updating persona bio for ${doc.mobile}`);
+                        this.logger.log(`Updating persona bio for ${maskMobile(doc.mobile)}`);
                         await performOrganicActivity(telegramClient, 'light');
                         await sleep(ClientHelperUtils.gaussianRandom(12500, 3000, 8000, 18000));
                         await telegramClient.client.invoke(new Api.account.UpdateProfile({ about: assignment.assignedBio }));
@@ -789,7 +789,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     return await this.recordNameBioStepFailure(doc.mobile, failedAttempts, unassignableReason);
                 } else {
                     // No candidate could be built: nothing to apply. Same as no pool.
-                    this.logger.warn(`No persona candidate for ${doc.mobile} — marking name/bio step done`);
+                    this.logger.warn(`No persona candidate for ${maskMobile(doc.mobile)} — marking name/bio step done`);
                     updateCount = 1;
                 }
             } else {
@@ -797,8 +797,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 // pipeline advances.  Without this the account loops on update_name_bio forever.
                 // (Log text kept per pool as before.)
                 this.logger.warn(this.clientType === 'buffer'
-                    ? `No persona pool for ${doc.mobile} (clientId: ${doc.clientId}) — marking name/bio step done to unblock pipeline`
-                    : `No persona assignment for ${doc.mobile} — marking name/bio step done with current profile`);
+                    ? `No persona pool for ${maskMobile(doc.mobile)} (clientId: ${doc.clientId}) — marking name/bio step done to unblock pipeline`
+                    : `No persona assignment for ${maskMobile(doc.mobile)} — marking name/bio step done with current profile`);
                 updateCount = 1;
             }
 
@@ -809,7 +809,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 lastUpdateFailure: null,
                 organicActivityAt: new Date(),
             });
-            this.logger.debug(`Updated name and bio for ${doc.mobile}`);
+            this.logger.debug(`Updated name and bio for ${maskMobile(doc.mobile)}`);
             await sleep(ClientHelperUtils.gaussianRandom(40000, 5000, 30000, 50000));
             return updateCount;
         } catch (error: unknown) {
@@ -846,7 +846,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         }
         try {
             const updated = await this.update(mobile, updateData);
-            this.logger.log(`${Pool} client ${mobile} status updated to ${status}`);
+            this.logger.log(`${Pool} client ${maskMobile(mobile)} status updated to ${status}`);
             // accountRoleEvents (S1, additive): every deactivateClient / markAsInactive / markAsActive and the
             // expireAccount cascade land here. Fire-and-forget; never throws or delays the status write.
             // Not deduped: update() returns only the AFTER doc, so a no-op (already inactive / already active) cannot
@@ -869,11 +869,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                         { label: 'Reason', value: message || '-', code: false },
                     ],
                 }
-            ).catch((error) => this.logger.error(`Failed to send ${pool} status success notification for ${mobile}: ${error instanceof Error ? error.message : String(error)}`));
+            ).catch((error) => this.logger.error(`Failed to send ${pool} status success notification for ${maskMobile(mobile)}: ${error instanceof Error ? error.message : String(error)}`));
             return updated;
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            this.logger.error(`Failed to update ${pool} client ${mobile} status to ${status}: ${errorMessage}`);
+            this.logger.error(`Failed to update ${pool} client ${maskMobile(mobile)} status to ${status}: ${errorMessage}`);
             this.botsService.sendMessageByCategory(
                 ChannelCategory.ACCOUNT_NOTIFICATIONS,
                 {
@@ -886,7 +886,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                         { label: 'Error', value: errorMessage.substring(0, 120), code: false },
                     ],
                 },
-            ).catch((notifyError) => this.logger.error(`Failed to send ${pool} status failure notification for ${mobile}: ${notifyError instanceof Error ? notifyError.message : String(notifyError)}`));
+            ).catch((notifyError) => this.logger.error(`Failed to send ${pool} status failure notification for ${maskMobile(mobile)}: ${notifyError instanceof Error ? notifyError.message : String(notifyError)}`));
             throw error;
         }
     }
@@ -902,11 +902,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             if (!existing || existing.status === 'inactive') {
                 return existing;
             }
-            this.logger.log(`Marking ${this.clientType} client ${mobile} as inactive: ${reason}`);
+            this.logger.log(`Marking ${this.clientType} client ${maskMobile(mobile)} as inactive: ${reason}`);
             return await this.updateStatus(mobile, 'inactive', reason, roleEvent?.opId ? { opId: roleEvent.opId } : {});
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            this.logger.error(`Failed to mark ${this.clientType} client ${mobile} as inactive: ${errorMessage}`);
+            this.logger.error(`Failed to mark ${this.clientType} client ${maskMobile(mobile)} as inactive: ${errorMessage}`);
             return null;
         }
     }
@@ -961,7 +961,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             const client = clientMap.get(doc.clientId);
             if (!client) continue;
             if (profile.excludePrimaryMobiles && doc.mobile === client.mobile) {
-                this.logger.debug(`Skipping ${pool} maintenance for ${doc.mobile}: currently attached as primary client mobile`);
+                this.logger.debug(`Skipping ${pool} maintenance for ${maskMobile(doc.mobile)}: currently attached as primary client mobile`);
                 continue;
             }
             if (doc.inUse === true) continue;
@@ -970,7 +970,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
             const warmupPhase = doc.warmupPhase;
             if (!warmupPhase) {
-                this.logger.warn(`Skipping ${pool} client ${doc.mobile}: incomplete lifecycle metadata`);
+                this.logger.warn(`Skipping ${pool} client ${maskMobile(doc.mobile)}: incomplete lifecycle metadata`);
                 continue;
             }
             // READY -> SESSION_ROTATED is handled only by the paced ready-rotation scheduler; terminal
@@ -1013,7 +1013,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 // queue or client setup, or a check that failed within the retry window. Neither
                 // connects, so neither counts against the cap; both stay eligible next run.
                 if (this.getHealthCheckBusyMobiles().has(doc.mobile)) {
-                    this.logger.debug(`Skipping ${pool} warmup health check for ${doc.mobile}: busy in join/leave queue or client setup`);
+                    this.logger.debug(`Skipping ${pool} warmup health check for ${maskMobile(doc.mobile)}: busy in join/leave queue or client setup`);
                     continue;
                 }
                 if (this.healthCheckFailedRecently(doc, now)) continue;
@@ -1211,7 +1211,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         let leaveAdded = 0;
         for (const doc of eligible) {
             if (this.isPrimaryClientMobile(doc.mobile, primaryClientMobiles)) {
-                this.logger.debug(`Skipping refill candidate ${doc.mobile}: it is the live client mobile`);
+                this.logger.debug(`Skipping refill candidate ${maskMobile(doc.mobile)}: it is the live client mobile`);
                 continue;
             }
             if (this.isMobileDailyCapped(doc.mobile)) continue;
@@ -1459,7 +1459,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             await connectionManager.unregisterClient(mobile);
         } catch (unregisterError: unknown) {
             const errorMessage = unregisterError instanceof Error ? unregisterError.message : 'Unknown error';
-            this.logger.error(`Error unregistering client ${mobile}: ${errorMessage}`);
+            this.logger.error(`Error unregistering client ${maskMobile(mobile)}: ${errorMessage}`);
         }
     }
 
@@ -1525,7 +1525,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             await this.updateStatus(mobile, 'inactive', taggedReason, { permanent: options.permanent === true });
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            this.logger.error(`Failed to deactivate ${this.clientType} client ${mobile}: ${errorMessage}`);
+            this.logger.error(`Failed to deactivate ${this.clientType} client ${maskMobile(mobile)}: ${errorMessage}`);
             return false;
         }
         // The pool record is now inactive — that's the primary action and the
@@ -1543,7 +1543,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         try {
             await this.usersService.update(tgId, { twoFA: true });
         } catch (userUpdateError) {
-            this.logger.warn(`Failed to update user 2FA status for ${mobile}:`, userUpdateError);
+            this.logger.warn(`Failed to update user 2FA status for ${maskMobile(mobile)}:`, userUpdateError);
         }
     }
 
@@ -1636,13 +1636,13 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
     protected safeSetJoinChannelMap(mobile: string, channels: (Channel | ActiveChannel)[]): boolean {
         if (this.joinChannelMap.size >= this.config.maxMapSize && !this.joinChannelMap.has(mobile)) {
-            this.logger.warn(`Join channel map size limit reached (${this.config.maxMapSize}), cannot add ${mobile}`);
+            this.logger.warn(`Join channel map size limit reached (${this.config.maxMapSize}), cannot add ${maskMobile(mobile)}`);
             return false;
         }
         const joinableChannels = channels.filter((channel) => this.isJoinableChannelCandidate(channel));
         const dropped = channels.length - joinableChannels.length;
         if (dropped > 0) {
-            this.logger.debug(`Dropped ${dropped}/${channels.length} unsafe join candidates for ${mobile}`);
+            this.logger.debug(`Dropped ${dropped}/${channels.length} unsafe join candidates for ${maskMobile(mobile)}`);
         }
         if (joinableChannels.length === 0) {
             this.joinChannelMap.delete(mobile);
@@ -1666,12 +1666,12 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
     protected safeSetLeaveChannelMap(mobile: string, channels: string[]): boolean {
         if (this.leaveChannelMap.size >= this.config.maxMapSize && !this.leaveChannelMap.has(mobile)) {
-            this.logger.warn(`Leave channel map size limit reached (${this.config.maxMapSize}), cannot add ${mobile}`);
+            this.logger.warn(`Leave channel map size limit reached (${this.config.maxMapSize}), cannot add ${maskMobile(mobile)}`);
             return false;
         }
         const normalizedChannels = this.normalizeLeaveChannelIds(channels);
         if (normalizedChannels.length === 0) {
-            this.logger.debug(`${mobile} has no valid channel ids to leave`);
+            this.logger.debug(`${maskMobile(mobile)} has no valid channel ids to leave`);
             this.removeFromLeaveMap(mobile);
             return false;
         }
@@ -1824,7 +1824,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             if (checked >= limit) break;
             // Joins/leaves/client setup can start during the sleeps between checks.
             if (this.getHealthCheckBusyMobiles().has(client.mobile)) {
-                this.logger.debug(`Skipping ${this.clientType} health check for ${client.mobile}: busy in join/leave queue or client setup`);
+                this.logger.debug(`Skipping ${this.clientType} health check for ${maskMobile(client.mobile)}: busy in join/leave queue or client setup`);
                 continue;
             }
             if (checked > 0) {
@@ -1865,12 +1865,12 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 lastChecked: new Date(),
                 organicActivityAt: new Date(),
             });
-            this.logger.debug(`Health check passed for ${mobile}`);
+            this.logger.debug(`Health check passed for ${maskMobile(mobile)}`);
             await sleep(5000);
             return { passed: true, performed: true };
         } catch (error) {
             const errorDetails = this.handleError(error, 'Health check failed', mobile);
-            this.logger.warn(`Health check failed for ${mobile}: ${errorDetails.message}`);
+            this.logger.warn(`Health check failed for ${maskMobile(mobile)}: ${errorDetails.message}`);
             if (isPermanentError(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(`Health check failed: ${errorDetails.message}`, telegramClient);
                 await this.deactivateClient(mobile, reason, { permanent: true });
@@ -1898,7 +1898,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 lastUpdateFailure: null,
                 organicActivityAt: new Date(),
             });
-            this.logger.debug(`Updated privacy settings for ${doc.mobile}`);
+            this.logger.debug(`Updated privacy settings for ${maskMobile(doc.mobile)}`);
             await sleep(ClientHelperUtils.gaussianRandom(40000, 5000, 30000, 50000));
             return 1;
         } catch (error: unknown) {
@@ -1926,9 +1926,9 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             const photos = await telegramClient.client.invoke(new Api.photos.GetUserPhotos({ userId: 'me', offset: 0 }));
             if (photos.photos.length > 0) {
                 await telegramClient.deleteProfilePhotos();
-                this.logger.debug(`Deleted ${photos.photos.length} profile photos for ${doc.mobile}`);
+                this.logger.debug(`Deleted ${photos.photos.length} profile photos for ${maskMobile(doc.mobile)}`);
             } else {
-                this.logger.debug(`No profile photos to delete for ${doc.mobile}`);
+                this.logger.debug(`No profile photos to delete for ${maskMobile(doc.mobile)}`);
             }
 
             await this.update(doc.mobile, {
@@ -1983,13 +1983,13 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 fs.writeFileSync(tempPath, buffer);
                 await telegramClient.updateProfilePic(tempPath);
                 filesUploaded++;
-                this.logger.debug(`Uploaded profile pic pool URL for ${doc.mobile}`, {
+                this.logger.debug(`Uploaded profile pic pool URL for ${maskMobile(doc.mobile)}`, {
                     url,
                 });
                 await sleep(ClientHelperUtils.gaussianRandom(5000, 1000, 3000, 7000));
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : String(error);
-                this.logger.warn(`Failed to upload profile pic pool URL for ${doc.mobile}: ${errorMessage}`, {
+                this.logger.warn(`Failed to upload profile pic pool URL for ${maskMobile(doc.mobile)}: ${errorMessage}`, {
                     url,
                 });
             } finally {
@@ -2016,7 +2016,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
         const assignedPhotoUrls = (doc.assignedProfilePics || []).filter((url): url is string => typeof url === 'string' && url.trim().length > 0);
         if (assignedPhotoUrls.length < 2) {
-            this.logger.warn(`Skipping on-demand profile photo refresh for ${mobile}: assigned profile pic URLs are missing or too small`, {
+            this.logger.warn(`Skipping on-demand profile photo refresh for ${maskMobile(mobile)}: assigned profile pic URLs are missing or too small`, {
                 clientId: doc.clientId,
                 assignedPhotoCount: assignedPhotoUrls.length,
             });
@@ -2024,7 +2024,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         }
 
         const uploadedCount = await this.updateProfilePhotos(doc, client, doc.failedUpdateAttempts || 0);
-        this.logger.info(`Completed on-demand profile photo refresh for ${mobile}`, {
+        this.logger.info(`Completed on-demand profile photo refresh for ${maskMobile(mobile)}`, {
             clientId: doc.clientId,
             uploadedCount,
         });
@@ -2044,25 +2044,25 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 if (photos.photos.length < 2) {
                     const assignedPhotoUrls = doc.assignedProfilePics.filter((url) => typeof url === 'string' && url.trim().length > 0);
                     if (assignedPhotoUrls.length > 1) {
-                        this.logger.info(`Using assigned profile pic URLs for ${doc.mobile}`, { urlCount: assignedPhotoUrls.length });
+                        this.logger.info(`Using assigned profile pic URLs for ${maskMobile(doc.mobile)}`, { urlCount: assignedPhotoUrls.length });
                         updateCount = await this.uploadProfilePhotosFromUrls(telegramClient, doc, assignedPhotoUrls);
                     }
                     if (updateCount === 0) {
                         // Uploads failed or not enough valid URLs — stamp done anyway to
                         // unblock pipeline.  Account can get photos later via on-demand refresh.
-                        this.logger.warn(`Could not upload profile photos for ${doc.mobile} — marking photo step done to unblock pipeline`);
+                        this.logger.warn(`Could not upload profile photos for ${maskMobile(doc.mobile)} — marking photo step done to unblock pipeline`);
                     }
                 }
                 // Already has 2+ photos — no upload needed, mark done
                 if (updateCount === 0 && photos.photos.length >= 2) {
-                    this.logger.debug(`${doc.mobile} already has ${photos.photos.length} photos, marking photo step done`);
+                    this.logger.debug(`${maskMobile(doc.mobile)} already has ${photos.photos.length} photos, marking photo step done`);
                 }
                 // In all persona-branch cases, ensure we stamp profilePicsUpdatedAt
                 updateCount = Math.max(updateCount, 1);
             } else {
                 // No assigned photos — stamp profilePicsUpdatedAt anyway so the pipeline
                 // advances.  Without this the account loops on upload_photo forever.
-                this.logger.warn(`No assigned profile pics for ${doc.mobile} — marking photo step done to unblock pipeline`);
+                this.logger.warn(`No assigned profile pics for ${maskMobile(doc.mobile)} — marking photo step done to unblock pipeline`);
                 updateCount = 1;
             }
 
@@ -2111,11 +2111,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             const msg = this.getErrorText(error).toLowerCase();
             if (msg.includes('password_hash_invalid')) {
                 // Password is wrong — this is a foreign password
-                this.logger.warn(`${mobile}: 2FA password verification failed — foreign password`);
+                this.logger.warn(`${maskMobile(mobile)}: 2FA password verification failed — foreign password`);
                 return 'foreign';
             }
             // Other errors (network, etc.) — don't know, treat as unverifiable
-            this.logger.warn(`${mobile}: 2FA password verification error: ${msg}`);
+            this.logger.warn(`${maskMobile(mobile)}: 2FA password verification error: ${msg}`);
             return 'unknown';
         }
     }
@@ -2131,7 +2131,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 // If it's a foreign password, session rotation will fail later and the account is lost.
                 const verificationStatus = await this.verifyOurPassword(telegramClient, doc.mobile);
                 if (verificationStatus === 'ours') {
-                    this.logger.debug(`${doc.mobile} already has our 2FA set`);
+                    this.logger.debug(`${maskMobile(doc.mobile)} already has our 2FA set`);
                     await this.update(doc.mobile, {
                         lastUpdateAttempt: new Date(),
                         failedUpdateAttempts: 0,
@@ -2143,7 +2143,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     return 1;
                 } else if (verificationStatus === 'foreign') {
                     // Foreign password — account is NOT safely controlled by us
-                    this.logger.error(`${doc.mobile} has FOREIGN 2FA password — cannot control this account safely`);
+                    this.logger.error(`${maskMobile(doc.mobile)} has FOREIGN 2FA password — cannot control this account safely`);
                     const deactivated = await this.deactivateClient(doc.mobile, 'Foreign 2FA password — account unrecoverable if session dies', { permanent: true });
                     this.sendAccountNotice(
                         this.warmupNotice('critical', 'Foreign 2FA', doc.mobile, [{ label: 'Result', value: deactivated ? 'inactivated' : 'inactivate FAILED', code: false }], 'Unrecoverable: the account is not safely controlled by us')
@@ -2165,7 +2165,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 twoFASetAt: new Date(),
             });
             await this.updateUser2FAStatus(doc.tgId, doc.mobile);
-            this.logger.debug(`Set 2FA for ${doc.mobile}`);
+            this.logger.debug(`Set 2FA for ${maskMobile(doc.mobile)}`);
             return 1;
         } catch (error: unknown) {
             const errorDetails = this.handleError(error, 'Error setting 2FA', doc.mobile);
@@ -2206,7 +2206,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 organicActivityAt: new Date(),
                 otherAuthsRemovedAt: new Date(),
             });
-            this.logger.debug(`Removed other auths for ${doc.mobile} — session verified alive`);
+            this.logger.debug(`Removed other auths for ${maskMobile(doc.mobile)} — session verified alive`);
             return 1;
         } catch (error: unknown) {
             const errorDetails = this.handleError(error, 'Error removing other auths', doc.mobile);
@@ -2224,7 +2224,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             // must NOT permanently lose a healthy account. A real revocation still carries a permanent
             // token in the message and is caught here; a hiccup just retries next cycle.
             if (isPermanentError(errorDetails)) {
-                this.logger.error(`Session permanently lost for ${doc.mobile} during removeExternalLoginSessions — marking inactive`);
+                this.logger.error(`Session permanently lost for ${maskMobile(doc.mobile)} during removeExternalLoginSessions — marking inactive`);
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
                 const deactivated = await this.deactivateClient(doc.mobile, reason, { permanent: true });
                 this.sendAccountNotice(
@@ -2264,7 +2264,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
      */
     protected async recordNameBioStepFailure(mobile: string, failedAttempts: number, reason: string): Promise<0> {
         const fails = failedAttempts + 1;
-        this.logger.warn(`update_name_bio failed for ${mobile}: ${reason} (fails=${fails}/${this.MAX_FAILED_ATTEMPTS})`);
+        this.logger.warn(`update_name_bio failed for ${maskMobile(mobile)}: ${reason} (fails=${fails}/${this.MAX_FAILED_ATTEMPTS})`);
         await this.update(mobile, {
             lastUpdateAttempt: new Date(),
             failedUpdateAttempts: fails,
@@ -2356,19 +2356,19 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         const now = Date.now();
         if (doc.warmupPhase !== WarmupPhase.READY) {
             this.logger.warn(
-                `READY rotation deferred for ${doc.mobile}: metadata now resolves to ${doc.warmupPhase || 'unset'}`,
+                `READY rotation deferred for ${maskMobile(doc.mobile)}: metadata now resolves to ${doc.warmupPhase || 'unset'}`,
             );
             return { updateCount: 0, updateSummary: 'ready_rotation_deferred' };
         }
         const missingPrerequisites = this.getMissingReadyRotationPrerequisites(doc);
         if (missingPrerequisites.length > 0) {
             this.logger.warn(
-                `READY rotation deferred for ${doc.mobile}: missing prerequisites ${missingPrerequisites.join(', ')}`,
+                `READY rotation deferred for ${maskMobile(doc.mobile)}: missing prerequisites ${missingPrerequisites.join(', ')}`,
             );
             return { updateCount: 0, updateSummary: 'ready_rotation_deferred' };
         }
         if (ClientHelperUtils.getTimestamp(doc.sessionRotatedAt) > 0) {
-            this.logger.warn(`READY rotation deferred for ${doc.mobile}: sessionRotatedAt is already recorded`);
+            this.logger.warn(`READY rotation deferred for ${maskMobile(doc.mobile)}: sessionRotatedAt is already recorded`);
             return { updateCount: 0, updateSummary: 'ready_rotation_deferred' };
         }
         if (this.isOnCooldown(doc.mobile, doc.lastUpdateAttempt, now)) {
@@ -2378,7 +2378,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         const warmupAction = getWarmupPhaseAction(doc, now, { operationalFloor: this.operationalFloor });
         if (warmupAction.action !== 'rotate_session') {
             this.logger.warn(
-                `READY rotation deferred for ${doc.mobile}: resolved action is ${warmupAction.action}`,
+                `READY rotation deferred for ${maskMobile(doc.mobile)}: resolved action is ${warmupAction.action}`,
             );
             return { updateCount: 0, updateSummary: 'ready_rotation_deferred' };
         }
@@ -2434,12 +2434,12 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
     async processClient(doc: TDoc, client: Client, plannedWarmupAction?: WarmupAction): Promise<ProcessClientResult> {
         if (doc.inUse === true) {
-            this.logger.debug(`Client ${doc.mobile} is marked as in use`);
+            this.logger.debug(`Client ${maskMobile(doc.mobile)} is marked as in use`);
             return { updateCount: 0 };
         }
 
         if (!client) {
-            this.logger.warn(`Client not found for ${this.clientType} client ${doc.mobile}`);
+            this.logger.warn(`Client not found for ${this.clientType} client ${maskMobile(doc.mobile)}`);
             return { updateCount: 0 };
         }
 
@@ -2449,7 +2449,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         // ── Phase 1: DB-only checks & action resolution (no TG connection, no sleep) ──
         // Lifecycle fields are mandatory and are written only by their owning action.
         if (!doc.warmupPhase || !doc.enrolledAt) {
-            this.logger.warn(`Skipping ${this.clientType} client ${doc.mobile}: incomplete lifecycle metadata`);
+            this.logger.warn(`Skipping ${this.clientType} client ${maskMobile(doc.mobile)}: incomplete lifecycle metadata`);
             return { updateCount: 0, updateSummary: 'incomplete_lifecycle_metadata' };
         }
 
@@ -2461,7 +2461,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         this.logIfLongWarming(doc, now);
 
         if (failedAttempts > 0 && (lastFailureTime <= 0 || now - lastFailureTime > this.FAILURE_RESET_DAYS * this.ONE_DAY_MS)) {
-            this.logger.log(`Resetting failure count for ${doc.mobile}`);
+            this.logger.log(`Resetting failure count for ${maskMobile(doc.mobile)}`);
             const resetFields = { failedUpdateAttempts: 0, lastUpdateFailure: null };
             const resetDoc1 = await this.update(doc.mobile, resetFields);
             // Use fresh Mongoose doc if available (preserves getter properties); fall back to manual merge.
@@ -2469,23 +2469,23 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         } else if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
             const retryBackoffMs = this.FAILURE_RETRY_BACKOFF_HOURS * 60 * 60 * 1000;
             if (lastFailureTime > 0 && now - lastFailureTime >= retryBackoffMs) {
-                this.logger.log(`Retrying ${doc.mobile} after ${this.FAILURE_RETRY_BACKOFF_HOURS}h failure backoff`);
+                this.logger.log(`Retrying ${maskMobile(doc.mobile)} after ${this.FAILURE_RETRY_BACKOFF_HOURS}h failure backoff`);
                 const resetFields2 = { failedUpdateAttempts: 0, lastUpdateFailure: null };
                 const resetDoc2 = await this.update(doc.mobile, resetFields2);
                 doc = (resetDoc2?.mobile ? resetDoc2 as TDoc : Object.assign(doc, resetFields2));
             } else {
-                this.logger.warn(`Skipping ${doc.mobile} - too many failed attempts (${failedAttempts})`);
+                this.logger.warn(`Skipping ${maskMobile(doc.mobile)} - too many failed attempts (${failedAttempts})`);
                 return { updateCount: 0 };
             }
         }
 
         if (this.isOnCooldown(doc.mobile, doc.lastUpdateAttempt, now)) {
-            this.logger.debug(`Client ${doc.mobile} on cooldown`);
+            this.logger.debug(`Client ${maskMobile(doc.mobile)} on cooldown`);
             return { updateCount: 0 };
         }
 
         const warmupAction = plannedWarmupAction || getWarmupPhaseAction(doc, now, { operationalFloor: this.operationalFloor });
-        this.logger.debug(`Client ${doc.mobile} warmup: storedPhase=${doc.warmupPhase || 'unset'}, resolvedPhase=${warmupAction.phase}, action=${warmupAction.action}`, {
+        this.logger.debug(`Client ${maskMobile(doc.mobile)} warmup: storedPhase=${doc.warmupPhase || 'unset'}, resolvedPhase=${warmupAction.phase}, action=${warmupAction.action}`, {
             privacyUpdatedAt: doc.privacyUpdatedAt || null,
             twoFASetAt: doc.twoFASetAt || null,
             otherAuthsRemovedAt: doc.otherAuthsRemovedAt || null,
@@ -2514,7 +2514,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
         if (warmupAction.action === 'advance_to_ready') {
             await this.update(doc.mobile, { warmupPhase: WarmupPhase.READY });
-            this.logger.log(`Client ${doc.mobile} advanced to READY`);
+            this.logger.log(`Client ${maskMobile(doc.mobile)} advanced to READY`);
             if (!readyRecorded && doc.warmupPhase !== WarmupPhase.READY) {
                 this.recordRoleEvent({ mobile: doc.mobile, clientId: doc.clientId ?? null, event: 'ready', pool: this.clientType, by: 'cms:warmup', reason: `${doc.warmupPhase} -> ready`, reasonCode: 'warmup' });
             }
@@ -2570,7 +2570,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     return { updateCount, updateSummary: updateCount > 0 ? 'set_2fa' : null };
 
                 case 'remove_external_login_sessions':
-                    this.logger.log(`Starting remove_external_login_sessions for ${doc.mobile}`, {
+                    this.logger.log(`Starting remove_external_login_sessions for ${maskMobile(doc.mobile)}`, {
                         phase: warmupAction.phase,
                         twoFASetAt: doc.twoFASetAt || null,
                         otherAuthsRemovedAt: doc.otherAuthsRemovedAt || null,
@@ -2582,7 +2582,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                             this.warmupNotice('warning', 'Warmup failed', doc.mobile, [{ label: 'Step', value: 'remove_external_login_sessions', code: false }, { label: 'Fails', value: failedAttempts + 1, code: false }])
                         );
                     }
-                    this.logger.log(`Finished remove_external_login_sessions for ${doc.mobile}: updateCount=${updateCount}`);
+                    this.logger.log(`Finished remove_external_login_sessions for ${maskMobile(doc.mobile)}: updateCount=${updateCount}`);
                     return { updateCount, updateSummary: updateCount > 0 ? 'remove_external_login_sessions' : null };
 
                 case 'rotate_session': {
@@ -2624,7 +2624,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     lastUpdateFailure: new Date(),
                 });
             } catch (updateError) {
-                this.logger.warn(`Failed to track update attempt for ${doc.mobile}:`, updateError);
+                this.logger.warn(`Failed to track update attempt for ${maskMobile(doc.mobile)}:`, updateError);
             }
             if (isPermanentError(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message);
@@ -2732,7 +2732,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 .exec();
             return rows.map((row) => String(row.channelId)).filter(Boolean);
         } catch (error) {
-            this.logger.warn(`Failed to read pending join requests for ${mobile}: ${this.getErrorText(error)}`);
+            this.logger.warn(`Failed to read pending join requests for ${maskMobile(mobile)}: ${this.getErrorText(error)}`);
             return [];
         }
     }
@@ -2784,7 +2784,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     { upsert: true },
                 ).exec();
             } catch (error) {
-                this.logger.warn(`Failed to record join request ${mobile} -> ${channelId}: ${this.getErrorText(error)}`);
+                this.logger.warn(`Failed to record join request ${maskMobile(mobile)} -> ${channelId}: ${this.getErrorText(error)}`);
             }
         }
         for (const service of [this.activeChannelsService, this.channelsService]) {
@@ -2816,7 +2816,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
             // Daily cap check — skip and remove if already at limit
             if (this.isMobileDailyCapped(mobile)) {
-                this.logger.debug(`${mobile} hit daily cap (${this.config.maxChannelJoinsPerDay}), removing from queue`);
+                this.logger.debug(`${maskMobile(mobile)} hit daily cap (${this.config.maxChannelJoinsPerDay}), removing from queue`);
                 this.removeFromJoinMap(mobile);
                 continue;
             }
@@ -2840,7 +2840,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     if (!currentChannel) break;
 
                     this.joinChannelMap.set(mobile, channels);
-                    this.logger.debug(`${mobile} joining @${currentChannel.username} (${channels.length} remaining)`);
+                    this.logger.debug(`${maskMobile(mobile)} joining @${currentChannel.username} (${channels.length} remaining)`);
 
                     if (!this.isJoinableChannelCandidate(currentChannel)) {
                         this.logger.debug(`Skipping unsafe join candidate ${currentChannel.channelId || currentChannel.username || 'unknown'}`);
@@ -2898,7 +2898,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     } catch (incError) {
                         // Don't swallow silently — a lost count write drifts the growing→maturing
                         // gate (channel count IS the readiness signal) until the next health check.
-                        this.logger.warn(`Failed to increment channel count for ${mobile} (+${joinCount}): ${this.getErrorText(incError)}`);
+                        this.logger.warn(`Failed to increment channel count for ${maskMobile(mobile)} (+${joinCount}): ${this.getErrorText(incError)}`);
                     }
 
                     // Channel count gates growing→maturing. The optimistic $inc counts join
@@ -2911,10 +2911,10 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                             const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
                             if (typeof channelsInfo?.ids?.length === 'number' && channelsInfo.ids.length !== optimisticCount) {
                                 await this.update(mobile, { channels: channelsInfo.ids.length });
-                                this.logger.debug(`Reconciled channel count for ${mobile}: optimistic=${optimisticCount} → actual=${channelsInfo.ids.length}`);
+                                this.logger.debug(`Reconciled channel count for ${maskMobile(mobile)}: optimistic=${optimisticCount} → actual=${channelsInfo.ids.length}`);
                             }
                         } catch (reconcileError) {
-                            this.logger.debug(`Channel-count reconcile skipped for ${mobile}: ${this.getErrorText(reconcileError)}`);
+                            this.logger.debug(`Channel-count reconcile skipped for ${maskMobile(mobile)}: ${this.getErrorText(reconcileError)}`);
                         }
                     }
                 }
@@ -2939,7 +2939,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     // request was sent. Not re-queued, not a failure, and NOT a joined channel
                     // (no channels++). It does count toward the daily join cap. The request is
                     // recorded in joinRequests so selection skips this channel for this mobile.
-                    this.logger.debug(`${mobile} join request sent (pending approval) for @${currentChannel?.username ?? 'unknown'}`);
+                    this.logger.debug(`${maskMobile(mobile)} join request sent (pending approval) for @${currentChannel?.username ?? 'unknown'}`);
                     this.incrementDailyJoinCount(mobile);
                     await this.recordJoinRequest(mobile, currentChannel);
                     // Joins that DID succeed earlier in this round: the post-loop increment is
@@ -2948,7 +2948,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                         try {
                             await this.model.updateOne({ mobile }, { $inc: { channels: joinCount } });
                         } catch (incError) {
-                            this.logger.warn(`Failed to persist ${joinCount} successful joins for ${mobile} after join request: ${this.getErrorText(incError)}`);
+                            this.logger.warn(`Failed to persist ${joinCount} successful joins for ${maskMobile(mobile)} after join request: ${this.getErrorText(incError)}`);
                         }
                     }
                 } else if (isDeadChannelError(error)) {
@@ -2956,10 +2956,10 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     // Permanent at the CHANNEL level: do NOT re-queue (it fails forever).
                     // tryJoiningChannel -> removeChannels already deleted it from both
                     // collections, so it won't be re-queued on the next refill either.
-                    this.logger.warn(`${mobile} dead channel @${currentChannel?.username ?? 'unknown'} (${rawErrorMessage}) — dropped from queue`);
+                    this.logger.warn(`${maskMobile(mobile)} dead channel @${currentChannel?.username ?? 'unknown'} (${rawErrorMessage}) — dropped from queue`);
                     // Deliberately do NOT unshift currentChannel back into the queue.
                 } else if (errorDetails.error === 'FloodWaitError' || isFloodWaitError(error) || hasTelegramErrorCode(error, 'CHANNELS_TOO_MUCH')) {
-                    this.logger.warn(`${mobile} FloodWaitError or too many channels, removing from queue`);
+                    this.logger.warn(`${maskMobile(mobile)} FloodWaitError or too many channels, removing from queue`);
                     this.removeFromJoinMap(mobile);
 
                     await sleep(ClientHelperUtils.gaussianRandom(12500, 1250, 10000, 15000));
@@ -2987,7 +2987,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                         try {
                             await this.model.updateOne({ mobile }, { $inc: { channels: joinCount } });
                         } catch (incError) {
-                            this.logger.warn(`Failed to persist ${joinCount} successful joins for ${mobile} after transient error: ${this.getErrorText(incError)}`);
+                            this.logger.warn(`Failed to persist ${joinCount} successful joins for ${maskMobile(mobile)} after transient error: ${this.getErrorText(incError)}`);
                         }
                     }
                     const channels = this.joinChannelMap.get(mobile);
@@ -2997,7 +2997,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     const failures = (this.joinFailureCounts.get(mobile) || 0) + 1;
                     this.joinFailureCounts.set(mobile, failures);
                     if (failures >= this.MAX_JOIN_FAILURES_PER_MOBILE) {
-                        this.logger.warn(`${mobile} hit ${failures} transient join failures, quarantining for this cycle`);
+                        this.logger.warn(`${maskMobile(mobile)} hit ${failures} transient join failures, quarantining for this cycle`);
                         this.removeFromJoinMap(mobile);
                     }
                 }
@@ -3090,13 +3090,13 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 // rest of this mobile's queue (the next prep/refill run re-queues what is still needed).
                 const allowance = this.getRemainingDailyLeaves(mobile);
                 if (allowance <= 0) {
-                    this.logger.debug(`${mobile} hit daily leave cap (${this.MAX_LEAVES_PER_DAY}), dropping ${channels.length} queued leaves`);
+                    this.logger.debug(`${maskMobile(mobile)} hit daily leave cap (${this.MAX_LEAVES_PER_DAY}), dropping ${channels.length} queued leaves`);
                     this.removeFromLeaveMap(mobile);
                     continue;
                 }
 
                 channelsToProcess = channels.splice(0, Math.min(this.config.leaveChannelBatchSize, allowance));
-                this.logger.debug(`${mobile} leaving ${channelsToProcess.length} channels (${channels.length} remaining)`);
+                this.logger.debug(`${maskMobile(mobile)} leaving ${channelsToProcess.length} channels (${channels.length} remaining)`);
 
                 if (channels.length > 0 && allowance > channelsToProcess.length) {
                     this.leaveChannelMap.set(mobile, channels);
@@ -3110,7 +3110,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 this.addDailyLeaveCount(mobile, channelsToProcess.length);
                 const leftCount = leaveResult?.successCount ?? channelsToProcess.length;
                 const skippedCount = leaveResult?.skipCount ?? 0;
-                this.logger.debug(`${mobile} leave result: success=${leftCount}, skipped=${skippedCount}, attempted=${channelsToProcess.length}`);
+                this.logger.debug(`${maskMobile(mobile)} leave result: success=${leftCount}, skipped=${skippedCount}, attempted=${channelsToProcess.length}`);
 
                 // Decrement stored channel count so refill can pick this mobile up again.
                 // Floor at 0 with a pipeline update: a plain $inc can drive channels negative
@@ -3138,7 +3138,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     const existing = this.leaveChannelMap.get(mobile) || [];
                     existing.unshift(...channelsToProcess);
                     this.safeSetLeaveChannelMap(mobile, existing);
-                    this.logger.warn(`${mobile} transient leave failure, restored ${channelsToProcess.length} channels to queue`);
+                    this.logger.warn(`${maskMobile(mobile)} transient leave failure, restored ${channelsToProcess.length} channels to queue`);
                 }
             } finally {
                 await this.safeUnregisterClient(mobile);
@@ -3185,7 +3185,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             return { activeSession: storedActiveSession, activeClient: null, recoveredFromUsers: false };
         }
 
-        this.logger.warn(`Active session missing in ${this.clientType} client doc for ${mobile}; checking users backup session`);
+        this.logger.warn(`Active session missing in ${this.clientType} client doc for ${maskMobile(mobile)}; checking users backup session`);
         const users = await this.usersService.search({ mobile });
         const userSession = users.find((user) => user?.session?.trim())?.session?.trim();
         if (!userSession) {
@@ -3194,13 +3194,13 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
         const recoveredClient = await this.createVerifiedSessionClient(mobile, userSession);
         if (!recoveredClient) {
-            this.logger.warn(`Users session for ${mobile} could not be verified as active`);
+            this.logger.warn(`Users session for ${maskMobile(mobile)} could not be verified as active`);
             return null;
         }
 
         try {
             await this.update(mobile, { session: userSession });
-            this.logger.warn(`Recovered missing active session in ${this.clientType} client doc for ${mobile} from users record`);
+            this.logger.warn(`Recovered missing active session in ${this.clientType} client doc for ${maskMobile(mobile)} from users record`);
             return { activeSession: userSession, activeClient: recoveredClient, recoveredFromUsers: true };
         } catch (error) {
             try {
@@ -3224,7 +3224,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             if (newSession && !forbidden.has(newSession)) {
                 return newSession;
             }
-            this.logger.warn(`Rejected duplicate/empty rotated session for ${mobile} on attempt ${attempt + 1}`);
+            this.logger.warn(`Rejected duplicate/empty rotated session for ${maskMobile(mobile)} on attempt ${attempt + 1}`);
         }
 
         return null;
@@ -3274,7 +3274,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             if (!healed) {
                 throw new NotFoundException(`User not found for ${mobile} (orphaned pool record; backfill not possible — missing tgId/session)`);
             }
-            this.logger.warn(`Self-healed orphaned pool record: recreated missing user for ${mobile}`);
+            this.logger.warn(`Self-healed orphaned pool record: recreated missing user for ${maskMobile(mobile)}`);
             user = healed;
         }
         const currentBackup = user.session?.trim();
@@ -3311,7 +3311,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             // but a failure to mark the user expired leaves the account selectable
             // again, so surface it rather than swallowing silently.
             const errorMessage = error instanceof Error ? error.message : String(error);
-            this.logger.warn(`expireUserByMobile: failed to expire user for ${mobile}: ${errorMessage}`);
+            this.logger.warn(`expireUserByMobile: failed to expire user for ${maskMobile(mobile)}: ${errorMessage}`);
         }
     }
 
@@ -3734,14 +3734,14 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             const sessionPhone = this.normalizeMobileNumber(me?.phone || '');
             const expectedMobile = this.normalizeMobileNumber(mobile);
             if (!sessionPhone || sessionPhone !== expectedMobile) {
-                this.logger.warn(`Session mobile mismatch for ${mobile}: got ${sessionPhone || 'unknown'}`);
+                this.logger.warn(`Session mobile mismatch for ${maskMobile(mobile)}: got ${maskMobile(sessionPhone) || 'unknown'}`);
                 await client.destroy();
                 return null;
             }
             return client;
         } catch (error) {
             const errorDetails = parseError(error, `verifySessionLive: ${mobile}`);
-            this.logger.warn(`Session liveness check failed for ${mobile}: ${errorDetails.message}`);
+            this.logger.warn(`Session liveness check failed for ${maskMobile(mobile)}: ${errorDetails.message}`);
             if (client) {
                 try {
                     await client.destroy();
@@ -3792,9 +3792,9 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 await client.connect();
             }
             const authResult = await client.invoke(new Api.account.GetAuthorizations());
-            this.logger.log(`Authorization check for ${mobile}: ${authResult.authorizations.length} active sessions found`);
+            this.logger.log(`Authorization check for ${maskMobile(mobile)}: ${authResult.authorizations.length} active sessions found`);
         } catch (error) {
-            this.logger.warn(`Authorization check failed for ${mobile}: ${parseError(error, 'GetAuthorizations').message}`);
+            this.logger.warn(`Authorization check failed for ${maskMobile(mobile)}: ${parseError(error, 'GetAuthorizations').message}`);
         } finally {
             if (client && ownsClientLifecycle) {
                 try {
@@ -3816,13 +3816,13 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         if (existingBackup && existingBackup !== activeSession) {
             const backupSessionIsLive = await this.verifySessionLive(mobile, existingBackup);
             if (backupSessionIsLive) {
-                this.logger.log(`Reusing existing users backup session for ${mobile}`);
+                this.logger.log(`Reusing existing users backup session for ${maskMobile(mobile)}`);
                 return { backupSession: existingBackup, reusedExisting: true };
             }
-            this.logger.warn(`Existing backup session is not valid for ${mobile}; creating a fresh backup`);
+            this.logger.warn(`Existing backup session is not valid for ${maskMobile(mobile)}; creating a fresh backup`);
         }
 
-        this.logger.log(`Creating fresh backup session for ${mobile}`);
+        this.logger.log(`Creating fresh backup session for ${maskMobile(mobile)}`);
         const backupSession = await this.createDistinctSessionString(mobile, [activeSession, existingBackup]);
         if (!backupSession) {
             return { backupSession: null, reusedExisting: false };
@@ -3842,11 +3842,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         const persistedActive = await this.getStoredActiveSession(mobile);
 
         if (persistedActive?.trim() !== activeSession) {
-            this.logger.error(`Active session changed unexpectedly during rotation for ${mobile}`);
+            this.logger.error(`Active session changed unexpectedly during rotation for ${maskMobile(mobile)}`);
             return false;
         }
         if (!persistedBackup || persistedBackup === activeSession || persistedBackup !== expectedBackupSession) {
-            this.logger.error(`Backup session persistence verification failed for ${mobile}`);
+            this.logger.error(`Backup session persistence verification failed for ${maskMobile(mobile)}`);
             return false;
         }
 
@@ -3909,29 +3909,29 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             // account.
             const lifecycleDoc = await this.findOne(mobile);
             if (!lifecycleDoc) {
-                this.logger.warn(`Session rotation refused for ${mobile}: pool record not found`);
+                this.logger.warn(`Session rotation refused for ${maskMobile(mobile)}: pool record not found`);
                 return false;
             }
             if (lifecycleDoc.status !== 'active' || lifecycleDoc.inUse === true) {
-                this.logger.warn(`Session rotation refused for ${mobile}: account is inactive or in use`);
+                this.logger.warn(`Session rotation refused for ${maskMobile(mobile)}: account is inactive or in use`);
                 return false;
             }
             if (lifecycleDoc.warmupPhase !== WarmupPhase.READY) {
                 this.logger.warn(
-                    `Session rotation refused for ${mobile}: expected READY, found ${lifecycleDoc.warmupPhase || 'unset'}`,
+                    `Session rotation refused for ${maskMobile(mobile)}: expected READY, found ${lifecycleDoc.warmupPhase || 'unset'}`,
                 );
                 return false;
             }
             if ((lifecycleDoc.channels || 0) < (this.config.operationalChannelThreshold ?? MIN_CHANNELS_FOR_MATURING)) {
                 this.logger.warn(
-                    `Session rotation refused for ${mobile}: ${lifecycleDoc.channels || 0} channels is below the ${this.config.operationalChannelThreshold ?? MIN_CHANNELS_FOR_MATURING} floor`,
+                    `Session rotation refused for ${maskMobile(mobile)}: ${lifecycleDoc.channels || 0} channels is below the ${this.config.operationalChannelThreshold ?? MIN_CHANNELS_FOR_MATURING} floor`,
                 );
                 return false;
             }
             const missingPrerequisites = this.getMissingReadyRotationPrerequisites(lifecycleDoc);
             if (missingPrerequisites.length > 0 || ClientHelperUtils.getTimestamp(lifecycleDoc.sessionRotatedAt) > 0) {
                 this.logger.warn(
-                    `Session rotation refused for ${mobile}: ${missingPrerequisites.length > 0
+                    `Session rotation refused for ${maskMobile(mobile)}: ${missingPrerequisites.length > 0
                         ? `missing prerequisites ${missingPrerequisites.join(', ')}`
                         : 'session rotation already recorded'}`,
                 );
@@ -3950,11 +3950,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 return false;
             }
 
-            this.logger.log(`Starting session rotation for ${mobile}`);
+            this.logger.log(`Starting session rotation for ${maskMobile(mobile)}`);
 
             const resolvedActive = await this.resolveActiveSessionForRotation(mobile);
             if (!resolvedActive) {
-                this.logger.error(`No active session found in client doc for ${mobile}`);
+                this.logger.error(`No active session found in client doc for ${maskMobile(mobile)}`);
                 return false;
             }
             const activeSession = resolvedActive.activeSession;
@@ -3962,21 +3962,21 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             if (!activeClient) {
                 activeClient = await this.createVerifiedSessionClient(mobile, activeSession);
                 if (!activeClient) {
-                    this.logger.error(`Active session is not live for the expected mobile ${mobile}`);
+                    this.logger.error(`Active session is not live for the expected mobile ${maskMobile(mobile)}`);
                     return false;
                 }
             }
 
             const users = await this.usersService.search({ mobile });
             if (!users.length) {
-                this.logger.error(`No user record found for ${mobile}`);
+                this.logger.error(`No user record found for ${maskMobile(mobile)}`);
                 return false;
             }
 
             const user = users[0] as User;
             const { backupSession } = await this.resolveRotationBackupSession(mobile, activeSession, user);
             if (!backupSession) {
-                this.logger.error(`Failed to create distinct backup session for ${mobile}`);
+                this.logger.error(`Failed to create distinct backup session for ${maskMobile(mobile)}`);
                 return false;
             }
 
@@ -3992,11 +3992,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 sessionRotatedAt: new Date(),
             });
 
-            this.logger.log(`Session rotation complete for ${mobile} — active session retained, users backup verified`);
+            this.logger.log(`Session rotation complete for ${maskMobile(mobile)} — active session retained, users backup verified`);
             return true;
         } catch (error) {
             const errorDetails = parseError(error, 'rotateSession');
-            this.logger.error(`Session rotation failed for ${mobile}: ${errorDetails.message}`);
+            this.logger.error(`Session rotation failed for ${maskMobile(mobile)}: ${errorDetails.message}`);
             // Re-throw permanent errors so processClient can mark the account inactive
             if (isPermanentError(errorDetails)) {
                 throw error;
@@ -4067,18 +4067,18 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             }
 
             if (!session?.trim()) {
-                this.logger.warn(`[HealSessions] ${mobile}: no session string stored — attempting users-session recovery`);
+                this.logger.warn(`[HealSessions] ${maskMobile(mobile)}: no session string stored — attempting users-session recovery`);
                 let recoveredActiveClient: TelegramClient | null = null;
                 try {
                     const recovered = await this.resolveActiveSessionForRotation(mobile);
                     recoveredActiveClient = recovered?.activeClient || null;
                     if (recovered?.activeSession) {
                         results.healed++;
-                        this.logger.warn(`[HealSessions] ${mobile}: recovered missing active session from users record`);
+                        this.logger.warn(`[HealSessions] ${maskMobile(mobile)}: recovered missing active session from users record`);
                         await sleep(2000);
                         continue;
                     }
-                    this.logger.warn(`[HealSessions] ${mobile}: no verified users session available — skipping`);
+                    this.logger.warn(`[HealSessions] ${maskMobile(mobile)}: no verified users session available — skipping`);
                     results.skipped++;
                     continue;
                 } catch (error) {
@@ -4113,12 +4113,12 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
             if (isAlive) {
                 results.healthy++;
-                this.logger.log(`[HealSessions] ${mobile}: session alive ✓`);
+                this.logger.log(`[HealSessions] ${maskMobile(mobile)}: session alive ✓`);
                 await sleep(2000);
                 continue;
             }
 
-            this.logger.warn(`[HealSessions] ${mobile}: session dead (${livenessError || 'returned null'}). Attempting recovery...`);
+            this.logger.warn(`[HealSessions] ${maskMobile(mobile)}: session dead (${livenessError || 'returned null'}). Attempting recovery...`);
 
             // Step 2: Create new session (service picks best strategy internally)
             try {
@@ -4127,21 +4127,21 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 if (createResult.success && createResult.session) {
                     await this.update(mobile, { session: createResult.session });
                     results.healed++;
-                    this.logger.log(`[HealSessions] ${mobile}: session healed ✓`);
+                    this.logger.log(`[HealSessions] ${maskMobile(mobile)}: session healed ✓`);
                 } else if (createResult.retryable === true || createResult.code === PARKED_SESSION_BUSY) {
                     // P4 re-review SB: a retryable refusal (the parked guard inside createSession, rate limit,
                     // creation in progress, a transient error) is NOT a dead account: skip, never deactivate.
                     this.logger.warn(`[HealSessions] ${maskMobile(mobile)}: session creation deferred (retryable) — ${createResult.error}`);
                     results.skipped++;
                 } else {
-                    this.logger.warn(`[HealSessions] ${mobile}: session creation failed — ${createResult.error}`);
+                    this.logger.warn(`[HealSessions] ${maskMobile(mobile)}: session creation failed — ${createResult.error}`);
                     const deactivated = await this.deactivateClient(mobile, `Session heal: creation failed — ${createResult.error}`, { permanent: true });
                     if (deactivated) results.deactivated++;
                     else results.errors.push({ mobile, error: createResult.error || 'creation failed', action: 'deactivation failed' });
                 }
             } catch (error) {
                 const errMsg = parseError(error, `healSessionCreate:${mobile}`).message;
-                this.logger.error(`[HealSessions] ${mobile}: session creation threw — ${errMsg}`);
+                this.logger.error(`[HealSessions] ${maskMobile(mobile)}: session creation threw — ${errMsg}`);
                 const deactivated = await this.deactivateClient(mobile, `Session heal: creation error — ${errMsg}`, { permanent: true });
                 if (deactivated) results.deactivated++;
                 results.errors.push({ mobile, error: errMsg, action: deactivated ? 'deactivated (creation error)' : 'deactivation failed (creation error)' });

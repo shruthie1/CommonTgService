@@ -19,6 +19,7 @@ import { WarmupPhase } from '../warmup-phases';
 import type { PoolProfile } from './pool-profile';
 import { accountRoleEventsCollectionOf, recordAccountRoleEventSoon } from '../../clients/account-role-events';
 import { mirrorPoolDocFacetsSoon } from '../account-pool-facets';
+import { maskMobile } from '../../monitor/monitor-util';
 
 export interface EnrolmentLogger {
     debug(message: string, ...rest: unknown[]): void;
@@ -57,7 +58,7 @@ export async function enrolPoolClientFromUser(
     // Cross-collection check: skip if already enrolled anywhere
     const enrolledIn = await port.isMobileEnrolledAnywhere(document.mobile);
     if (enrolledIn) {
-        logger.debug(`Skipping ${document.mobile}: already enrolled in ${enrolledIn}`);
+        logger.debug(`Skipping ${maskMobile(document.mobile)}: already enrolled in ${enrolledIn}`);
         return false;
     }
 
@@ -66,7 +67,7 @@ export async function enrolPoolClientFromUser(
     try {
         await ensurePoolClaimIndex(port.model);
     } catch (error: unknown) {
-        logger.error(`Skipping ${pool} enrollment for ${document.mobile}: pool claim index not ready: ${(error as Error)?.message ?? String(error)}`);
+        logger.error(`Skipping ${pool} enrollment for ${maskMobile(document.mobile)}: pool claim index not ready: ${(error as Error)?.message ?? String(error)}`);
         return false;
     }
 
@@ -75,7 +76,7 @@ export async function enrolPoolClientFromUser(
     try {
         const hasPassword = await telegramClient.hasPassword();
         if (hasPassword) {
-            logger.debug(`Skipping ${pool} enrollment for ${document.mobile}: account already has a 2FA password`);
+            logger.debug(`Skipping ${pool} enrollment for ${maskMobile(document.mobile)}: account already has a 2FA password`);
             await port.updateUser2FAStatus(document.tgId, document.mobile);
             return false;
         }
@@ -86,7 +87,7 @@ export async function enrolPoolClientFromUser(
 
         const user = (await port.usersService.search({ mobile: document.mobile }))[0];
         if (!user?.session?.trim()) {
-            logger.warn(`Skipping ${pool} enrollment for ${document.mobile}: source user/session missing`);
+            logger.warn(`Skipping ${pool} enrollment for ${maskMobile(document.mobile)}: source user/session missing`);
             return false;
         }
         const targetAvailableDate = availableDate || ClientHelperUtils.getTodayDateString();
@@ -112,7 +113,7 @@ export async function enrolPoolClientFromUser(
         const enrolled = await withEnrollmentLock(canonical, async () => {
             const claim = await withPoolClaim(port.model, canonical, profile.collection, () => writeIfStillFree());
             if ('heldBy' in claim) {
-                logger.warn(`Skipping ${pool} enrollment for ${document.mobile}: ${describeClaimHolder(claim)} is enrolling it right now`);
+                logger.warn(`Skipping ${pool} enrollment for ${maskMobile(document.mobile)}: ${describeClaimHolder(claim)} is enrolling it right now`);
                 return false;
             }
             return claim.value;
@@ -120,7 +121,7 @@ export async function enrolPoolClientFromUser(
         async function writeIfStillFree(): Promise<boolean> {
             const already = await port.isMobileEnrolledAnywhere(document.mobile);
             if (already && already !== profile.collection) {
-                logger.warn(`Skipping ${pool} enrollment for ${document.mobile}: now enrolled in ${already}`);
+                logger.warn(`Skipping ${pool} enrollment for ${maskMobile(document.mobile)}: now enrolled in ${already}`);
                 return false;
             }
             const after = await port.model.findOneAndUpdate(
@@ -162,7 +163,7 @@ export async function enrolPoolClientFromUser(
         return true;
     } catch (error: unknown) {
         const errorDetails = port.handleError(error, 'Error processing client', document.mobile);
-        logger.error(`Error processing ${pool} client ${document.mobile}: ${errorDetails.message}`);
+        logger.error(`Error processing ${pool} client ${maskMobile(document.mobile)}: ${errorDetails.message}`);
         if (isPermanentError(errorDetails)) {
             // Retire the source user — cascades to deactivate buffer/promote pool docs
             try { await port.usersService.expireAccount(document.mobile, errorDetails.message); } catch { /* cascade is best effort, as before */ }

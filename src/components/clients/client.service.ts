@@ -1047,7 +1047,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     const candidateBufferClients = r3Mode === 'off' ? dueScanned : await this.recheckSpamEligible(r3Mode, dueScanned);
     this.logger.info(
       `[${clientId}] Setup candidate scan completed`,
-      { existingMobile: existingClientMobile, candidateCount: candidateBufferClients.length, query: dueCandidateQuery },
+      { existingMobile: maskMobile(existingClientMobile), candidateCount: candidateBufferClients.length, query: dueCandidateQuery },
     );
     let newBufferClient = await this.findSafeSetupBufferCandidate(candidateBufferClients, existingClient.session, probeBudget);
     let usedFutureAvailableFallback = false;
@@ -1073,7 +1073,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       newBufferClient = await this.findSafeSetupBufferCandidate(futureCandidateBufferClients, existingClient.session, fallbackBudget, {}, 'allow');
       usedFutureAvailableFallback = !!newBufferClient;
       this.logger.warn(`[${clientId}] Permanent replacement fallback scan completed`, {
-        existingMobile: existingClientMobile,
+        existingMobile: maskMobile(existingClientMobile),
         reason: setupClientQueryDto.reason,
         candidateCount: futureCandidateBufferClients.length,
         selected: newBufferClient?.mobile,
@@ -1107,7 +1107,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         };
       }
       this.logger.warn(`[${clientId}] Degraded swap scan completed`, {
-        existingMobile: existingClientMobile,
+        existingMobile: maskMobile(existingClientMobile),
         reason: setupClientQueryDto.reason,
         tiers: degradedTiers,
         selected: newBufferClient?.mobile,
@@ -1131,7 +1131,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       }
       if (permanentReplacement) {
         this.logger.warn(`[${clientId}] No replacement buffer available, but setup reason is permanent; marking existing mobile inactive`, {
-          existingMobile: existingClientMobile,
+          existingMobile: maskMobile(existingClientMobile),
           reason: setupClientQueryDto.reason,
         });
         // Idempotent: an already retired main is not retired (or announced) again.
@@ -1180,7 +1180,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     // Checked synchronously right before registering our own setup (no await in between).
     const conflictingSetup = this.telegramService.getActiveClientSetup(newBufferClient.mobile);
     if (conflictingSetup && conflictingSetup.clientId !== clientId) {
-      this.logger.warn(`[${clientId}] Candidate ${newBufferClient.mobile} is in an active setup for ${conflictingSetup.clientId}; not taken`);
+      this.logger.warn(`[${clientId}] Candidate ${maskMobile(newBufferClient.mobile)} is in an active setup for ${conflictingSetup.clientId}; not taken`);
       return {
         status: 'failed',
         swapped: false,
@@ -1203,8 +1203,8 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       this.logger.info(
         `[${clientId}] Selected replacement buffer client`,
         {
-          existingMobile: existingClientMobile,
-          newMobile: newBufferClient.mobile,
+          existingMobile: maskMobile(existingClientMobile),
+          newMobile: maskMobile(newBufferClient.mobile),
           usedFutureAvailableFallback,
           pickTier: degradedPlan?.pickTier,
           markerTier: degradedPlan?.markerTier,
@@ -1224,8 +1224,8 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         tables: this.probeSkipTables(probeBudget, fallbackBudget, degradedBudget),
       });
       this.logger.debug(`[${clientId}] Active client setup registered`, {
-        existingMobile: existingClientMobile,
-        newMobile: newBufferClient.mobile,
+        existingMobile: maskMobile(existingClientMobile),
+        newMobile: maskMobile(newBufferClient.mobile),
         returnOldToPool: setupClientQueryDto.archiveOld,
         formalities: setupClientQueryDto.formalities,
       });
@@ -1265,7 +1265,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       // for it, or our own cutover committed before the error. No availableDate push, no disconnect.
       const ownerOfMobile = await this.clientUsingMobile(newBufferClient.mobile);
       if (ownerOfMobile) {
-        this.logger.warn(`[${clientId}] Swap failed on ${newBufferClient.mobile}, now the live main of ${ownerOfMobile}; leaving it untouched`);
+        this.logger.warn(`[${clientId}] Swap failed on ${maskMobile(newBufferClient.mobile)}, now the live main of ${ownerOfMobile}; leaving it untouched`);
       } else if (permanent) {
         // Account is permanently dead — retire it everywhere (user + pools), don't recycle
         await this.usersService.expireAccount(newBufferClient.mobile, `Setup failed permanently: ${errorDetails.message}`);
@@ -1305,12 +1305,12 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     const { archiveOld: returnOldToPool, clientId, existingMobile, formalities, newMobile, reason } = setup;
     const days = setup.days ?? 0;
     this.logger.info(`[${clientId}] Starting client session cutover`, {
-      existingMobile,
-      newMobile,
+      existingMobile: maskMobile(existingMobile),
+      newMobile: maskMobile(newMobile),
       returnOldToPool,
       formalities,
       days,
-      setupMobile: setupMobile || newMobile,
+      setupMobile: maskMobile(setupMobile || newMobile),
     });
     await sleep(2000);
     const existingClient = await this.findOne(clientId);
@@ -1336,7 +1336,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       // Fetch buffer doc to get persona assignment
       const bufferDoc = await this.bufferClientService.findOne(newMobile);
       this.logger.debug(`[${clientId}] Loaded buffer persona assignment for cutover`, {
-        newMobile,
+        newMobile: maskMobile(newMobile),
         hasAssignedFirstName: !!bufferDoc?.assignedFirstName,
         assignedPhotoCount: bufferDoc?.assignedProfilePics?.length || 0,
       });
@@ -1370,12 +1370,12 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         );
       } catch { /* best-effort; the cutover is committed */ }
       this.logger.info(`[${clientId}] Cutover committed`, {
-        existingMobile,
-        newMobile,
+        existingMobile: maskMobile(existingMobile),
+        newMobile: maskMobile(newMobile),
         updatedUsername,
         mirroredActiveName,
       });
-      this.logger.debug(`[${clientId}] Marked replacement buffer doc as the sole active/in-use primary`, { newMobile });
+      this.logger.debug(`[${clientId}] Marked replacement buffer doc as the sole active/in-use primary`, { newMobile: maskMobile(newMobile) });
       // Profile refresh (name/bio, privacy, photos) is handled by tg-aut on startup
       // via persona verifier + CMS photo refresh endpoint. No delayed update needed —
       // avoids a second connection racing with tg-aut's own startup.
@@ -1387,7 +1387,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         if (existingClient.deployKey) {
           this.logger.info(`[${clientId}] Triggering deploy restart after cutover`, { deployKeyPresent: true });
           await fetchWithTimeout(existingClient.deployKey, {}, 1);
-          this.logger.debug(`[${clientId}] Deploy restart request completed`, { newMobile });
+          this.logger.debug(`[${clientId}] Deploy restart request completed`, { newMobile: maskMobile(newMobile) });
         }
       } catch (deployError) {
         const deployMessage = deployError instanceof Error ? deployError.message : String(deployError);
@@ -1395,7 +1395,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         await this.notify({ severity: 'error', title: 'Restart failed', summary: 'Cutover is done', fields: [{ label: 'Client ID', value: clientId }, { label: 'New mobile', value: newMobile }], details: deployMessage?.substring(0, 500), detailsTitle: 'Error message' });
       }
       this.logger.info(`[${clientId}] Starting replaced-client pool-return handling`, {
-        existingMobile,
+        existingMobile: maskMobile(existingMobile),
         returnOldToPool,
         formalities,
         days,
@@ -1404,7 +1404,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         swappedAt: committedClient?.swappedAt ? new Date(committedClient.swappedAt) : null,
         persona: existingClient.dbcoll || '',
       });
-      this.logger.info(`[${clientId}] Client session cutover finished`, { existingMobile, newMobile });
+      this.logger.info(`[${clientId}] Client session cutover finished`, { existingMobile: maskMobile(existingMobile), newMobile: maskMobile(newMobile) });
       await this.notify({ severity: 'success', title: 'Swap complete', fields: [{ label: 'Client ID', value: clientId }, { label: 'Old mobile', value: existingMobile }, { label: 'New mobile', value: newMobile }] });
     } catch (error) {
       const errorDetails = parseError(error, `[New: ${newMobile}] Error in updating client session`, true);
@@ -1415,14 +1415,14 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       }
       this.logger.error(
         `[${clientId}] Client session cutover failed`,
-        { existingMobile, newMobile, cutoverCommitted, error: errorDetails.message },
+        { existingMobile: maskMobile(existingMobile), newMobile: maskMobile(newMobile), cutoverCommitted, error: errorDetails.message },
         error instanceof Error ? error.stack : undefined,
       );
       throw error;
     } finally {
       await connectionManager.unregisterClient(newMobile);
       this.telegramService.clearActiveClientSetup(newMobile);
-      this.logger.debug(`[${clientId}] Cleared active setup state`, { newMobile });
+      this.logger.debug(`[${clientId}] Cleared active setup state`, { newMobile: maskMobile(newMobile) });
     }
   }
 
@@ -1698,17 +1698,17 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
    */
   private async retireReplacedMobile(mobile: string, reason: string, roleOpId?: string | null): Promise<void> {
     if (await this.isAlreadyRetired(mobile)) {
-      this.logger.log(`Replaced account ${mobile} is already retired; not retired or announced again`);
+      this.logger.log(`Replaced account ${maskMobile(mobile)} is already retired; not retired or announced again`);
       return;
     }
     try {
       if (roleOpId) await this.usersService.expireAccount(mobile, reason, { opId: roleOpId });
       else await this.usersService.expireAccount(mobile, reason);
-      this.logger.warn(`Replaced account retired (expired + pools deactivated)`, { mobile, reason: reason.substring(0, 160) });
+      this.logger.warn(`Replaced account retired (expired + pools deactivated)`, { mobile: maskMobile(mobile), reason: reason.substring(0, 160) });
       await this.notify({ severity: 'warning', title: 'Inactivated', fields: [{ label: 'Mobile', value: mobile }, { label: 'Reason', value: reason.substring(0, 120), code: false }] });
     } catch (error) {
       const errorDetails = parseError(error, `Failed to retire replaced account: ${mobile}`, false);
-      this.logger.error(`Failed to retire replaced account ${mobile}: ${errorDetails.message}`);
+      this.logger.error(`Failed to retire replaced account ${maskMobile(mobile)}: ${errorDetails.message}`);
       await this.notify({ severity: 'error', title: 'Inactivate fail', fields: [{ label: 'Mobile', value: mobile }, { label: 'Reason', value: reason.substring(0, 100), code: false }], details: errorDetails.message.substring(0, 500), detailsTitle: 'Error message' });
     }
   }
@@ -1826,7 +1826,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       );
       // Identifiers only: the buffer doc carries the live Telegram session (PENDING 24-5).
       this.logger.log('Client returned to buffer pool', {
-        mobile: existingMobile,
+        mobile: maskMobile(existingMobile),
         clientId: updatedBufferClient?.clientId ?? existingClient.clientId,
         status: updatedBufferClient?.status,
         availableDate,
@@ -1842,7 +1842,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       const errorDetails = parseError(error, `Error returning old client to buffer pool: ${existingMobile}`, true);
       await this.notify({ severity: 'error', title: 'Return error', fields: [{ label: 'Mobile', value: existingMobile }], details: errorDetails.message?.substring(0, 500), detailsTitle: 'Error message' });
       if (isPermanentError(errorDetails)) {
-        this.logger.log('Marking replaced buffer inactive:', existingMobile);
+        this.logger.log('Marking replaced buffer inactive:', maskMobile(existingMobile));
         await this.retireReplacedMobile(existingMobile, errorDetails.message, roleOpId);
         // await this.bufferClientService.remove(existingClientUser.mobile, 'Deactivated user');
       } else {
@@ -1857,7 +1857,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
           availableDate: retryAvailableDate,
           message: `Pool return retry after transient error: ${errorDetails.message?.substring(0, 160)}`,
         }).then(() => true).catch((updateError) => {
-          this.logger.error(`Failed to release stranded pool-return reservation for ${existingMobile}: ${parseError(updateError, '', false).message}`);
+          this.logger.error(`Failed to release stranded pool-return reservation for ${maskMobile(existingMobile)}: ${parseError(updateError, '', false).message}`);
           return false;
         });
         if (released) {
@@ -1866,7 +1866,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
             reason: reason ?? null, opId: roleOpId, details: { status: 'active', days, availableDate: retryAvailableDate, error: errorDetails.message ?? null },
           });
         }
-        this.logger.log(`Released pool-return reservation for ${existingMobile} after transient error; available ${retryAvailableDate}`);
+        this.logger.log(`Released pool-return reservation for ${maskMobile(existingMobile)} after transient error; available ${retryAvailableDate}`);
       }
       return false;
     }
@@ -1902,11 +1902,11 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         continue;
       }
       if (candidate.session === existingClientSession) {
-        this.logger.warn(`Skipping setup candidate ${candidate.mobile}: session matches current main client`);
+        this.logger.warn(`Skipping setup candidate ${maskMobile(candidate.mobile)}: session matches current main client`);
         continue;
       }
       if (this.setupOwnedByAnotherClient(candidate.mobile, probeBudget.clientId)) {
-        this.logger.warn(`Skipping setup candidate ${candidate.mobile}: in an active setup for another client`);
+        this.logger.warn(`Skipping setup candidate ${maskMobile(candidate.mobile)}: in an active setup for another client`);
         continue;
       }
       // Lease the row before anything can connect it (backup-session creation, SpamBot probe,
@@ -1917,11 +1917,11 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         try {
           leased = await this.bufferClientService.acquireProbeLease(candidate.mobile, owner, SWAP_LEASE_TTL_MS);
         } catch (error) {
-          this.logger.warn(`Skipping setup candidate ${candidate.mobile}: probe lease failed (${parseError(error, '', false).message})`);
+          this.logger.warn(`Skipping setup candidate ${maskMobile(candidate.mobile)}: probe lease failed (${parseError(error, '', false).message})`);
           continue;
         }
         if (!leased) {
-          this.logger.warn(`[${probeBudget.clientId}] Skipping setup candidate ${candidate.mobile}: leased by another CMS process`);
+          this.logger.warn(`[${probeBudget.clientId}] Skipping setup candidate ${maskMobile(candidate.mobile)}: leased by another CMS process`);
           probeBudget.skipped.push(`${candidate.mobile} busy in another CMS process (not probed)`);
           probeBudget.moreCandidatesPending = true;
           continue;
@@ -1933,14 +1933,14 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
           ? await this.storedDistinctBackup(candidate.mobile, candidate.session)
           : await this.assertDistinctUserBackupSession(candidate.mobile, candidate.session);
         if (!backupUser?.session?.trim() || backupUser.session.trim() === candidate.session.trim()) {
-          this.logger.warn(`Skipping setup candidate ${candidate.mobile}: ${probeBudget.jobPass ? 'no stored distinct backup session (job passes never create one)' : 'backup session is still duplicated'}`);
+          this.logger.warn(`Skipping setup candidate ${maskMobile(candidate.mobile)}: ${probeBudget.jobPass ? 'no stored distinct backup session (job passes never create one)' : 'backup session is still duplicated'}`);
           continue;
         }
         probeBudget.lastVerdict = undefined;
         if (!(await this.isSpamSafeForSwap(candidate, probeBudget, accept))) continue;
         // A sibling's setup may have registered this mobile while we probed it.
         if (this.setupOwnedByAnotherClient(candidate.mobile, probeBudget.clientId)) {
-          this.logger.warn(`Skipping setup candidate ${candidate.mobile}: taken by another client's setup during the probe`);
+          this.logger.warn(`Skipping setup candidate ${maskMobile(candidate.mobile)}: taken by another client's setup during the probe`);
           continue;
         }
         const verdict = probeBudget.lastVerdict as SetupProbeBudget['lastVerdict'];
@@ -1963,12 +1963,12 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
             : {}),
         };
       } catch (error) {
-        this.logger.warn(`Skipping setup candidate ${candidate.mobile}: failed to ensure distinct backup session`);
+        this.logger.warn(`Skipping setup candidate ${maskMobile(candidate.mobile)}: failed to ensure distinct backup session`);
         continue;
       } finally {
         if (owner && !picked) {
           await this.bufferClientService.releaseProbeLeases(owner, candidate.mobile).catch((error: unknown) =>
-            this.logger.warn(`Probe lease release failed for ${candidate.mobile} (expires by TTL): ${parseError(error, '', false).message}`));
+            this.logger.warn(`Probe lease release failed for ${maskMobile(candidate.mobile)} (expires by TTL): ${parseError(error, '', false).message}`));
         }
       }
     }
@@ -2021,7 +2021,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     // stays within SETUP_PROBE_TIME_BUDGET_MS instead of overshooting by a whole probe.
     const probeTimeoutMs = Math.min(SPAMBOT_TOTAL_TIMEOUT_MS, SETUP_PROBE_TIME_BUDGET_MS - budget.spentMs);
     if (budget.remaining <= 0 || probeTimeoutMs < MIN_SETUP_PROBE_MS) {
-      this.logger.warn(`[${budget.clientId}] Skipping setup candidate ${candidate.mobile}: per-request SpamBot probe budget exhausted`);
+      this.logger.warn(`[${budget.clientId}] Skipping setup candidate ${maskMobile(candidate.mobile)}: per-request SpamBot probe budget exhausted`);
       budget.moreCandidatesPending = true; // never swap an unprobed account; tell the caller to retry
       return false;
     }
@@ -2040,30 +2040,30 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       // Nothing was spent, and a retry can probe it once that flow is done.
       budget.remaining += 1;
       budget.moreCandidatesPending = true;
-      this.logger.warn(`[${budget.clientId}] Skipping setup candidate ${candidate.mobile}: connection in use by another flow, not probed`);
+      this.logger.warn(`[${budget.clientId}] Skipping setup candidate ${maskMobile(candidate.mobile)}: connection in use by another flow, not probed`);
       budget.skipped.push(`${candidate.mobile} busy (not probed)`);
       return false;
     }
     if (result.status === 'unknown' && result.sendFailed) {
       // Connected but could not even message SpamBot (PEER_FLOOD, FLOOD_WAIT, auth errors): not safe.
-      this.logger.warn(`[${budget.clientId}] Skipping setup candidate ${candidate.mobile}: SpamBot probe send failed (${result.error || 'unknown error'})`);
+      this.logger.warn(`[${budget.clientId}] Skipping setup candidate ${maskMobile(candidate.mobile)}: SpamBot probe send failed (${result.error || 'unknown error'})`);
       budget.skipped.push(`${candidate.mobile} probe failed: ${(result.error || 'unknown error').slice(0, 60)}`);
       return false;
     }
     if (result.status === 'unknown' && result.connectFailed) {
       // Could not even connect the account: treat like unsafe (it could not serve as a live account either).
-      this.logger.warn(`[${budget.clientId}] Skipping setup candidate ${candidate.mobile}: SpamBot probe could not connect (${result.error || 'unknown error'})`);
+      this.logger.warn(`[${budget.clientId}] Skipping setup candidate ${maskMobile(candidate.mobile)}: SpamBot probe could not connect (${result.error || 'unknown error'})`);
       budget.skipped.push(`${candidate.mobile} connect failed`);
       return false;
     }
     if (result.status === 'unknown') {
       if (accept.rejectFrozenReply && /frozen/i.test(result.replyText || '')) {
         // Degraded tiers: SpamBot answering about a frozen account means it cannot serve users.
-        this.logger.warn(`[${budget.clientId}] Skipping setup candidate ${candidate.mobile}: SpamBot reply mentions a frozen account`);
+        this.logger.warn(`[${budget.clientId}] Skipping setup candidate ${maskMobile(candidate.mobile)}: SpamBot reply mentions a frozen account`);
         budget.skipped.push(`${candidate.mobile} frozen (SpamBot reply)`);
         return false;
       }
-      this.logger.warn(`[${budget.clientId}] SpamBot probe inconclusive for ${candidate.mobile} (${result.error || 'unrecognized reply'}); allowing candidate`);
+      this.logger.warn(`[${budget.clientId}] SpamBot probe inconclusive for ${maskMobile(candidate.mobile)} (${result.error || 'unrecognized reply'}); allowing candidate`);
       budget.lastVerdict = { status: 'unknown', limitedUntil: null };
       return true;
     }
@@ -2091,7 +2091,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         }, { logger: this.logger });
       } catch { /* best-effort mirror */ }
     } catch (error) {
-      this.logger.warn(`[${budget.clientId}] Failed to persist SpamBot result for ${candidate.mobile}: ${parseError(error, '', false).message}`);
+      this.logger.warn(`[${budget.clientId}] Failed to persist SpamBot result for ${maskMobile(candidate.mobile)}: ${parseError(error, '', false).message}`);
     }
     if (result.status === 'free'
       || (result.status === 'limited' && accept.limited)
@@ -2103,7 +2103,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     const detail = result.status === 'limited' && result.limitedUntil
       ? `limited until ${result.limitedUntil.toISOString().slice(0, 16).replace('T', ' ')} UTC`
       : 'harsh limit (indefinite)';
-    this.logger.warn(`[${budget.clientId}] Skipping setup candidate ${candidate.mobile}: SpamBot ${detail}`);
+    this.logger.warn(`[${budget.clientId}] Skipping setup candidate ${maskMobile(candidate.mobile)}: SpamBot ${detail}`);
     budget.skipped.push(`${candidate.mobile} ${detail}`);
     return false;
   }
@@ -2294,9 +2294,9 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         const backup = user?.session?.trim();
         const backupOk = !opts.requireDistinctBackup || (!!backup && backup !== (candidate.session || '').trim());
         if (user && user.expired !== true && user.twoFA === true && backupOk) kept.push(candidate);
-        else this.logger.warn(`Skipping degraded candidate ${candidate.mobile}: users doc missing, expired, without 2FA${opts.requireDistinctBackup ? ' or without a distinct backup session' : ''}`);
+        else this.logger.warn(`Skipping degraded candidate ${maskMobile(candidate.mobile)}: users doc missing, expired, without 2FA${opts.requireDistinctBackup ? ' or without a distinct backup session' : ''}`);
       } catch (error) {
-        this.logger.warn(`Skipping degraded candidate ${candidate.mobile}: users lookup failed (${parseError(error, '', false).message})`);
+        this.logger.warn(`Skipping degraded candidate ${maskMobile(candidate.mobile)}: users lookup failed (${parseError(error, '', false).message})`);
       }
     }
     return kept;
@@ -2588,7 +2588,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         }
         attempts++;
         const evidence = states.get(client.clientId)?.evidence || String(client.deadMain?.reason);
-        this.logger.warn(`[${client.clientId}] Rescue: current main ${client.mobile} is dead (${evidence}); running setupClient`);
+        this.logger.warn(`[${client.clientId}] Rescue: current main ${maskMobile(client.mobile)} is dead (${evidence}); running setupClient`);
         const row = await this.runPassAttempt('rescue', client, all, decision,
           { days: 0, archiveOld: false, formalities: false, reason: `${DEAD_MAIN_RESCUE_REASON}: ${client.deadMain!.reason}` }, {});
         results.push({ ...row, ...(client.degraded?.tier ? { fromTier: client.degraded.tier } : {}) });
@@ -2739,7 +2739,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       const owner = await this.clientModel.findOne({ mobile }, { clientId: 1, mobile: 1 }).lean<Pick<Client, 'clientId' | 'mobile'>>().exec();
       return owner && owner.mobile === mobile ? owner.clientId : null;
     } catch (error) {
-      this.logger.warn(`Could not check the owner of ${mobile}: ${parseError(error, '', false).message}`);
+      this.logger.warn(`Could not check the owner of ${maskMobile(mobile)}: ${parseError(error, '', false).message}`);
       // Unknown owner: treat as taken, so a failure path never touches a possibly-live main.
       return 'unknown';
     }
@@ -2879,7 +2879,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       const errorMessage = error instanceof Error ? error.message : String(error);
       await this.notify({ severity: 'error', title: 'Update failed', fields: [{ label: 'Client ID', value: clientId }, { label: 'Mobile', value: client.mobile }, { label: 'Reason', value: message, code: false }], details: errorMessage?.substring(0, 500), detailsTitle: 'Error message' });
       if (isPermanentError(errorDetails)) {
-        this.logger.warn(`Permanent error while updating active client ${clientId}; manual review required for ${client.mobile}`);
+        this.logger.warn(`Permanent error while updating active client ${clientId}; manual review required for ${maskMobile(client.mobile)}`);
       }
       if (throwOnFailure) throw error;
       return false;
@@ -2923,9 +2923,9 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
 
     try {
       await this.bufferClientService.update(mobile, update);
-      this.logger.debug(`Stamped active buffer lifecycle state for ${mobile}`, update);
+      this.logger.debug(`Stamped active buffer lifecycle state for ${maskMobile(mobile)}`, update);
     } catch (error) {
-      this.logger.warn(`Failed to stamp active buffer lifecycle state for ${mobile}`);
+      this.logger.warn(`Failed to stamp active buffer lifecycle state for ${maskMobile(mobile)}`);
       parseError(error, `[${mobile}] Failed to stamp active buffer lifecycle state`);
     }
   }
@@ -3112,7 +3112,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         )
         .lean();
     } catch (error) {
-      this.logger.warn(`[${client.clientId}] Failed to load active buffer assignment for ${client.mobile}`);
+      this.logger.warn(`[${client.clientId}] Failed to load active buffer assignment for ${maskMobile(client.mobile)}`);
       return null;
     }
 

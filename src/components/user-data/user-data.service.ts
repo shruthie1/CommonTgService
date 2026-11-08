@@ -250,17 +250,6 @@ export class UserDataService {
         return updatedUser;
     }
 
-    async updateLastActive(profile: string, chatId: string): Promise<UserDataDocument> {
-        return this.userDataModel
-            .findOneAndUpdate({ profile, chatId }, { $set: { lastActiveTime: new Date() } }, { returnDocument: 'after' })
-            .lean()
-            .exec();
-    }
-
-    async findInactiveSince(date: Date): Promise<UserDataDocument[]> {
-        return this.userDataModel.find({ lastActiveTime: { $lt: date } }).lean().exec();
-    }
-
     async findByPaymentRange(minAmount: number, maxAmount: number): Promise<UserDataDocument[]> {
         return this.userDataModel.find({ payAmount: { $gte: minAmount, $lte: maxAmount } }).lean().exec();
     }

@@ -68,6 +68,7 @@ import {
     type BufferSupplyConfig,
     type FleetBudget,
 } from '../buffer-clients/buffer-supply';
+import { maskMobile } from '../monitor/monitor-util';
 
 /** Same lead time as buffer's default (BUFFER_SUPPLY_LEAD_TIME_DAYS default 30). */
 const PROMOTE_ENROLMENT_LEAD_TIME_DAYS = 30;
@@ -183,7 +184,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 lastUpdateFailure: null,
                 organicActivityAt: new Date(),
             });
-            this.logger.debug(`Cleared username for ${doc.mobile}`);
+            this.logger.debug(`Cleared username for ${maskMobile(doc.mobile)}`);
             await sleep(ClientHelperUtils.gaussianRandom(40000, 5000, 30000, 50000));
             return 1;
         } catch (error: unknown) {

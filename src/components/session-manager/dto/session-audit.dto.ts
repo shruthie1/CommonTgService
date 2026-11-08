@@ -22,11 +22,6 @@ export class CreateSessionAuditDto {
     @IsString()
     creationMessage?: string;
 
-    @ApiProperty({ description: 'Previous session string', required: false })
-    @IsOptional()
-    @IsString()
-    previousSessionString?: string;
-
     @ApiProperty({ description: 'Client ID', required: false })
     @IsOptional()
     @IsString()
@@ -36,11 +31,6 @@ export class CreateSessionAuditDto {
     @IsOptional()
     @IsString()
     username?: string;
-
-    @ApiProperty({ description: 'Number of retry attempts', required: false })
-    @IsOptional()
-    @IsNumber()
-    retryAttempts?: number;
 
     @ApiProperty({ description: 'Additional metadata', required: false })
     @IsOptional()

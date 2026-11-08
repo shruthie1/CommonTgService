@@ -50,10 +50,6 @@ export class SessionAudit {
     @Prop()
     creationMessage?: string;
 
-    @ApiProperty({ description: 'Previous session string used for creation (if applicable)' })
-    @Prop()
-    previousSessionString?: string;
-
     @ApiProperty({ description: 'When the session was created' })
     @Prop({ default: Date.now })
     createdAt: Date;
@@ -73,10 +69,6 @@ export class SessionAudit {
     @ApiProperty({ description: 'Username associated with this session' })
     @Prop()
     username?: string;
-
-    @ApiProperty({ description: 'Number of retry attempts during creation' })
-    @Prop({ default: 0 })
-    retryAttempts: number;
 
     @ApiProperty({ description: 'Error message if creation failed' })
     @Prop()
