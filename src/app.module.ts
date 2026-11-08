@@ -34,6 +34,7 @@ import { DailyAnalyticsModule } from './components/daily-analytics/daily-analyti
 import { MonitorModule } from './components/monitor/monitor.module';
 import { FakePaymentModule } from './components/fake-payment/fake-payment.module';
 import { PaymentProofsModule } from './components/payment-proofs/payment-proofs.module';
+import { PaymentUncreditModule } from './components/payment-uncredit/payment-uncredit.module';
 import { FileModule } from './components/files/file.module';
 import { AppService } from './app.service';
 import { RuntimeConfigService } from './control-plane/config/runtime-config.service';
@@ -65,6 +66,7 @@ import { AccountMaintenanceService } from './control-plane/maintenance/account-m
     MonitorModule,
     FakePaymentModule,
     PaymentProofsModule,
+    PaymentUncreditModule,
     StatModule,
     Stat2Module,
     TgSignupModule,

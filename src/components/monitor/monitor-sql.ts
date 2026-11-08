@@ -407,6 +407,8 @@ GROUP BY 1, 2, 3`,
  * (chat, client) since `dmFrom` and its service ('t' direct tg-aut promotion, 'p' routed by a promote
  * account). payment_event's ts index bounds the payers; conversion_event has no chat index, so its
  * scan is the dm rows since dmFrom (same rows dms_hist reads). Chat ids never leave the service.
+ * Payers read the payment_event_owner view, so a voided payment (Uncredit, 2026-11-08) is not a payer; the view
+ * exists before and after that migration, so this SQL works in either deploy order.
  */
 export function paidOriginSql(dmFrom: number, payFrom: number): SqlQuery {
   return q(
@@ -414,7 +416,7 @@ export function paidOriginSql(dmFrom: number, payFrom: number): SqlQuery {
     `SELECT DISTINCT ON (c.chat_id, c.client_id) c.chat_id, c.client_id, c.service
 FROM conversion_event c
 WHERE c.kind = 'dm' AND c.ts >= $1::timestamptz AND c.client_id IS NOT NULL
-  AND (c.chat_id, c.client_id) IN (SELECT chat_id, client_id FROM payment_event WHERE ts >= $2::timestamptz AND amount > 0)
+  AND (c.chat_id, c.client_id) IN (SELECT chat_id, client_id FROM payment_event_owner WHERE ts >= $2::timestamptz AND amount > 0)
 ORDER BY c.chat_id, c.client_id, c.ts`,
     [iso(dmFrom), iso(payFrom)],
   );

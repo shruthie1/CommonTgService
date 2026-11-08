@@ -8,6 +8,7 @@ import {
   dmRowsSql,
   dmsByDaySql,
   mobilesSql,
+  paidOriginSql,
   paymentRowsSql,
   sendsHourlySql,
   sendsLiveSql,
@@ -101,6 +102,13 @@ describe('monitor SQL builders', () => {
     const t = paymentRowsSql('pay_today', today0);
     expect(t.sql).toContain('WHERE ts >= $1::timestamptz AND amount > 0');
     expect(t.params).toEqual(['2026-10-27T18:30:00.000Z']);
+  });
+
+  it('paid origin: payers come from payment_event_owner (a voided payment is not a payer; works before and after the void migration)', () => {
+    const o = paidOriginSql(Date.parse('2026-10-01T00:00:00Z'), Date.parse('2026-10-20T00:00:00Z'));
+    expect(o.sql).toContain('IN (SELECT chat_id, client_id FROM payment_event_owner WHERE ts >= $2::timestamptz AND amount > 0)');
+    expect(o.sql).not.toMatch(/FROM payment_event\b(?!_owner)/);
+    expect(o.sql).not.toContain('voided_at');
   });
 
   it('daily_client: never revenue or active_users; tg-aut new users only; per (day, client)', () => {

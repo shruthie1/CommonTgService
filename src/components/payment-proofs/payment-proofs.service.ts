@@ -344,6 +344,12 @@ export class PaymentProofsService {
         }
     }
 
+    /** Called by PaymentUncreditService after it wrote a proof of the chat (journal, review stamp). */
+    async proofsChanged(chatId: string): Promise<void> {
+        const id = String(chatId);
+        await this.patchWindows(`uncredit ${id}`, () => this.rereadChat(id));
+    }
+
     /** Called by FakePaymentService after a mark / unmark wrote userData for the chat. */
     async chatChanged(chatId: string): Promise<void> {
         const id = String(chatId);
