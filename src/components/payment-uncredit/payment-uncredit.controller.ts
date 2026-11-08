@@ -17,7 +17,7 @@ export class PaymentUncreditController {
     @ApiOperation({
         summary: 'Void ONE credited payment: Postgres payment_void (out of revenue; payer taken back only if it was the day\'s last), ' +
             'stats2 day marker, the profile\'s userData credit/tier, review stamp fake. Idempotent (changed:false). ' +
-            '409 fake_marked | call_in_progress (retry with force) | pg_row_pending | uncredit_in_progress; 502 {failedAt, compensated}',
+            '409 fake_marked | call_in_progress (retry with force) | pg_row_pending | ambiguous_match | already_voided | uncredit_in_progress; 502 {failedAt, compensated}',
     })
     @ApiParam({ name: 'proofId', description: '<clientId>-<chatId>-<telegramMsgId>' })
     @ApiBody({

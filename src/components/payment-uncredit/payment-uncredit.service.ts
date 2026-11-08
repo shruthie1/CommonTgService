@@ -35,7 +35,7 @@ export const PG_ROW_GRACE_MS = 60 * 60_000;
 /** A pending journal younger than this belongs to a request still running. */
 export const PENDING_STALE_MS = 2 * 60_000;
 
-interface PgVoid { status: 'voided' | 'already' | 'no_row' | 'fake_marked'; payment_id: string | null; amount: number | null; day: string | null; payers_taken: boolean; payers_mobile: string | null }
+interface PgVoid { status: 'voided' | 'already' | 'no_row' | 'ambiguous' | 'fake_marked'; payment_id: string | null; amount: number | null; day: string | null; payers_taken: boolean; payers_mobile: string | null }
 interface PgUnvoid { status: 'unvoided' | 'not_voided' | 'fake_marked'; payment_id: string | null; amount: number | null; day: string | null; payers_given: boolean }
 
 export interface PgUndo { status: PgVoid['status']; linked: boolean; paymentId: string | null; day: string | null; payersTaken: boolean }
@@ -155,6 +155,7 @@ export class PaymentUncreditService {
 
         // Claim (or resume an earlier attempt that died: its journal says what is already done).
         let journal: UncreditJournal;
+        const resumed = !!proof.uncredited;
         if (proof.uncredited) {
             journal = proof.uncredited;
             journal.at = new Date(nowMs);
@@ -180,6 +181,16 @@ export class PaymentUncreditService {
                 if (pg.row.status === 'fake_marked') {
                     await this.release(proof._id, journal);
                     throw new ConflictException({ code: 'fake_marked', message: 'the chat is marked fake in Postgres: no payment of it counts already' });
+                }
+                if (pg.row.status === 'ambiguous') {
+                    await this.release(proof._id, journal);
+                    throw new ConflictException({ code: 'ambiguous_match', message: 'more than one revenue row matches this payment (same chat, amount and minute): not uncredited; fix it by hand' });
+                }
+                if (pg.row.status === 'already' && !resumed) {
+                    // Postgres holds a void for this proof that no journal of ours knows of (a manual void): going on
+                    // would take the userData credit a second time.
+                    await this.release(proof._id, journal);
+                    throw new ConflictException({ code: 'already_voided', message: 'the revenue row of this payment is already voided outside tg-chats: not changed' });
                 }
                 if (pg.row.status === 'no_row' && nowMs - new Date(proof.servedAt).getTime() < PG_ROW_GRACE_MS) {
                     await this.release(proof._id, journal);

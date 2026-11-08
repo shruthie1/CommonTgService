@@ -292,6 +292,25 @@ describe('PaymentUncreditService', () => {
         expect(pg.count('payment_unvoid')).toBe(0);
     });
 
+    it('Postgres: two candidate rows (ambiguous) refuses with 409, claim released, nothing else written', async () => {
+        pg.voidRow = { status: 'ambiguous', payment_id: null, amount: null, day: null, payers_taken: false, payers_mobile: null };
+        await expect(service.uncredit(PROOF_ID, { reason: 'fake' }, NOW)).rejects.toMatchObject({ response: { code: 'ambiguous_match' } });
+        expect((await proof()).uncredited).toBeUndefined();
+        expect((await proof()).review).toMatchObject({ decision: 'fine' });
+        expect((await user()).lifetimePaid).toBe(850);
+        expect((await stats()).dailyPaidCountedAt).toBe('2026-11-08');
+        expect(pg.count('payment_unvoid')).toBe(0);
+    });
+
+    it('Postgres: already voided for this proof but no journal knows of it: 409, userData never taken twice', async () => {
+        pg.voidRow = { status: 'already', payment_id: '5060', amount: 350, day: '2026-11-08', payers_taken: true, payers_mobile: '917814283401' };
+        await expect(service.uncredit(PROOF_ID, { reason: 'fake' }, NOW)).rejects.toMatchObject({ response: { code: 'already_voided' } });
+        expect((await proof()).uncredited).toBeUndefined();
+        expect((await user()).lifetimePaid).toBe(850);
+        expect((await stats()).dailyPaidCountedAt).toBe('2026-11-08');
+        expect(pg.count('payment_unvoid')).toBe(0);
+    });
+
     it('Postgres failure on the void itself: nothing written anywhere, claim released, 502 compensated', async () => {
         pg.failVoid = true;
         const err = await service.uncredit(PROOF_ID, { reason: 'fake' }, NOW).catch((e) => e);
