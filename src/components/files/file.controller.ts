@@ -603,15 +603,21 @@ export class FileController {
   }
 
   @Get('folders/:folder/files/:filename/thumbnail')
-  @ApiOperation({ summary: 'Get a thumbnail of an image or video file' })
+  @ApiOperation({ summary: 'Get a resized webp thumbnail of an image file' })
   @ApiParam({ name: 'folder', description: 'Folder name' })
   @ApiParam({ name: 'filename', description: 'File name' })
+  @ApiQuery({
+    name: 'w',
+    required: false,
+    description: 'Longest side in px (default 128, clamped 64..512); webp output',
+  })
   getThumbnail(
     @Param('folder') folder: string,
     @Param('filename') filename: string,
     @Res() res: Response,
+    @Query('w') w?: string,
   ) {
-    return this.fileService.getThumbnail(folder, filename, res);
+    return this.fileService.getThumbnail(folder, filename, res, w);
   }
 
   // =====================================================

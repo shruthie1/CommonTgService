@@ -45,6 +45,13 @@ import { pipeline } from 'stream';
 import { finished } from 'stream/promises';
 import { promisify } from 'util';
 import { getFileExtension, sanitizeFileName } from './utils/helper';
+import {
+  ByteLru,
+  THUMB_CACHE_MAX_BYTES,
+  clampThumbWidth,
+  loadSharp,
+  renderThumbnail,
+} from './utils/thumbnail';
 const streamPipeline = promisify(pipeline);
 
 type MimeType =
@@ -55,6 +62,9 @@ type MimeType =
 @Injectable()
 export class FileService implements OnModuleInit {
   private readonly logger = new Logger(FileService.name);
+  private readonly thumbCache = new ByteLru(THUMB_CACHE_MAX_BYTES);
+  private readonly thumbInFlight = new Map<string, Promise<Buffer>>();
+  private readonly thumbFallbackLogged = new Set<string>();
   private readonly config: {
     storagePath: string;
     maxFileSize: number;
@@ -871,7 +881,12 @@ export class FileService implements OnModuleInit {
     }
   }
 
-  async getThumbnail(folder: string, filename: string, res: Response) {
+  async getThumbnail(
+    folder: string,
+    filename: string,
+    res: Response,
+    rawWidth?: unknown,
+  ) {
     const filePath = this.getSafePath(
       this.config.storagePath,
       folder,
@@ -884,38 +899,77 @@ export class FileService implements OnModuleInit {
 
     const mimeType = lookup(filePath) || 'application/octet-stream';
     const stats = fs.statSync(filePath);
-    const etag = `"thumb-${stats.mtimeMs.toString(36)}-${stats.size.toString(36)}"`;
+    const width = clampThumbWidth(rawWidth);
+    const fileTag = `${stats.mtimeMs.toString(36)}-${stats.size.toString(36)}`;
 
-    res.set({
-      'Cache-Control': 'public, max-age=3600, s-maxage=86400',
-      'ETag': etag,
-      'Last-Modified': stats.mtime.toUTCString(),
-    });
-
-    try {
-      // Handle image thumbnails
-      if (VIEW_CONFIG.IMAGE_TYPES.includes(mimeType)) {
-        const thumbnail = fs.readFileSync(filePath);
-
-        res.setHeader('Content-Type', 'image/jpeg');
-        return res.send(thumbnail);
-      }
-
-      // For video types, try to extract frame or generate dynamic thumbnail
+    // Video: unchanged (no frame extraction; empty body). Other non-images: 400 as before.
+    // Not falling back to the original here: a "thumbnail" that is a full video defeats the route.
+    if (!VIEW_CONFIG.IMAGE_TYPES.includes(mimeType as never)) {
       if (VIEW_CONFIG.VIDEO_TYPES.includes(mimeType)) {
         res.setHeader('Content-Type', 'image/jpeg');
         return res.send(undefined);
       }
-
-      throw new BadRequestException(
-        'Thumbnail not available for this file type',
-      );
-    } catch (error) {
-      this.logger.error(
-        `Error generating thumbnail for ${filename}: ${error.message}`,
-      );
-      throw new InternalServerErrorException('Error generating thumbnail');
+      throw new BadRequestException('Thumbnail not available for this file type');
     }
+
+    const loaded = loadSharp();
+    let thumb: Buffer | null = null;
+    if ('sharp' in loaded) {
+      const cacheKey = `${filePath}|${fileTag}|${width}`;
+      thumb = this.thumbCache.get(cacheKey) ?? null;
+      if (!thumb) {
+        try {
+          let pending = this.thumbInFlight.get(cacheKey);
+          if (!pending) {
+            pending = renderThumbnail(loaded.sharp, filePath, width);
+            this.thumbInFlight.set(cacheKey, pending);
+          }
+          try {
+            thumb = await pending;
+          } finally {
+            this.thumbInFlight.delete(cacheKey);
+          }
+          this.thumbCache.set(cacheKey, thumb);
+        } catch (error) {
+          this.logThumbFallbackOnce(
+            filePath,
+            `resize failed for ${folder}/${filename}: ${(error as Error).message}`,
+          );
+        }
+      }
+    } else {
+      this.logThumbFallbackOnce(
+        '<sharp>',
+        `sharp unavailable, thumbnails send originals: ${loaded.error.message}`,
+      );
+    }
+
+    if (thumb) {
+      res.set({
+        'Content-Type': 'image/webp',
+        'Cache-Control': 'public, max-age=86400',
+        ETag: `"thumb-${fileTag}-w${width}"`,
+        'Last-Modified': stats.mtime.toUTCString(),
+      });
+      // Express res.send answers 304 itself when the request's If-None-Match matches.
+      return res.send(thumb);
+    }
+
+    // Fallback: the original bytes with their real type, shorter cache so a later fix shows up.
+    res.set({
+      'Content-Type': mimeType,
+      'Cache-Control': 'public, max-age=3600',
+      ETag: `"thumb-${fileTag}-orig"`,
+      'Last-Modified': stats.mtime.toUTCString(),
+    });
+    return res.send(fs.readFileSync(filePath));
+  }
+
+  private logThumbFallbackOnce(key: string, message: string) {
+    if (this.thumbFallbackLogged.has(key)) return;
+    if (this.thumbFallbackLogged.size >= 1000) this.thumbFallbackLogged.clear();
+    this.thumbFallbackLogged.add(key);
+    this.logger.warn(`thumbnail fallback to original: ${message}`);
   }
 
   private isPreviewSupported(mimeType: string): boolean {
