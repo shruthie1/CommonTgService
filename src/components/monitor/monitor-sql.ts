@@ -166,6 +166,9 @@ WHERE kind = 'dm' AND ${range}`,
 /**
  * promotion_send live: today per (client, IST hour) plus yesterday up to `cut` (= now - 24 h) per
  * (client, IST hour). One statement scans the two newest partitions; count(*) only.
+ * `failed` = outcome IN ('failed','banned') = sent - delivered, the same definition as daily_client /
+ * daily_mobile.failed (the sink counts a banned send in both), so today + closed days add up (owner
+ * 2026-11-08, docs/design/2026-11-08-analytics-cleanup.md B). `banned` stays its own number.
  */
 export function sendsLiveSql(today: Window, cut: number): SqlQuery {
   return q(
@@ -174,7 +177,7 @@ export function sendsLiveSql(today: Window, cut: number): SqlQuery {
   count(*) FILTER (WHERE outcome <> 'deleted') AS sent,
   count(*) FILTER (WHERE outcome = 'delivered') AS delivered,
   count(*) FILTER (WHERE outcome = 'banned') AS banned,
-  count(*) FILTER (WHERE outcome = 'failed') AS failed
+  count(*) FILTER (WHERE outcome IN ('failed', 'banned')) AS failed
 FROM promotion_send
 WHERE ts >= $2::timestamptz AND ts < $3::timestamptz AND (ts >= $1::timestamptz OR ts < $4::timestamptz)
 GROUP BY 1, 2, 3, 4`,
@@ -330,8 +333,10 @@ ORDER BY max(ts) DESC`,
 /**
  * Promotion sends of one intraday window per (current?, service, client, mobile, error_type), current =
  * [curStart, end), previous = [prevStart, prevEnd) (prevEnd <= curStart). One scan of the partitions the
- * range covers (2 for today, 3 for 24h); count(*) only. error_type is NULL on non-failed rows, so the
- * failed rows carry the per-mobile error mix. max(ts) = last send.
+ * range covers (2 for today, 3 for 24h); count(*) only. `failed` = outcome IN ('failed','banned'), as in
+ * daily_mobile.failed (see sendsLiveSql). error_type is NULL on delivered rows; banned rows carry
+ * USER_BANNED_IN_CHANNEL, so the per-mobile error mix is (failed - banned) per row = the outcome='failed'
+ * rows only (monitor-promotions aggregate). max(ts) = last send.
  */
 export function promoSendsSql(cur: Window, prev: Window): SqlQuery {
   return q(
@@ -340,7 +345,7 @@ export function promoSendsSql(cur: Window, prev: Window): SqlQuery {
   count(*) FILTER (WHERE outcome <> 'deleted') AS sent,
   count(*) FILTER (WHERE outcome = 'delivered') AS delivered,
   count(*) FILTER (WHERE outcome = 'banned') AS banned,
-  count(*) FILTER (WHERE outcome = 'failed') AS failed,
+  count(*) FILTER (WHERE outcome IN ('failed', 'banned')) AS failed,
   max(ts) FILTER (WHERE outcome <> 'deleted') AS last_ts
 FROM promotion_send
 WHERE ts >= $2::timestamptz AND ts < $3::timestamptz AND (ts >= $1::timestamptz OR ts < $4::timestamptz)

@@ -66,7 +66,7 @@ const SENDS = [
   { cur: true, service: 'p', client_id: 'alpha1', mobile: '919876540001', error_type: null, sent: '300', delivered: '6', banned: '0', failed: '0', last_ts: ts('2026-10-28T15:00:00') },
   { cur: true, service: 'p', client_id: 'alpha1', mobile: '919876540001', error_type: 'FLOOD', sent: '10', delivered: '0', banned: '0', failed: '10', last_ts: ts('2026-10-28T15:10:00') },
   { cur: true, service: 'p', client_id: 'alpha1', mobile: '919876540001', error_type: 'PEER_FLOOD', sent: '3', delivered: '0', banned: '0', failed: '3', last_ts: ts('2026-10-28T14:00:00') },
-  { cur: true, service: 't', client_id: 'alpha1', mobile: '919811110000', error_type: null, sent: '100', delivered: '80', banned: '15', failed: '0', last_ts: ts('2026-10-28T15:30:00') },
+  { cur: true, service: 't', client_id: 'alpha1', mobile: '919811110000', error_type: null, sent: '100', delivered: '80', banned: '15', failed: '15', last_ts: ts('2026-10-28T15:30:00') },
   { cur: true, service: 't', client_id: 'beta1', mobile: '919822220000', error_type: null, sent: '40', delivered: '40', banned: '0', failed: '0', last_ts: ts('2026-10-28T12:00:00') },
   { cur: true, service: null, client_id: null, mobile: '919833330000', error_type: null, sent: '5', delivered: '5', banned: '0', failed: '0', last_ts: ts('2026-10-28T09:00:00') },
   { cur: false, service: 'p', client_id: 'alpha1', mobile: '919876540001', error_type: null, sent: '200', delivered: '150', banned: '0', failed: '0', last_ts: ts('2026-10-27T15:00:00') },

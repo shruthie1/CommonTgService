@@ -397,7 +397,10 @@ function aggregate(rows: PromoRow[]): Map<string, Agg> {
     a.delivered += r.delivered;
     a.banned += r.banned;
     a.failed += r.failed;
-    if (r.errorType && r.failed > 0) a.errors.set(r.errorType, (a.errors.get(r.errorType) ?? 0) + r.failed);
+    // failed includes banned (promo_sends and daily_mobile alike), so the error mix is failed - banned: the
+    // outcome='failed' rows only (a banned row's error_type is USER_BANNED_IN_CHANNEL; banned has its own number).
+    const otherFailed = r.failed - r.banned;
+    if (r.errorType && otherFailed > 0) a.errors.set(r.errorType, (a.errors.get(r.errorType) ?? 0) + otherFailed);
     if (r.lastAt !== null && (a.lastAt === null || r.lastAt > a.lastAt)) a.lastAt = r.lastAt;
     if (r.lastDay !== null && (a.lastDay === null || r.lastDay > a.lastDay)) a.lastDay = r.lastDay;
     if (r.profile) a.profile = r.profile;
