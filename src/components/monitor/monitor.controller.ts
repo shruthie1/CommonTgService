@@ -1,6 +1,7 @@
 import { BadRequestException, Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { addDays, DateRange, daysIn, istDate, MAX_RANGE_DAYS, MONITOR_PERIODS, MonitorPeriod, RANGE_LOOKBACK_DAYS } from './monitor-time';
+import { HISTORY_RANGES, parseHistoryRange } from './monitor-history';
 import { PROMO_WINDOWS, PromoWindow } from './monitor-promotions';
 import { REACT_WINDOWS, ReactWindow } from './monitor-reactions';
 import { REVENUE_HISTORY_FROM } from './monitor-util';
@@ -123,6 +124,18 @@ export class MonitorController {
   @ApiQuery({ name: 'clientId', required: false })
   paidChats(@Query('date') date?: string, @Query('clientId') clientId?: string) {
     return this.service.paidChats(parsePaidDate(date, Date.now()), parseOptionalClientId(clientId));
+  }
+
+  /**
+   * Long-run series for the History tab (2026-11-08, additive): range 7d (hourly) | 90d (daily, default)
+   * | 24m (monthly), IST; optional clientId (alias client). 400 on a bad range or client, 503 when
+   * Postgres fails. Uncovered buckets are null, never 0; every series names its source and data start.
+   */
+  @Get('history')
+  @ApiQuery({ name: 'range', required: false, enum: HISTORY_RANGES })
+  @ApiQuery({ name: 'clientId', required: false })
+  history(@Query('range') range?: string, @Query('clientId') clientId?: string, @Query('client') client?: string) {
+    return this.service.history(parseHistoryRange(range), parseOptionalClientId(clientId || client));
   }
 
   /**

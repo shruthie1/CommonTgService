@@ -133,6 +133,17 @@ import {
   RangeWindows,
   resolveRange,
 } from './monitor-time';
+import {
+  assembleHistory,
+  HISTORY_PAGE_FRESH_MS,
+  HISTORY_PAGE_MAX_STALE_MS,
+  HISTORY_PAGE_RE,
+  HistoryRange,
+  HistoryResponse,
+  HistoryRows,
+  historySqls,
+  historyWindow,
+} from './monitor-history';
 import { DMS_ATTRIBUTION_FROM, FAMILY_DMS_FROM, historyNotes, maskMobile, maskPayload, num, ratio, REVENUE_HISTORY_FROM, withTimeout } from './monitor-util';
 
 export const MONITOR_REDIS = 'MONITOR_REDIS';
@@ -661,8 +672,9 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       complete: (v) => !(v?.notes ?? []).some((n: unknown) => typeof n === 'string' && / unavailable: /.test(n)),
       // from..to ranges: only ranges including today go to Redis; closed ranges are memory-only and stay fresh 10 min
       persist: (name) => !this.closedRangePage(name),
-      freshMsOf: (name) => (this.closedRangePage(name) ? RANGE_CLOSED_FRESH_MS : undefined),
-      maxServeStaleMsOf: (name) => (this.closedRangePage(name) ? 2 * RANGE_CLOSED_FRESH_MS : undefined),
+      freshMsOf: (name) => (this.closedRangePage(name) ? RANGE_CLOSED_FRESH_MS : HISTORY_PAGE_RE.test(name) ? HISTORY_PAGE_FRESH_MS : undefined),
+      maxServeStaleMsOf: (name) =>
+        this.closedRangePage(name) ? 2 * RANGE_CLOSED_FRESH_MS : HISTORY_PAGE_RE.test(name) ? HISTORY_PAGE_MAX_STALE_MS : undefined,
       onError: (what, err) => this.logger.warn(`monitor snapshot ${what} failed: ${String((err as Error)?.message ?? err).slice(0, 200)}`),
     });
     this.warmer = new SnapshotWarmer({
@@ -773,6 +785,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       throw new Error(`unknown monitor page ${page}`);
     }
     const [kind, a, b] = page.split(':');
+    if (kind === 'history') return this.buildHistory(a as HistoryRange, b === '*' ? null : b, now, background);
     if (kind === 'fleet') return this.buildFleet(a as MonitorPeriod, now, background);
     if (kind === 'detail') return this.buildDetail(null, Number(b) as 7 | 30, now, background);
     if (kind === 'promotions') return this.buildPromotions(a as PromoWindow, b === '*' ? null : b, now, background);
@@ -2011,6 +2024,35 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(`monitor promotions ${window} failed: ${msg}`);
       throw new ServiceUnavailableException(`promotions unavailable: ${msg}`);
     }
+  }
+
+  /**
+   * /monitor/history (2026-11-08, additive): long-run series for the History tab (monitor-history.ts).
+   * Snapshot 'history:<range>:<client|*>', fresh 5 min; not kept warm (viewer = false: no poll-driven rebuilds).
+   */
+  async history(range: HistoryRange, client: string | null): Promise<HistoryResponse> {
+    try {
+      return await this.snap<HistoryResponse>(`history:${range}:${client ?? '*'}`, false);
+    } catch (err) {
+      if (err instanceof ServiceUnavailableException) throw err;
+      const msg = String((err as Error)?.message ?? err).slice(0, 200);
+      this.logger.warn(`monitor history ${range} failed: ${msg}`);
+      throw new ServiceUnavailableException(`history unavailable: ${msg}`);
+    }
+  }
+
+  private async buildHistory(range: HistoryRange, client: string | null, now: number, background: boolean): Promise<HistoryResponse> {
+    const w = historyWindow(range, now);
+    const timings: Record<string, number> = {};
+    const t0 = Date.now();
+    const rows: HistoryRows = {};
+    await Promise.all(
+      Object.entries(historySqls(w, client)).map(async ([k, q]) => {
+        rows[k] = await this.pgRows(q, timings, background);
+      }),
+    );
+    timings.total = Date.now() - t0;
+    return assembleHistory(w, client, rows, now, timings);
   }
 
   /** promotion_send per (current?, service, client, mobile, error type) for today / 24h. */
