@@ -25,12 +25,31 @@ export function owedShowCap(highest: unknown): number {
     return OWED_SHOW_ROWS.reduce((cap, [min, owed]) => (h >= min ? Math.max(cap, owed) : cap), 0);
 }
 
-/** A live in-house call: a callProgress entry not completed, updated in the last 10 minutes. */
-export const LIVE_CALL_MS = 10 * 60_000;
+/**
+ * tg-aut in-house-call-service.ts PROGRESS_CHECKPOINT_MS: a playing show rewrites its callProgress entry (the heartbeat)
+ * at connect and then this often. Keep in step.
+ */
+export const PROGRESS_CHECKPOINT_MS = 15_000;
+/** Three missed heartbeats: the show's process died without writing endedAt (crash, kill -9). */
+export const LIVE_HEARTBEAT_MS = 3 * PROGRESS_CHECKPOINT_MS;
+
+/**
+ * The show playing in this chat right now, if any: a callProgress entry not completed, with no endedAt (tg-aut writes it
+ * with the final position when the call ends, any way), and a heartbeat in the last LIVE_HEARTBEAT_MS. Entries written
+ * before endedAt existed fall back to the heartbeat rule alone.
+ */
+export function liveCall(callProgress: unknown, now: number): { videoId: string; secondsSinceHeartbeat: number } | null {
+    if (!callProgress || typeof callProgress !== 'object') return null;
+    for (const [videoId, p] of Object.entries(callProgress as Record<string, any>)) {
+        if (!p || typeof p !== 'object' || p.completed === true || p.endedAt != null) continue;
+        const sinceMs = now - amountOf(p.updatedAt);
+        if (sinceMs < LIVE_HEARTBEAT_MS) return { videoId, secondsSinceHeartbeat: Math.max(0, Math.floor(sinceMs / 1000)) };
+    }
+    return null;
+}
+
 export function callInProgress(callProgress: unknown, now: number): boolean {
-    if (!callProgress || typeof callProgress !== 'object') return false;
-    return Object.values(callProgress as Record<string, any>).some((p) =>
-        p && typeof p === 'object' && p.completed !== true && now - amountOf(p.updatedAt) < LIVE_CALL_MS);
+    return liveCall(callProgress, now) !== null;
 }
 
 /** The userData fields Uncredit may set (never creditKeys, servedSha, cheatCount, canReply, fakePayment*, videos, callProgress). */

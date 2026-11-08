@@ -8,6 +8,7 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 import { UserDataSchema } from '../../user-data/schemas/user-data.schema';
 import { PaymentProofSchema } from '../../payment-proofs/schemas/payment-proof.schema';
 import { PaymentUncreditService } from '../payment-uncredit.service';
+import { callInProgress } from '../uncredit.plan';
 
 jest.mock('../../../utils', () => ({
     ...jest.requireActual('../../../utils'),
@@ -259,8 +260,15 @@ describe('PaymentUncreditService', () => {
         await expect(service.uncredit(PROOF_ID, { reason: 'fake' }, NOW)).rejects.toMatchObject({ response: { code: 'fake_marked' } });
         await users.collection.updateOne({ chatId: CHAT, profile: 'kavya' }, { $unset: { fakePaymentAt: '' } });
 
-        await users.collection.updateOne({ chatId: CHAT, profile: PROFILE }, { $set: { callTime: 0, callProgress: { v1: { positionSec: 30, durationSec: 300, updatedAt: NOW - 60_000, completed: false } } } });
-        await expect(service.uncredit(PROOF_ID, { reason: 'fake' }, NOW)).rejects.toMatchObject({ response: { code: 'call_in_progress' } });
+        // Ended (endedAt) a second ago, and an old-shape entry whose heartbeat stopped 60 s ago: neither is a live show.
+        await users.collection.updateOne({ chatId: CHAT, profile: PROFILE }, { $set: { callTime: 0, callProgress: {
+            v1: { positionSec: 30, durationSec: 300, updatedAt: NOW - 60_000, completed: false },
+            v2: { positionSec: 81, durationSec: 309, updatedAt: NOW - 1_000, completed: false, endedAt: NOW - 1_000, endReason: 'dropped' },
+        } } });
+        expect(callInProgress((await user()).callProgress, NOW)).toBe(false);
+        // A heartbeat 20 s ago: live.
+        await users.collection.updateOne({ chatId: CHAT, profile: PROFILE }, { $set: { 'callProgress.v1': { positionSec: 45, durationSec: 300, updatedAt: NOW - 20_000, completed: false } } });
+        await expect(service.uncredit(PROOF_ID, { reason: 'fake' }, NOW)).rejects.toMatchObject({ response: { code: 'call_in_progress', secondsSinceHeartbeat: 20, message: 'a show is playing in this chat right now (last heartbeat 20 s ago); Uncredit anyway treats it as delivered' } });
         expect(pg.calls).toHaveLength(0);
         expect((await proof()).uncredited).toBeUndefined();
         await service.uncredit(PROOF_ID, { reason: 'fake', force: true }, NOW);

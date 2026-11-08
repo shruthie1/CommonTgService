@@ -11,7 +11,7 @@ import { getBotsServiceInstance } from '../../utils';
 import { PaymentProofsService } from '../payment-proofs/payment-proofs.service';
 import { parseProofId, proofIdOf } from '../payment-proofs/payment-proofs.classify';
 import { PAYMENT_PROOF_MODEL } from '../payment-proofs/schemas/payment-proof.schema';
-import { amountOf, callInProgress, planRecredit, planUncredit, UserDataUndo } from './uncredit.plan';
+import { amountOf, liveCall, planRecredit, planUncredit, UserDataUndo } from './uncredit.plan';
 
 /**
  * Uncredit = a supported void of ONE credited payment; Recredit undoes it (owner 2026-11-08;
@@ -150,8 +150,14 @@ export class PaymentUncreditService {
             throw new ConflictException({ code: 'fake_marked', message: 'the chat is marked fake: no payment of it counts already' });
         }
         const user = await this.users.findOne({ chatId: proof.chatId, profile: proof.profile }) as Record<string, any> | null;
-        const live = !!user && callInProgress(user.callProgress, nowMs);
-        if (live && !force) throw new ConflictException({ code: 'call_in_progress', message: 'a show is running for this payment; Uncredit anyway treats it as delivered' });
+        const live = user ? liveCall(user.callProgress, nowMs) : null;
+        if (live && !force) {
+            throw new ConflictException({
+                code: 'call_in_progress',
+                message: `a show is playing in this chat right now (last heartbeat ${live.secondsSinceHeartbeat} s ago); Uncredit anyway treats it as delivered`,
+                secondsSinceHeartbeat: live.secondsSinceHeartbeat,
+            });
+        }
 
         // Claim (or resume an earlier attempt that died: its journal says what is already done).
         let journal: UncreditJournal;
