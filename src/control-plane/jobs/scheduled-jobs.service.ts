@@ -3,6 +3,7 @@ import {
   Logger,
   OnModuleDestroy,
   OnModuleInit,
+  Optional,
 } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import type { Connection } from 'mongoose';
@@ -18,6 +19,7 @@ import { RuntimeConfigService } from '../config/runtime-config.service';
 import { AccountMaintenanceService } from '../maintenance/account-maintenance.service';
 import { AnalyticsHealthCheck } from '../../components/daily-analytics/analytics-health.check';
 import { PoolSnapshotWriter } from '../../components/monitor/pool-snapshot.writer';
+import { PaymentHealthService } from '../../components/payment-health/payment-health.service';
 
 const IST = 'Asia/Kolkata';
 /**
@@ -49,6 +51,7 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
     @InjectConnection() private readonly connection: Connection,
     private readonly analyticsHealth: AnalyticsHealthCheck,
     private readonly poolSnapshot: PoolSnapshotWriter,
+    @Optional() private readonly paymentHealth?: PaymentHealthService,
   ) {}
 
   onModuleInit(): void {
@@ -117,6 +120,10 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
     // UTC hour so one CMS-scheduler process writes. IST :03 = UTC :33, so ts_hour is the current UTC hour.
     // The writer never throws: a failed hour is recorded as completed with its outcome and stays a gap.
     this.register('cms-pool-snapshot', '3 * * * *', () => this.runPoolSnapshot());
+    // Daily payment health report for YESTERDAY (IST), owner 2026-11-11: credited proofs vs payment_event rows,
+    // possible double credits, holds / fake flags by reason, processes behind the newest build. Read-only; sent to the
+    // ops channel (PAYMENT_HEALTH_REPORT_ENABLED off = computed and logged, not sent). Run-claimed per IST day.
+    this.register('cms-payment-health', '0 9 * * *', () => this.runPaymentHealth());
     // Degraded swap fallback (docs/design/2026-10-24-degraded-swap-fallback.md): every 30 min a
     // swap-maintenance run (rescue dead mains, upgrade degraded clients, refill limited mains); daily
     // summary at 10:05 IST. Both run-claimed so two CMS-scheduler processes never double-swap or
@@ -361,6 +368,15 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
   /** UTC hour, e.g. 2026-11-07T05, the run-claim key of the hourly pool snapshot. */
   private utcHourKey(now: Date = new Date()): string {
     return now.toISOString().slice(0, 13);
+  }
+
+  private runPaymentHealth(): Promise<void> {
+    const service = this.paymentHealth;
+    if (!service) {
+      this.logger.warn('payment health report skipped: PaymentHealthService not provided');
+      return Promise.resolve();
+    }
+    return this.runClaimed(`payment-health:${this.istDateKey()}`, 'payment health report', () => service.runDaily());
   }
 
   private runPoolSnapshot(now: Date = new Date()): Promise<void> {

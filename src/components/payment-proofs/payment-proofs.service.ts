@@ -7,6 +7,7 @@ import {
     ClassifiedProof, PROOF_STATES, ProofCounts, ProofState, addToCounts, buildReviewModel, classify,
     decodeCursor, emptyCounts, encodeCursor, isAfterCursor, parseProofId, proofIdOf, reviewOptionsFromEnv,
 } from './payment-proofs.classify';
+import { DOUBLE_CREDIT_PROJECTION, DOUBLE_CREDIT_WINDOW_MS, DoubleCreditRow, doubleCreditIndex, findDoubleCredits } from './payment-proofs.double-credit';
 import { ChatUser, REVIEW_VIEWS, ReviewView, ReviewViews, buildViews, isHiddenEntry } from './payment-proofs.views';
 
 export const DEFAULT_LIMIT = 50;
@@ -104,6 +105,8 @@ export interface ProofItem extends Omit<PaymentProofRow, UnsentRowField> {
     complaintScore: number | null;
     fakePaymentAt: Date | null;
     clientHost: string | null;
+    /** ?chat= only (2026-11-11): possible double credit of another credited proof of this chat; null = none. */
+    doubleCredit?: { withProofIds: string[]; why: string } | null;
 }
 
 export interface ListResult {
@@ -259,9 +262,29 @@ export class PaymentProofsService {
                 clientHost: hosts.get(String(row.clientId)) ?? null,
             } as ProofItem;
         });
+        if (p.chat && items.length) await this.markDoubleCredits(p.chat, p.since, items);
         const last = page[page.length - 1];
         const nextCursor = more && last ? encodeCursor({ t: last.t, id: String(last.row._id) }) : null;
         return { items, nextCursor, counts, truncated };
+    }
+
+    /**
+     * ?chat= only (owner 2026-11-11): items.doubleCredit = { withProofIds, why } on a credited proof that may double another
+     * credit of this chat (same amount within 48 h, evidence does not prove two payments; payment-proofs.double-credit.ts),
+     * else null. One indexed read (chatId_1_createdAt_-1) of the chat's served rows. A failed read leaves the field off and
+     * logs; the list itself still answers.
+     */
+    private async markDoubleCredits(chatId: string, since: number, items: ProofItem[]): Promise<void> {
+        try {
+            const rows = await this.proofModel
+                .find({ chatId, createdAt: { $gte: new Date(since - DOUBLE_CREDIT_WINDOW_MS) }, servedAt: { $ne: null } }, DOUBLE_CREDIT_PROJECTION)
+                .lean<DoubleCreditRow[]>()
+                .exec();
+            const index = doubleCreditIndex(findDoubleCredits(Array.isArray(rows) ? rows : []));
+            for (const item of items) item.doubleCredit = index.get(item.proofId) ?? null;
+        } catch (e) {
+            this.logger.warn(`double-credit check failed for chat ${chatId}: ${(e as Error)?.message ?? e}`);
+        }
     }
 
     /** The shared whole-window data: cached, single-flight, stale-while-revalidate (see DEFAULT_LIST_CACHE_MS). */

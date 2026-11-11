@@ -108,6 +108,46 @@ describe('ScheduledJobsService scheduler ownership', () => {
     }
   });
 
+  it('payment health: 09:00 IST, CMS only; two CMS-scheduler processes send ONE report per IST day (run-claim)', async () => {
+    createService(['UMS_SCHEDULER']).onModuleInit();
+    expect(jobNames()).not.toContain('cms-payment-health');
+    scheduleJob.mockClear();
+    const mongod = await MongoMemoryServer.create({ instance: { ip: '127.0.0.1' } });
+    const connection = await mongoose
+      .createConnection(mongod.getUri(), { dbName: 'scheduled-jobs-payment-health-test' })
+      .asPromise();
+    try {
+      const paymentHealth = { runDaily: jest.fn().mockResolvedValue({ day: '2026-11-10', sent: true, summary: { missing: 0 } }) };
+      const a = createService(['CMS_SCHEDULER'], connection);
+      const b = createService(['CMS_SCHEDULER'], connection);
+      (a as any).paymentHealth = paymentHealth;
+      (b as any).paymentHealth = paymentHealth;
+      a.onModuleInit();
+      b.onModuleInit();
+      expect(scheduleJob).toHaveBeenCalledWith('cms-payment-health', '0 9 * * *', 'Asia/Kolkata', expect.any(Function));
+      const callbacks = scheduleJob.mock.calls.filter(([name]) => name === 'cms-payment-health').map((c) => c[3]);
+      expect(callbacks).toHaveLength(2);
+      await Promise.all(callbacks.map((cb) => cb()));
+      await callbacks[0]();
+      expect(paymentHealth.runDaily).toHaveBeenCalledTimes(1);
+      const runs = (await connection.db.collection('controlPlaneJobRuns').find({}).toArray())
+        .filter((run) => String(run._id).startsWith('payment-health:'));
+      expect(runs).toHaveLength(1);
+      expect(runs[0]).toEqual(expect.objectContaining({ completedAt: expect.any(Date), day: '2026-11-10', sent: true }));
+    } finally {
+      await connection.dropDatabase();
+      await connection.close();
+      await mongod.stop();
+    }
+  });
+
+  it('payment health: no PaymentHealthService (optional dependency) = skipped, no claim, no throw', async () => {
+    const svc = createService(['CMS_SCHEDULER']);
+    svc.onModuleInit();
+    const cb = scheduleJob.mock.calls.filter(([name]) => name === 'cms-payment-health').map((c) => c[3])[0];
+    await expect(cb()).resolves.toBeUndefined();
+  });
+
   it('DS-J01 degraded swap: swap maintenance every 30 min + daily summary, CMS only, run-claimed so two processes swap/alert ONCE per slot', async () => {
     createService(['UMS_SCHEDULER']).onModuleInit();
     expect(jobNames()).not.toContain('cms-swap-maintenance');

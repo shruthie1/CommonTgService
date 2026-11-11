@@ -194,6 +194,27 @@ describe('PaymentProofsService', () => {
         expect(copy.reusedFrom).toMatchObject({ proofId: orig.proofId, chatId: '555', amount: 50 });
     });
 
+    it('?chat=: doubleCredit on both credits of a possible double (relative time vs printed clock), null on proven pairs', async () => {
+        await proofs.collection.insertMany([
+            proof({ chatId: '666', proofId: 'ramya1-666-901', telegramMsgId: 901, servedAt: at(300), creditAmount: 100, amount: 100, createdAt: at(300),
+                verdict: { outcome: 'credited', reasons: [] }, time: { state: 'known', epochMs: NOW - 301 * 60_000 }, ocr: { precheckText: 'Paid to\nMrs RAVVA LAKSHMI ·100\n1 min ago' } }),
+            proof({ chatId: '666', proofId: 'ramya1-666-902', telegramMsgId: 902, servedAt: at(20), creditAmount: 100, amount: 100, createdAt: at(20),
+                verdict: { outcome: 'credited', reasons: [] }, utr: 'T2611091131442440992013', time: { state: 'known', epochMs: NOW - 302 * 60_000 } }),
+            // proven two payments: different 12-digit UTRs
+            proof({ chatId: '666', proofId: 'ramya1-666-903', telegramMsgId: 903, servedAt: at(40), creditAmount: 50, amount: 50, createdAt: at(40), utr: '719414939436' }),
+            proof({ chatId: '666', proofId: 'ramya1-666-904', telegramMsgId: 904, servedAt: at(30), creditAmount: 50, amount: 50, createdAt: at(30), utr: '391884040074' }),
+        ]);
+        const r = await service.list({ state: 'all', chat: '666' }, NOW);
+        const by = new Map(r.items.map((i) => [i.proofId, i.doubleCredit]));
+        expect(by.get('ramya1-666-901')).toEqual({ withProofIds: ['ramya1-666-902'], why: expect.stringMatching(/relative/) });
+        expect(by.get('ramya1-666-902')).toEqual({ withProofIds: ['ramya1-666-901'], why: expect.any(String) });
+        expect(by.get('ramya1-666-903')).toBeNull();
+        expect(by.get('ramya1-666-904')).toBeNull();
+        // without ?chat= the field is not computed
+        const all = await service.list({ state: 'all' }, NOW);
+        expect(all.items.every((i) => i.doubleCredit === undefined)).toBe(true);
+    });
+
     it('caps limit at 100 and rejects bad params', async () => {
         await proofs.collection.insertMany(Array.from({ length: 105 }, () => proof({})));
         expect((await service.list({ state: 'all', limit: '500' }, NOW)).items).toHaveLength(100);

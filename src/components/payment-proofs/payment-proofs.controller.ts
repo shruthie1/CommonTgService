@@ -25,7 +25,10 @@ export class PaymentProofsController {
             '(no reader): reviewModel, riskReasons, imageSha256, ocr, time. ' +
             'flagged = outcome fraud_ask|fake_blocked|cross_client; marked = chat has userData.fakePaymentAt; reviewed = a stamp that still holds (item.stamp). ' +
             'Rows without verdict (before tg-aut wrote one) get an outcome derived from servedAt / ask / decision (legacy: true). ' +
-            'counts cover since/client/chat/minAmount (not cursor).',
+            'counts cover since/client/chat/minAmount (not cursor). ' +
+            'With chat (2026-11-11): items.doubleCredit = { withProofIds, why } when a credited proof may double another credit of ' +
+            'the chat (same amount within 48 h; not two different real UTRs, not two printed clocks > 1 min apart), else null. ' +
+            'A signal for a human check only: nothing is uncredited.',
     })
     @ApiQuery({ name: 'since', required: false, description: 'ISO date; default now - 7 days (the TTL)' })
     @ApiQuery({ name: 'client', required: false, description: 'clientId' })
