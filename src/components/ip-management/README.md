@@ -101,22 +101,6 @@ The client schema has no IP fields. `dedicatedIps`, `preferredIpCountry` and `au
 - `GET /ip-management/clients/:clientId/mappings` - Get client's mappings
 - `POST /ip-management/clients/:clientId/assign-dedicated` - Assign dedicated IPs to client
 
-### Client Integration
-
-#### Auto-Assignment & Management
-- `POST /client-ip-integration/clients/:clientId/auto-assign-ips` - Auto-assign IPs to all client mobiles
-- `GET /client-ip-integration/clients/:clientId/ip-summary` - Get comprehensive IP summary
-- `POST /client-ip-integration/clients/:clientId/setup-dedicated-ips` - Setup dedicated IPs for client
-
-#### Mobile-Specific Operations
-- `GET /client-ip-integration/mobile/:mobile/ip` - Get IP with smart assignment
-- `POST /client-ip-integration/clients/:clientId/assign-main-mobile-ip` - Assign IP to main mobile
-- `POST /client-ip-integration/clients/:clientId/assign-promote-mobiles-ips` - Assign IPs to promote mobiles
-
-#### Enhanced Client Endpoints
-- `GET /clients/:clientId/ip-info` - Get IP assignment info for client
-- `GET /clients/mobile/:mobile/ip` - Get IP for mobile (with context)
-
 ### Statistics & Maintenance
 - `GET /ip-management/statistics` - Get system statistics
 - `POST /ip-management/maintenance/cleanup-expired` - Clean up expired mappings
@@ -154,37 +138,7 @@ const bulkResponse = await fetch('/ip-management/proxy-ips/bulk', {
 });
 ```
 
-### 2. Setup Client with Dedicated IPs
-
-```javascript
-// Assign dedicated IPs to a client
-const setupResponse = await fetch('/client-ip-integration/clients/shruthi1/setup-dedicated-ips', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(['192.168.1.100:8080', '192.168.1.101:8080'])
-});
-
-// Auto-assign IPs to all client mobile numbers
-const autoAssignResponse = await fetch('/client-ip-integration/clients/shruthi1/auto-assign-ips', {
-  method: 'POST'
-});
-```
-
-### 3. Get IP for Mobile Number
-
-```javascript
-// Get IP for mobile (checks global mapping, auto-assigns if needed)
-const ipResponse = await fetch('/client-ip-integration/mobile/916265240911/ip', {
-  method: 'GET',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ clientId: 'shruthi1' })
-});
-
-const { mobile, ipAddress, source } = await ipResponse.json();
-console.log(`IP for ${mobile}: ${ipAddress} (source: ${source})`);
-```
-
-### 4. Manual IP Assignment
+### 2. Manual IP Assignment
 
 ```javascript
 // Manually assign IP to specific mobile
@@ -199,19 +153,6 @@ const assignResponse = await fetch('/ip-management/assign', {
     assignmentReason: 'Manual assignment for testing'
   })
 });
-```
-
-### 5. Get Client IP Summary
-
-```javascript
-// Get comprehensive client IP information
-const summaryResponse = await fetch('/client-ip-integration/clients/shruthi1/ip-summary');
-const summary = await summaryResponse.json();
-
-console.log('Client Info:', summary.clientInfo);
-console.log('Main Mobile Mapping:', summary.mainMobileMapping);
-console.log('Promote Mobile Mappings:', summary.promoteMobileMappings);
-console.log('Statistics:', summary.statistics);
 ```
 
 ## Integration with Existing Code
