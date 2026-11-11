@@ -34,14 +34,6 @@ export enum MessageMediaType {
   CHAT_PHOTO = 'chatPhoto' }
 
 /**
- * Enum for search scope
- */
-export enum SearchScope {
-  CHAT = 'chat',
-  GLOBAL = 'global'
-}
-
-/**
  * DTO for search messages request
  */
 export class SearchMessagesDto {

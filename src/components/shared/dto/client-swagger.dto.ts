@@ -1,11 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-export class AcceptedStringResponseDto {
-    @ApiProperty({
-        description: 'Acknowledgement returned when a long-running background operation is started.' })
-    message: string;
-}
-
 export class StatusUpdateRequestDto {
     @ApiProperty({
         description: 'Lifecycle status to assign to the client record.',

@@ -1,4 +1,4 @@
-import { IsBoolean, IsEnum, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsEnum, IsNumber, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export enum NotificationSound {
@@ -27,13 +27,4 @@ export class NotificationSettingsDto {
   @IsNumber()
   @IsOptional()
   muteUntil?: number;
-}
-
-export class ChatNotificationSettingsDto {
-  @ApiProperty({ description: 'Chat ID to update settings for' })
-  @IsString()
-  chatId: string;
-
-  @ApiProperty({ type: NotificationSettingsDto })
-  settings: NotificationSettingsDto;
 }

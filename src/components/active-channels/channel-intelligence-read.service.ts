@@ -47,7 +47,6 @@ export const SQ_PRIOR_RATE_FALLBACK = 0.82;// used ONLY when fleet has zero send
 //  (The delete-ratio exclusion is NOT part of this flag — see getJoinDeleteRatioLimit below.)
 export const JOIN_SCORING_V2_ENV = 'CHANNEL_JOIN_SCORING_V2';
 export const MIN_CONVERSION_EVIDENCE = 10;   // resolved sends needed before conversion weight may exceed 1.0
-export const DELETE_RATIO_EXCLUDE_V1 = 0.5;  // legacy CMS exclusion threshold (attempted >= 10)
 export const DELETE_RATIO_EXCLUDE_V2 = 0.3;  // tg-platform block threshold
 
 /**

@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { PrivacyLevel, PrivacyLevelEnum } from '../manager/types';
 
@@ -32,17 +32,6 @@ export class PrivacySettingsDto {
   @IsOptional()
   @IsEnum(PrivacyLevelEnum)
   groups?: PrivacyLevel;
-}
-
-export class SecuritySettingsDto {
-  @ApiProperty({ description: 'Enable/disable two-factor authentication' })
-  @IsBoolean()
-  twoFactorAuth: boolean;
-
-  @ApiProperty({ description: 'Active sessions limit', required: false })
-  @IsOptional()
-  @IsEnum([1, 2, 3, 4, 5])
-  activeSessionsLimit?: number;
 }
 
 export class ProfilePhotoDto {

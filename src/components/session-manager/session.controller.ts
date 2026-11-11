@@ -28,42 +28,6 @@ export class CreateSessionDto {
     forceNew?: boolean;
 }
 
-export class SearchAuditDto {
-    @ApiPropertyOptional({
-        description: 'Phone number to search for'})
-    @IsOptional()
-    @IsString()
-    mobile?: string;
-
-    @ApiPropertyOptional({
-        description: 'Session status to filter by',
-        enum: ['created', 'active', 'expired', 'revoked', 'failed']
-    })
-    @IsOptional()
-    @IsString()
-    status?: string;
-
-    @ApiPropertyOptional({
-        description: 'Number of records to return',
-        default: 10,
-        minimum: 1
-    })
-    @IsOptional()
-    @IsNumber()
-    @Min(1)
-    limit?: number;
-
-    @ApiPropertyOptional({
-        description: 'Number of records to skip',
-        default: 0,
-        minimum: 0
-    })
-    @IsOptional()
-    @IsNumber()
-    @Min(0)
-    offset?: number;
-}
-
 export class GetOldestSessionDto {
     @ApiPropertyOptional({
         description: 'Phone number to get session for'})

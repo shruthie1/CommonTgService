@@ -74,18 +74,6 @@ export class Client {
     @Prop({ required: false, default: null })
     gpayId: string;
 
-    @ApiProperty({ description: 'Dedicated proxy IPs', required: false })
-    @Prop({ required: false, type: [String], default: [] })
-    dedicatedIps?: string[];
-
-    @ApiProperty({ description: 'Preferred IP country (ISO 2-letter)', required: false })
-    @Prop({ required: false, default: null })
-    preferredIpCountry?: string;
-
-    @ApiProperty({ description: 'Auto-assign IPs to mobile numbers', required: false })
-    @Prop({ required: false, type: Boolean, default: false })
-    autoAssignIps?: boolean;
-
     @ApiProperty({ description: 'First name pool for persona assignment', required: false })
     @Prop({ required: false, type: [String], default: [] })
     firstNames: string[];

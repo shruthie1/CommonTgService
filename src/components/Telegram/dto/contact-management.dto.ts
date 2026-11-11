@@ -3,22 +3,6 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export type ExportFormat = 'vcard' | 'csv';
 
-export class ContactGroupDto {
-  @ApiProperty({ description: 'Name of the contact group' })
-  @IsString()
-  name: string;
-
-  @ApiProperty({ description: 'User IDs to include in the group', type: [String] })
-  @IsArray()
-  @IsString({ each: true })
-  userIds: string[];
-
-  @ApiProperty({ description: 'Optional description for the group' })
-  @IsOptional()
-  @IsString()
-  description?: string;
-}
-
 export class ContactBlockListDto {
   @ApiProperty({ description: 'User IDs to block/unblock', type: [String] })
   @IsArray()
@@ -39,16 +23,6 @@ export class ContactExportImportDto {
   @IsOptional()
   @IsBoolean()
   includeBlocked = false;
-}
-
-export class ContactImportDto {
-  @ApiProperty({ description: 'Contacts to import', type: [Object] })
-  @IsArray()
-  contacts: Array<{
-    firstName: string;
-    lastName?: string;
-    phone: string;
-  }>;
 }
 
 export class AddContactsDto {

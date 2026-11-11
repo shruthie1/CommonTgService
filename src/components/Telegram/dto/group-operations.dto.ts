@@ -2,19 +2,6 @@ import { IsString, IsOptional, IsNumber, IsBoolean, IsObject, ValidateNested, Is
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
 
-export enum AdminPermission {
-  CHANGE_INFO = 'changeInfo',
-  POST_MESSAGES = 'postMessages',
-  EDIT_MESSAGES = 'editMessages',
-  DELETE_MESSAGES = 'deleteMessages',
-  BAN_USERS = 'banUsers',
-  INVITE_USERS = 'inviteUsers',
-  PIN_MESSAGES = 'pinMessages',
-  ADD_ADMINS = 'addAdmins',
-  ANONYMOUS = 'anonymous',
-  MANAGE_CALL = 'manageCall'
-}
-
 export class AdminPermissionsDto {
   @ApiProperty({ description: 'Permission to change group info', default: true })
   @IsOptional()

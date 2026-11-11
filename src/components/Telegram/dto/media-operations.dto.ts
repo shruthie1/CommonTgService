@@ -96,20 +96,3 @@ export class SendMediaAlbumDto extends BaseMediaOperationDto {
   @Type(() => MediaAlbumItemDto)
   media: MediaAlbumItemDto[];
 }
-
-export class VoiceMessageDto extends BaseMediaOperationDto {
-  @ApiProperty({ description: 'URL of the voice message file' })
-  @IsString()
-  @IsUrl()
-  url: string;
-
-  @ApiProperty({ description: 'Duration of voice message in seconds', required: false })
-  @IsOptional()
-  @IsNumber()
-  duration?: number;
-
-  @ApiProperty({ description: 'Caption for the voice message', required: false })
-  @IsOptional()
-  @IsString()
-  caption?: string;
-}

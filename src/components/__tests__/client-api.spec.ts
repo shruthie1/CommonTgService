@@ -124,10 +124,10 @@ describe('Client API', () => {
             expect(result.bios).toEqual([]);
             expect(result.profilePics).toEqual([]);
 
-            // IP-related defaults
-            expect(result.dedicatedIps).toEqual([]);
-            expect(result.autoAssignIps).toBe(false);
-            expect(result.preferredIpCountry).toBeNull();
+            // IP fields were removed from the schema (never read): new docs do not get them
+            expect(result).not.toHaveProperty('dedicatedIps');
+            expect(result).not.toHaveProperty('autoAssignIps');
+            expect(result).not.toHaveProperty('preferredIpCountry');
         });
 
         it('creates a client without qrId and gpayId (defaults to null)', async () => {
@@ -443,13 +443,13 @@ describe('Client API', () => {
             expect(found?.profilePics).toEqual([]);
         });
 
-        it('IP-related fields default correctly', async () => {
+        it('removed IP fields are not written on create', async () => {
             const doc = await ClientModel.create(makeClientData());
             const found = await ClientModel.findOne({ clientId: doc.clientId }).lean();
 
-            expect(found?.dedicatedIps).toEqual([]);
-            expect(found?.autoAssignIps).toBe(false);
-            expect(found?.preferredIpCountry).toBeNull();
+            expect(found).not.toHaveProperty('dedicatedIps');
+            expect(found).not.toHaveProperty('autoAssignIps');
+            expect(found).not.toHaveProperty('preferredIpCountry');
         });
     });
 

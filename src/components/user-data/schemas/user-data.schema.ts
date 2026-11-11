@@ -88,7 +88,8 @@ export class UserData {
     /**
      * Complaint score: how strongly the user feels cheated; never a fake-payment or revenue signal (owner 2026-11-02).
      * Raised by tg-aut on "fake/scam" in chat; drives complaint calls, grace and the 48 h block. The name is historical
-     * (60k docs, many readers). The operator's fake-payment mark is fakePaymentAt below. Postgres mirror: cheat_flag.
+     * (60k docs, many readers). The operator's fake-payment mark is fakePaymentAt below. No Postgres mirror: the
+     * cheat_flag table was dropped 2026-11-11 (analytics cleanup wave 3, H11).
      */
     @Prop({ required: true, default: 0 })
     cheatCount: number;

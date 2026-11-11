@@ -1,6 +1,4 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsNumber, IsOptional, IsArray, IsBoolean, Min, Max, IsEnum } from 'class-validator';
-import { Transform, Type } from 'class-transformer';
 import { MediaType } from './media-operations.dto';
 
 export class MediaItemDto {
@@ -99,67 +97,4 @@ export class MediaGroupDto {
 
     @ApiProperty({ description: 'Pagination information for this type', type: PaginationDto })
     pagination: PaginationDto;
-}
-
-export class PaginatedMediaResponseDto {
-    @ApiProperty({ description: 'Array of media items (when single type or multiple types without grouping)', type: [MediaItemDto] })
-    data?: MediaItemDto[];
-
-    @ApiProperty({ description: 'Media grouped by type (when "all" is in types)', type: [MediaGroupDto] })
-    groups?: MediaGroupDto[];
-
-    @ApiProperty({ description: 'Pagination information (for single type or overall)', type: PaginationDto })
-    pagination: PaginationDto;
-
-    @ApiProperty({ description: 'Applied filters', type: MediaFiltersDto })
-    filters: MediaFiltersDto;
-}
-
-export class MediaMetadataQueryDto {
-    @ApiProperty({ description: 'Chat ID or username'})
-    @IsString()
-    chatId: string;
-
-    @ApiPropertyOptional({ description: 'Media types to filter. Use "all" to get all types grouped by type', enum: MediaType, isArray: true})
-    @IsOptional()
-    @IsArray()
-    @IsEnum(MediaType, { each: true })
-    @Transform(({ value }) => {
-        if (typeof value === 'string') {
-            return value.split(',').map(v => v.trim());
-        }
-        return Array.isArray(value) ? value : [value];
-    })
-    types?: MediaType[];
-
-    @ApiPropertyOptional({ description: 'Start date (ISO 8601)'})
-    @IsOptional()
-    @IsString()
-    startDate?: string;
-
-    @ApiPropertyOptional({ description: 'End date (ISO 8601)'})
-    @IsOptional()
-    @IsString()
-    endDate?: string;
-
-    @ApiPropertyOptional({ description: 'Maximum number of items (1-1000)', minimum: 1, maximum: 1000 })
-    @IsOptional()
-    @Type(() => Number)
-    @IsNumber()
-    @Min(1)
-    @Max(1000)
-    limit?: number;
-
-    @ApiPropertyOptional({ description: 'Maximum message ID to include (use for pagination - get messages with ID less than this)'})
-    @IsOptional()
-    @Type(() => Number)
-    @IsNumber()
-    maxId?: number;
-
-    @ApiPropertyOptional({ description: 'Minimum message ID to include'})
-    @IsOptional()
-    @Type(() => Number)
-    @IsNumber()
-    minId?: number;
-
 }

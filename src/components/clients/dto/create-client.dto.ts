@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform, TransformFnParams, Type } from 'class-transformer';
-import { ArrayUnique, IsArray, IsBoolean, IsOptional, IsString, IsUrl, Matches } from 'class-validator';
+import { Transform, TransformFnParams } from 'class-transformer';
+import { IsArray, IsOptional, IsString, IsUrl, Matches } from 'class-validator';
 import { CANONICAL_MOBILE_REGEX, normalizeMobileInput } from '../../shared/mobile-utils';
 
 export class CreateClientDto {
@@ -80,25 +80,6 @@ export class CreateClientDto {
     @IsOptional()
     @IsString()
     readonly gpayId: string;
-
-    @ApiPropertyOptional({ description: 'Dedicated proxy IPs' })
-    @IsOptional()
-    @IsArray()
-    @ArrayUnique()
-    @IsString({ each: true })
-    readonly dedicatedIps?: string[];
-
-    @ApiPropertyOptional({ description: 'Preferred IP country (ISO 2-letter)' })
-    @Transform(({ value }: TransformFnParams) => value?.trim().toUpperCase())
-    @IsOptional()
-    @Matches(/^[A-Z]{2}$/, { message: 'preferredIpCountry must be a 2-letter ISO country code' })
-    readonly preferredIpCountry?: string;
-
-    @ApiPropertyOptional({ description: 'Auto-assign IPs to mobile numbers' })
-    @IsOptional()
-    @Type(() => Boolean)
-    @IsBoolean()
-    readonly autoAssignIps?: boolean;
 
     @ApiPropertyOptional({ description: 'First name pool for persona assignment' })
     @IsOptional()
