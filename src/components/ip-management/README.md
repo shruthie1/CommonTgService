@@ -69,15 +69,8 @@ Mobile Number Request → Check Global Mapping → Found? Return IP
 }
 ```
 
-### Enhanced Client Schema
-```typescript
-{
-  // ... existing client fields ...
-  dedicatedIps?: string[];      // ["192.168.1.100:8080", ...]
-  preferredIpCountry?: string;  // Preferred country for IP assignment
-  autoAssignIps?: boolean;      // Enable/disable auto IP assignment
-}
-```
+### Client Schema
+The client schema has no IP fields. `dedicatedIps`, `preferredIpCountry` and `autoAssignIps` were removed on 2026-11-11. Old values stay in stored documents but nothing reads them.
 
 ## API Endpoints
 
@@ -216,7 +209,6 @@ const summaryResponse = await fetch('/client-ip-integration/clients/shruthi1/ip-
 const summary = await summaryResponse.json();
 
 console.log('Client Info:', summary.clientInfo);
-console.log('Dedicated IPs:', summary.dedicatedIps);
 console.log('Main Mobile Mapping:', summary.mainMobileMapping);
 console.log('Promote Mobile Mappings:', summary.promoteMobileMappings);
 console.log('Statistics:', summary.statistics);
@@ -235,7 +227,7 @@ await clientService.update(clientId, { mobile: newMobile });
 
 // When adding promote mobiles
 await clientService.addPromoteMobile(clientId, newPromoteMobile);
-// IP is automatically assigned if autoAssignIps is enabled
+// Assign its IP through the ip-management endpoints
 
 // Get IP for any mobile operation
 const ip = await clientService.getIpForMobile(mobile, clientId);
@@ -289,15 +281,7 @@ ENABLE_IP_HEALTH_CHECK=true
 
 ### Client Configuration
 
-Update your client records to enable IP management:
-
-```typescript
-// Enable auto-assignment for a client
-await clientService.update(clientId, {
-  autoAssignIps: true,
-  preferredIpCountry: 'US'
-});
-```
+No per-client setup is needed. The client IP fields were removed on 2026-11-11.
 
 ## Monitoring & Maintenance
 
@@ -368,7 +352,7 @@ The system includes automatic health monitoring:
    - Check client-specific IP assignments
 
 2. **Assignment Failures**
-   - Verify client exists and autoAssignIps is enabled
+   - Verify client exists
    - Check IP pool has available IPs in preferred country
    - Review assignment logs for error details
 
@@ -421,16 +405,7 @@ If you have existing IP management, follow these steps:
    ```
 
 3. **Update Client Configuration**
-   ```javascript
-   // Enable auto-assignment for existing clients
-   const clients = await clientService.findAll();
-   for (const client of clients) {
-     await clientService.update(client.clientId, {
-       autoAssignIps: true,
-       preferredIpCountry: 'US' // or client's preferred country
-     });
-   }
-   ```
+   No step. Clients have no IP fields since 2026-11-11.
 
 4. **Migrate Existing Assignments**
    ```javascript

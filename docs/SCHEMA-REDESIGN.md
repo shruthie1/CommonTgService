@@ -12,7 +12,7 @@
 ### Remove
 - `name` — replaced by firstNames/lastNames pools
 - `mainAccount` — not needed
-- `dedicatedIps` — not needed
+- `dedicatedIps` — not needed (removed from the client schema 2026-11-11, with `preferredIpCountry` and `autoAssignIps`; stored data untouched)
 
 ### Add
 | Field | Type | Default | Purpose |
