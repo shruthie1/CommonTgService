@@ -1,7 +1,7 @@
 /**
  * MemoryCleanerService is currently an intentionally-empty @Injectable. Its prior
  * heap-monitor/GC implementation was removed in commit f05d14c ("okayish"). It is
- * re-exported from src/index.ts but is NOT registered as a provider in any NestJS
+ * NOT registered as a provider in any NestJS
  * module, so the application never instantiates it.
  *
  * These tests document that reality rather than re-creating deleted behavior. If
