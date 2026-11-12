@@ -18,8 +18,7 @@ This system provides:
 1. **ProxyIp Schema**: Stores proxy IP information with authentication details
 2. **IpMobileMapping Schema**: Maps mobile numbers to IP addresses
 3. **IpManagementService**: Core IP and mapping management
-4. **ClientIpIntegrationService**: Integration with existing client system
-5. **Controllers**: REST API endpoints for all operations
+4. **Controllers**: REST API endpoints for all operations
 
 ### Flow Diagram
 
@@ -178,33 +177,6 @@ if (ip) {
 }
 ```
 
-### Telegram Integration Example
-
-```typescript
-// In your Telegram service, get IP before connecting
-async function connectWithMobileIp(mobile: string, clientId?: string) {
-  const ip = await clientIpIntegrationService.getIpForMobile(mobile, clientId);
-  
-  if (ip) {
-    const [ipAddress, port] = ip.split(':');
-    // Configure Telegram client with proxy
-    const telegramClient = new TelegramClient({
-      // ... other config
-      proxy: {
-        ip: ipAddress,
-        port: parseInt(port),
-        socksType: 5  // or http proxy
-      }
-    });
-    
-    await telegramClient.connect();
-  } else {
-    // Connect without proxy or handle error
-    console.warn(`No IP assigned to mobile ${mobile}`);
-  }
-}
-```
-
 ## Configuration
 
 ### Environment Variables
@@ -313,9 +285,6 @@ curl -X GET "http://localhost:3000/ip-management/proxy-ips/search?status=active&
 
 # Check client mappings
 curl -X GET http://localhost:3000/ip-management/clients/{clientId}/mappings
-
-# Get mobile IP with debug info
-curl -X GET "http://localhost:3000/clients/mobile/{mobile}/ip?clientId={clientId}"
 ```
 
 ## Migration Guide

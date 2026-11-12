@@ -82,3 +82,6 @@ sync-git.log
 
 # agent scratch/progress reports (not durable docs)
 .superpowers/
+
+# Webpack prod bundle (built in CI, uploaded by upload-build.js)
+/out/
