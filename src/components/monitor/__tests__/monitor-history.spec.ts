@@ -8,6 +8,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import {
   assembleHistory,
+  BUFFER_ACTIVE_FROM,
   chainSeries,
   HISTORY_PAGE_RE,
   HISTORY_SERIES,
@@ -144,12 +145,13 @@ describe('history SQL builders', () => {
     expect(historySendsRawSql(w7, null).sql).not.toContain('client_id =');
   });
 
-  it('pool: total + active only (b.active and p.eligible have no source), last sample per bucket', () => {
+  it('pool: total + active only (p.eligible has no source), buffer active read, last sample per bucket', () => {
     for (const s of [historyPoolSnapshotSql(w7, null), historyPoolSnapshotSql(w90, 'a'), historyDailyPoolSql(w24, null), historyMonthlyPoolSql(w24, null)]) {
       expect(s.sql).not.toMatch(/eligible/);
-      expect(s.sql).not.toMatch(/sum\(active(_last)?\) FILTER \(WHERE pool = 'b'/);
+      expect(s.sql).toMatch(/sum\(active(_last)?\) FILTER \(WHERE pool = 'b'[^)]*\), 0\) AS b_active/);
       expect(s.sql).toMatch(/AS p_active/);
     }
+    expect(historyPoolSnapshotSql(w90, 'alpha1').sql).toContain(`sum(active) FILTER (WHERE pool = 'b' AND client_id = $3), 0) AS b_active`);
     expect(historyPoolSnapshotSql(w90, null).sql).toContain('DISTINCT ON (1, pool, client_id)');
     expect(historyPoolSnapshotSql(w90, null).sql).toContain('ORDER BY 1, pool, client_id, ts_hour DESC');
     expect(historyPoolSnapshotSql(w7, null).sql).not.toContain('DISTINCT ON');
@@ -283,6 +285,58 @@ describe('assembleHistory', () => {
     expect(r.series.payers.values.slice(-3)).toEqual([null, 1950, 621]);
     expect(r.notes[0]).toMatch(/payers are distinct per month; not summable/);
     expect(r.cache).toEqual({ history: null, today: null, ageSec: null, historyAgeSec: null });
+    expect(r.series.poolBufferActive.values.every((v) => v === null)).toBe(true); // NOW is before BUFFER_ACTIVE_FROM
+  });
+  it('buffer active: null before BUFFER_ACTIVE_FROM (old rows hold 0), real values from then on', () => {
+    expect(BUFFER_ACTIVE_FROM).toBe('2026-11-08T22');
+    const later = Date.parse('2026-11-10T06:00:00Z');
+    const cover = [{ pool_snapshot: '2026-11-08T02', daily_pool: '2026-11-08', monthly_pool: '2026-10' }];
+    // hour: 21 (ts_hour 16:00Z, old writer) is a gap even though its row says 0; 22 on is real
+    const w7 = historyWindow('7d', later);
+    const pool = [
+      { b: '2026-11-08T21', b_total: '466', b_active: '0' },
+      { b: '2026-11-08T22', b_total: '466', b_active: '440' },
+      { b: '2026-11-09T00', b_total: '466', b_active: '0' },
+    ];
+    const r7 = assembleHistory(w7, null, { cover, pool }, later);
+    const at = (b: string) => r7.series.poolBufferActive.values[w7.buckets.indexOf(b)];
+    expect(at('2026-11-08T20')).toBeNull();
+    expect(at('2026-11-08T21')).toBeNull();
+    expect(at('2026-11-08T22')).toBe(440);
+    expect(at('2026-11-09T00')).toBe(0); // covered, real 0
+    expect(at('2026-11-09T01')).toBeNull(); // covered, no sample
+    expect(r7.series.poolBufferActive).toMatchObject({ source: 'pool_snapshot', from: '2026-11-08T22' });
+    expect(r7.series.poolBufferTotal.values[w7.buckets.indexOf('2026-11-08T21')]).toBe(466); // total unaffected
+    // day: 11-08 last sample is after the cutover (pool_snapshot); 11-07 from daily_pool stays a gap
+    const w90 = historyWindow('90d', later);
+    const r90 = assembleHistory(
+      w90,
+      null,
+      {
+        cover: [{ pool_snapshot: '2026-11-08T02', daily_pool: '2026-11-01' }],
+        pool: [{ b: '2026-11-08', b_total: '466', b_active: '452' }],
+        dailyPool: [{ b: '2026-11-07', b_total: '460', b_active: '0' }],
+      },
+      later,
+    );
+    const day = (b: string) => r90.series.poolBufferActive.values[w90.buckets.indexOf(b)];
+    expect(day('2026-11-07')).toBeNull();
+    expect(day('2026-11-08')).toBe(452);
+    expect(r90.series.poolBufferTotal.values[w90.buckets.indexOf('2026-11-07')]).toBe(460);
+    // month: October (monthly_pool) is a gap, November is real
+    const w24 = historyWindow('24m', later);
+    const r24 = assembleHistory(
+      w24,
+      null,
+      {
+        cover,
+        pool: [{ b: '2026-11', b_total: '466', b_active: '434' }],
+        monthlyPool: [{ b: '2026-10', b_total: '400', b_active: '0' }],
+      },
+      later,
+    );
+    expect(r24.series.poolBufferActive.values.slice(-2)).toEqual([null, 434]);
+    expect(r24.series.poolBufferTotal.values.slice(-2)).toEqual([400, 466]);
   });
   it('7d: sends from promotion_send; hourly new users only on closed days that add up to daily_client; pool gaps', () => {
     const w = historyWindow('7d', NOW);
@@ -325,7 +379,7 @@ describe('assembleHistory', () => {
       cover,
       revenue: big(['revenue', 'payers']),
       daily: big(['sent', 'delivered', 'failed', 'new_users']),
-      pool: big(['b_total', 'p_total', 'p_active']),
+      pool: big(['b_total', 'b_active', 'p_total', 'p_active']),
     };
     const r = assembleHistory(w, null, rows, NOW, {});
     expect(r.series.sent.values.every((v) => v === 123456)).toBe(true);

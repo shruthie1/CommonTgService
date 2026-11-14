@@ -21,8 +21,9 @@
  *    and the `failed` column (which already counts banned) on the rollup tables (monitor-sql.ts sendsLiveSql).
  *  - new users (tg-aut namespace, as dailyClientSql): hour = hourly_client (verified days only); day =
  *    daily_client; month = daily_client, then monthly_client.
- *  - pool (gauges; b.active and p.eligible have no source, never read): hour = pool_snapshot; day / month =
- *    the last sample per (bucket, pool, client) from pool_snapshot, then daily_pool, then monthly_pool.
+ *  - pool (gauges; p.eligible has no source, never read): hour = pool_snapshot; day / month = the last
+ *    sample per (bucket, pool, client) from pool_snapshot, then daily_pool, then monthly_pool. b.active is
+ *    written from CMS 71061d7f (live 2026-11-08 ~17:33Z); buckets before BUFFER_ACTIVE_FROM are null, not 0.
  */
 import { BadRequestException } from '@nestjs/common';
 import { SqlQuery } from './monitor-sql';
@@ -233,6 +234,7 @@ GROUP BY 1`,
 /** `c` = the client predicate (' AND client_id = $n') or ''; applied inside the sums (see historyPoolSnapshotSql). */
 const POOL_SUMS = (total: string, active: string, c: string) =>
   `coalesce(sum(${total}) FILTER (WHERE pool = 'b'${c}), 0) AS b_total,
+  coalesce(sum(${active}) FILTER (WHERE pool = 'b'${c}), 0) AS b_active,
   coalesce(sum(${total}) FILTER (WHERE pool = 'p'${c}), 0) AS p_total,
   coalesce(sum(${active}) FILTER (WHERE pool = 'p'${c}), 0) AS p_active`;
 
@@ -331,6 +333,7 @@ export const HISTORY_SERIES = [
   'failed',
   'newUsers',
   'poolBufferTotal',
+  'poolBufferActive',
   'poolPromoteTotal',
   'poolPromoteActive',
 ] as const;
@@ -364,6 +367,12 @@ interface Link {
   /** when set, only buckets of these IST days are covered (hour buckets of verified-complete days) */
   days?: Set<string>;
 }
+
+/**
+ * First IST hour whose pool_snapshot buffer rows carry a real `active` (ts_hour 2026-11-08 17:00Z, first row written 17:33Z with 434). Older rows
+ * (and daily_pool / monthly_pool rolled up from them) hold 0 there, so those buckets are null.
+ */
+export const BUFFER_ACTIVE_FROM = '2026-11-08T22';
 
 /** a bucket at or after `first` (labels compare as strings; a coarser first covers its whole period) */
 const covers = (b: string, first: string) => b >= first.slice(0, Math.min(first.length, b.length));
@@ -451,6 +460,12 @@ export function assembleHistory(
     ...(w.grain !== 'hour' ? [{ source: 'daily_pool', first: cover.daily_pool, rows: rows.dailyPool, col, gauge: true }] : []),
     ...(w.grain === 'month' ? [{ source: 'monthly_pool', first: cover.monthly_pool, rows: rows.monthlyPool, col, gauge: true }] : []),
   ];
+  /** b.active: no link starts before BUFFER_ACTIVE_FROM (a later source start still wins) */
+  const bufferActiveChain = (): Link[] =>
+    poolChain('b_active').map((l) => ({
+      ...l,
+      first: l.first && startKey(l.first) < startKey(BUFFER_ACTIVE_FROM) ? BUFFER_ACTIVE_FROM : l.first,
+    }));
   const series: Record<HistorySeriesKey, HistorySeries> = {
     revenue: chainSeries(B, revenueChain('revenue')),
     payers: chainSeries(B, revenueChain('payers')),
@@ -459,6 +474,7 @@ export function assembleHistory(
     failed: chainSeries(B, counterChain('failed')),
     newUsers: chainSeries(B, counterChain('new_users', true)),
     poolBufferTotal: chainSeries(B, poolChain('b_total')),
+    poolBufferActive: chainSeries(B, bufferActiveChain()),
     poolPromoteTotal: chainSeries(B, poolChain('p_total')),
     poolPromoteActive: chainSeries(B, poolChain('p_active')),
   };
