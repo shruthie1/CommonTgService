@@ -5,7 +5,7 @@ import { HISTORY_RANGES, parseHistoryRange } from './monitor-history';
 import { PROMO_WINDOWS, PromoWindow } from './monitor-promotions';
 import { REACT_WINDOWS, ReactWindow } from './monitor-reactions';
 import { REVENUE_HISTORY_FROM } from './monitor-util';
-import { LIVE_SVCS, LiveSvc, MonitorService } from './monitor.service';
+import { LIVE_SVCS, LiveSvc, MonitorService, PAID_SEARCH_LIMIT, PAID_SEARCH_MAX_LIMIT, PAID_SEARCH_MAX_Q, PAID_SEARCH_MIN_Q } from './monitor.service';
 
 const CLIENT_ID_RE = /^[A-Za-z0-9_-]{1,40}$/;
 
@@ -78,6 +78,23 @@ export function parseRange(from: string | undefined, to: string | undefined, now
   return { from, to: end };
 }
 
+/** Paid-chat search text: trimmed, one leading '@' stripped (as tg-chats matchesPaidFilter), 2-64 chars. */
+export function parsePaidSearchQ(q?: string): string {
+  const v = String(q ?? '').trim().replace(/^@/, '').trim();
+  if (v.length < PAID_SEARCH_MIN_Q) throw new BadRequestException(`q must be at least ${PAID_SEARCH_MIN_Q} characters`);
+  if (v.length > PAID_SEARCH_MAX_Q) throw new BadRequestException(`q must be at most ${PAID_SEARCH_MAX_Q} characters`);
+  return v;
+}
+
+/** Paid-chat search row cap: integer 1-200, default 100. */
+export function parsePaidSearchLimit(limit?: string): number {
+  if (limit === undefined || limit === '') return PAID_SEARCH_LIMIT;
+  if (!/^\d+$/.test(limit)) throw new BadRequestException(`limit must be an integer 1-${PAID_SEARCH_MAX_LIMIT}`);
+  const n = Number(limit);
+  if (n < 1 || n > PAID_SEARCH_MAX_LIMIT) throw new BadRequestException(`limit must be an integer 1-${PAID_SEARCH_MAX_LIMIT}`);
+  return n;
+}
+
 export function parseOptionalClientId(clientId?: string): string | null {
   if (clientId === undefined || clientId === '') return null;
   if (!CLIENT_ID_RE.test(clientId)) throw new BadRequestException('invalid clientId');
@@ -124,6 +141,19 @@ export class MonitorController {
   @ApiQuery({ name: 'clientId', required: false })
   paidChats(@Query('date') date?: string, @Query('clientId') clientId?: string) {
     return this.service.paidChats(parsePaidDate(date, Date.now()), parseOptionalClientId(clientId));
+  }
+
+  /**
+   * Search every paid chat since 2026-10-04, all clients (ignores date + client): case-insensitive
+   * substring of username, chat id, client id or persona. One row per (clientId, chatId, IST day) with
+   * `date`; exact chat id first, then newest. 400 on a bad q/limit, 503 when Postgres fails.
+   * Declared before client/:clientId.
+   */
+  @Get('paid-chats/search')
+  @ApiQuery({ name: 'q', required: true, description: 'search text, 2-64 chars; a leading @ is ignored' })
+  @ApiQuery({ name: 'limit', required: false, description: `rows, 1-${PAID_SEARCH_MAX_LIMIT} (default ${PAID_SEARCH_LIMIT})` })
+  searchPaidChats(@Query('q') q?: string, @Query('limit') limit?: string) {
+    return this.service.searchPaidChats(parsePaidSearchQ(q), parsePaidSearchLimit(limit));
   }
 
   /**

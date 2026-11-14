@@ -104,6 +104,9 @@ import {
   dmRowsSql,
   dmsByDaySql,
   mobilesSql,
+  likeContains,
+  paidChatIdsSql,
+  paidChatsSearchSql,
   paidChatsSql,
   paidOriginSql,
   paymentRowsSql,
@@ -144,7 +147,7 @@ import {
   historySqls,
   historyWindow,
 } from './monitor-history';
-import { DMS_ATTRIBUTION_FROM, FAMILY_DMS_FROM, historyNotes, maskMobile, maskPayload, num, ratio, REVENUE_HISTORY_FROM, withTimeout } from './monitor-util';
+import { DMS_ATTRIBUTION_FROM, escapeRegExp, FAMILY_DMS_FROM, historyNotes, maskMobile, maskPayload, num, ratio, REVENUE_HISTORY_FROM, withTimeout } from './monitor-util';
 
 export const MONITOR_REDIS = 'MONITOR_REDIS';
 
@@ -300,6 +303,34 @@ export interface PaidChatsResponse {
   source: 'payment_event';
   chats: PaidChat[];
   totals: { chats: number; credits: number; amount: number; ownerAmount: number };
+  notes: string[];
+}
+
+/** Defaults and bounds of GET /monitor/paid-chats/search. */
+export const PAID_SEARCH_LIMIT = 100;
+export const PAID_SEARCH_MAX_LIMIT = 200;
+export const PAID_SEARCH_MIN_Q = 2;
+export const PAID_SEARCH_MAX_Q = 64;
+/** Distinct paid chat ids (username search scope) are reused for this long. */
+export const PAID_IDS_TTL_MS = 60_000;
+
+/** One search hit: the paidChats row of one IST day, plus that day. */
+export interface PaidChatSearchRow extends PaidChat {
+  /** IST YYYY-MM-DD of the credits this row sums. */
+  date: string;
+}
+
+export interface PaidChatsSearchResponse {
+  q: string;
+  tz: 'Asia/Kolkata';
+  /** First IST day searched (payment_event start). */
+  from: string;
+  asOf: number;
+  source: 'payment_event';
+  /** Exact chat id hits first (all-digit q), then newest last credit. */
+  chats: PaidChatSearchRow[];
+  /** true = more rows matched than `limit`; narrow q. */
+  truncated: boolean;
   notes: string[];
 }
 
@@ -625,6 +656,8 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     onBackgroundError: (key, err) => this.logger.warn(`monitor clients refresh ${key} failed: ${String((err as Error)?.message ?? err).slice(0, 200)}`),
   });
   private readonly liveCache = new TtlCache<LiveSnapshot>(LIVE_TTL_MS, 2);
+  /** Distinct chat ids credited since REVENUE_HISTORY_FROM (paid-chats search username scope). */
+  private readonly paidIdsCache = new TtlCache<string[]>(PAID_IDS_TTL_MS, 1);
   /** Paid chats per closed IST day (fleet-wide rows; clientId filters in memory). */
   private readonly paidHistCache = new SwrCache<Loaded<PaidChat[]>>({
     freshMs: HISTORY_FRESH_MS,
@@ -1982,6 +2015,58 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       totals.ownerAmount += c.ownerAmount;
     }
     return { date, tz: 'Asia/Kolkata', clientId, asOf: loaded.asOf, source: 'payment_event', chats, totals, notes };
+  }
+
+  /**
+   * Paid chats of every IST day since REVENUE_HISTORY_FROM, every client, whose username, chat id,
+   * client id or persona contains `q` (case-insensitive, already trimmed, '@'-stripped and validated by
+   * the controller; matchesPaidFilter in tg-chats). One row per (clientId, chatId, IST day), as
+   * paidChats builds per day. Username hits: ONE userData find restricted to the paid chat ids (no
+   * username index), then the row must still match on its own resolved username, so a username of the
+   * same chat id under another client never pulls that client's rows in. Postgres failure = 503; a
+   * Mongo failure only drops username matches + usernames (note added).
+   */
+  async searchPaidChats(q: string, limit: number): Promise<PaidChatsSearchResponse> {
+    const asOf = Date.now();
+    const timings: Record<string, number> = {};
+    const from = istDayStart(REVENUE_HISTORY_FROM);
+    const needle = q.toLowerCase();
+    const notes: string[] = [];
+    let rows: Array<PaidChatPgRow & { day: string }>;
+    try {
+      const paidIds = (await this.paidIdsCache.get('all', async () => {
+        const r = await this.pgRows<{ chat_id: string }>(paidChatIdsSql(from), timings, false);
+        return r.map((x) => String(x.chat_id));
+      })).value;
+      let nameIds: string[] = [];
+      if (paidIds.length) {
+        try {
+          const docs = await this.mongoFind<{ chatId?: string }>(
+            'userData',
+            { chatId: { $in: paidIds }, username: { $regex: escapeRegExp(q), $options: 'i' } },
+            { _id: 0, chatId: 1 },
+            'mongo.userData_paid_search',
+            timings,
+          );
+          nameIds = [...new Set(docs.map((d) => d.chatId).filter((v): v is string => typeof v === 'string'))];
+        } catch (err) {
+          const msg = String((err as Error)?.message ?? err).slice(0, 200);
+          this.logger.warn(`monitor paid-chats search usernames failed: ${msg}`);
+          notes.push(`username search unavailable: ${msg}`);
+        }
+      }
+      const exact = /^\d+$/.test(q) ? q : null;
+      rows = await this.pgRows<PaidChatPgRow & { day: string }>(paidChatsSearchSql(from, likeContains(q), nameIds, exact, limit + 1), timings, false);
+    } catch (err) {
+      const msg = String((err as Error)?.message ?? err).slice(0, 200);
+      this.logger.warn(`monitor paid-chats search failed: ${msg}`);
+      throw new ServiceUnavailableException(`paid chat search unavailable: ${msg}`);
+    }
+    const truncated = rows.length > limit;
+    const hits: PaidChatSearchRow[] = rows.slice(0, limit).map((r) => ({ ...toPaidChat(r), date: String(r.day) }));
+    await this.addUsernames(hits, notes);
+    const chats = hits.filter((c) => [c.username, c.chatId, c.clientId, c.profile].some((v) => String(v || '').toLowerCase().includes(needle)));
+    return { q, tz: 'Asia/Kolkata', from: REVENUE_HISTORY_FROM, asOf, source: 'payment_event', chats, truncated, notes };
   }
 
   private async addUsernames(chats: PaidChat[], notes: string[]): Promise<void> {

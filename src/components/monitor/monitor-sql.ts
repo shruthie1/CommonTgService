@@ -328,6 +328,49 @@ ORDER BY max(ts) DESC`,
   );
 }
 
+/** LIKE pattern for a literal substring: `\`, `%` and `_` escaped (backslash is Postgres' default LIKE escape). */
+export function likeContains(text: string): string {
+  return `%${text.replace(/[\\%_]/g, '\\$&')}%`;
+}
+
+/**
+ * Distinct chat ids credited since `from` (GET /monitor/paid-chats/search): the userData username
+ * lookup is restricted to these ids (chatId_Profile index prefix), because userData has no username
+ * index and an unanchored regex over it would scan the whole collection.
+ */
+export function paidChatIdsSql(from: number): SqlQuery {
+  return q(
+    'paid_chat_ids',
+    `SELECT DISTINCT chat_id FROM payment_event_owner WHERE ts >= $1::timestamptz AND amount > 0`,
+    [iso(from)],
+  );
+}
+
+/**
+ * Paid-chat search across every day and client (GET /monitor/paid-chats/search): ONE row per
+ * (client_id, chat_id, IST day), the same row paidChatsSql builds for one day, plus `day`. Matches a
+ * case-insensitive substring (`pattern` from likeContains) of chat_id, client_id or persona_id, or a chat
+ * whose username matched in Mongo (`chatIds`). `exact` (all-digit query, else null) ranks that chat id
+ * first; then newest last credit. LIMIT `limit` (caller passes its limit + 1 to detect truncation).
+ * Cost: the ts range covers the whole ledger since 2026-10-04 (~250 grouped rows/day), so this is one
+ * scan of payment_event_owner; no substring index exists or is needed at this size.
+ */
+export function paidChatsSearchSql(from: number, pattern: string, chatIds: string[], exact: string | null, limit: number): SqlQuery {
+  return q(
+    'paid_chats_search',
+    `SELECT client_id, chat_id, to_char(${IST}, 'YYYY-MM-DD') AS day, min(persona_id) AS persona_id,
+  count(*)::int AS credits, sum(amount)::bigint AS amount, sum(owner_amount)::bigint AS owner_amount,
+  bool_or(cheat_flagged) AS cheat_flagged, min(ts) AS first_at, max(ts) AS last_at
+FROM payment_event_owner
+WHERE ts >= $1::timestamptz AND amount > 0
+  AND (chat_id ILIKE $2 OR client_id ILIKE $2 OR persona_id ILIKE $2 OR chat_id = ANY($3::text[]))
+GROUP BY client_id, chat_id, to_char(${IST}, 'YYYY-MM-DD')
+ORDER BY (chat_id = $4::text) IS TRUE DESC, max(ts) DESC, client_id, chat_id
+LIMIT $5`,
+    [iso(from), pattern, chatIds, exact, limit],
+  );
+}
+
 // ---------------------------------------------------------------- promotions + funnel (2026-10-29)
 
 /**

@@ -49,6 +49,11 @@ export function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promis
   return Promise.race([p, t]).finally(() => clearTimeout(timer));
 }
 
+/** A literal string as a RegExp / Mongo $regex source (every metacharacter escaped). */
+export function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export const DMS_ATTRIBUTION_FROM = '2026-10-26';
 /** payment_event starts 2026-10-03 20:32Z = 2026-10-04 02:02 IST. */
 export const REVENUE_HISTORY_FROM = '2026-10-04';
