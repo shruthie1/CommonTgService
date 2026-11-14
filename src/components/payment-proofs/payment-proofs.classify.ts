@@ -77,6 +77,18 @@ export function proofIdOf(row: Pick<PaymentProofRow, 'proofId' | 'clientId' | 'c
     return `${row.clientId}-${row.chatId}-${row.telegramMsgId}`;
 }
 
+/**
+ * The money was credited: verdict 'credited', or the row carries servedAt / creditAmount > 0 (written only by the
+ * credit claim), whatever the verdict says. A duplicate Telegram update of a served message once overwrote its verdict
+ * to 'repeat' DUPLICATE_UPDATE (arpitha1 ****9176 ₹51, 2026-11-10): the label lies, the served fields do not.
+ * Uncredit and the double-credit hint read this one rule.
+ */
+export function moneyCredited(p: { verdict?: { outcome?: string } | null; servedAt?: Date | string | null; creditAmount?: number | null }): boolean {
+    if (p.verdict?.outcome === 'credited') return true;
+    if (p.servedAt) return true;
+    return typeof p.creditAmount === 'number' && p.creditAmount > 0;
+}
+
 /** `<clientId>-<chatId>-<telegramMsgId>`; chatId may be negative (lazy clientId match keeps the sign on chatId). */
 export function parseProofId(proofId: unknown): { clientId: string; chatId: string; telegramMsgId: number } | null {
     if (typeof proofId !== 'string' || proofId.length > 120) return null;

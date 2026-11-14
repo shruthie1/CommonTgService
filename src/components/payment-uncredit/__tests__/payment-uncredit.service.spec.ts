@@ -136,6 +136,26 @@ describe('PaymentUncreditService', () => {
         expect(sent[0].m.title).toBe('Payment uncredited (₹350)');
     });
 
+    it("served proof whose verdict a duplicate update overwrote to 'repeat' (arpitha1 ****9176 ₹51, 2026-11-10): uncreditable, voided like any credit", async () => {
+        await proofs.collection.updateOne({ telegramMsgId: MSG }, { $set: { verdict: { outcome: 'repeat', reasons: ['DUPLICATE_UPDATE'] } } });
+        const res = await service.uncredit(PROOF_ID, { reason: 'other', note: 'extra revenue row', by: 'ops-sai' }, NOW);
+        expect(res.changed).toBe(true);
+        expect(pg.count('payment_void')).toBe(1);
+        expect(pg.calls[0].params).toEqual([PROOF_ID, CHAT, CLIENT, PROFILE, 350, SERVED.toISOString(), 'other: extra revenue row', 'ops-sai']);
+        const p = await proof();
+        expect(p.uncredited.state).toBe('done');
+        expect(p.servedAt).toEqual(SERVED);
+        expect(p.creditAmount).toBe(350);
+        expect((await user()).cheatCount).toBe(0);
+    });
+
+    it("a served 'repeat' proof of the same chat counts as an earlier payment when another one is uncredited", async () => {
+        await proofs.collection.updateOne({ telegramMsgId: 170001 }, { $set: { verdict: { outcome: 'repeat', reasons: ['DUPLICATE_UPDATE'] } } });
+        await service.uncredit(PROOF_ID, { reason: 'resent' }, NOW);
+        // Same as the plain void: the earlier ₹350 (170001) still holds the tier.
+        expect((await user()).highestPayAmount).toBe(350);
+    });
+
     it('payer kept (another counted payment that day): stats2 revenue lowered, marker kept', async () => {
         pg.voidRow = { ...pg.voidRow, payers_taken: false, payers_mobile: null };
         await connection.collection('stats2').updateOne({ chatId: CHAT }, { $set: { dailyRevenueCounted: 500 } });

@@ -9,7 +9,7 @@ import { AnalyticsPgError, AnalyticsPgReader } from '../daily-analytics/analytic
 import { ChannelCategory } from '../bots/channel-category.enum';
 import { getBotsServiceInstance } from '../../utils';
 import { PaymentProofsService } from '../payment-proofs/payment-proofs.service';
-import { parseProofId, proofIdOf } from '../payment-proofs/payment-proofs.classify';
+import { moneyCredited, parseProofId, proofIdOf } from '../payment-proofs/payment-proofs.classify';
 import { PAYMENT_PROOF_MODEL } from '../payment-proofs/schemas/payment-proof.schema';
 import { amountOf, liveCall, planRecredit, planUncredit, UserDataUndo } from './uncredit.plan';
 
@@ -67,9 +67,9 @@ function pgMessage(err: AnalyticsPgError | undefined): string {
     return err.code ? `${err.message} (${err.code})` : err.message;
 }
 
-export function isCredited(p: Pick<ProofRow, 'verdict' | 'servedAt'>): boolean {
-    const outcome = p.verdict?.outcome;
-    return outcome ? outcome === 'credited' : !!p.servedAt;
+/** Credited money (payment-proofs.classify moneyCredited): a served 'repeat' DUPLICATE_UPDATE row is uncreditable too. */
+export function isCredited(p: Pick<ProofRow, 'verdict' | 'servedAt' | 'creditAmount'>): boolean {
+    return moneyCredited(p);
 }
 
 export function creditOf(p: Pick<ProofRow, 'creditAmount' | 'amount'>): number {
