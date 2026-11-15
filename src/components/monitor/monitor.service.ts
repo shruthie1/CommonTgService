@@ -108,8 +108,12 @@ import {
   paidChatIdsSql,
   paidChatsSearchSql,
   paidChatsSql,
+  ATTRIBUTION_RULE,
+  attributionDailySql,
+  deadChannelsSql,
   paidOriginSql,
   paymentRowsSql,
+  restMobilesSql,
   promoMobileDaysSql,
   promoMobilesHistSql,
   promoMobilesTodaySql,
@@ -147,6 +151,18 @@ import {
   historySqls,
   historyWindow,
 } from './monitor-history';
+import {
+  ATTRIBUTION_NOTE,
+  attributionDays,
+  attributionFirstDay,
+  deadChannelsOf,
+  deadChannelWindow,
+  OVERLAP_NOTE,
+  paymentOverlaps,
+  REST_NOTE,
+  RestFlag,
+  restFlags,
+} from './monitor-enrich';
 import { DMS_ATTRIBUTION_FROM, escapeRegExp, FAMILY_DMS_FROM, historyNotes, maskMobile, maskPayload, num, ratio, REVENUE_HISTORY_FROM, withTimeout } from './monitor-util';
 
 export const MONITOR_REDIS = 'MONITOR_REDIS';
@@ -1635,7 +1651,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     const mobTo = rw && r.to < yday ? r.to : undefined;
     const t = (on: boolean, name: string, fn: () => Promise<any>) => (on ? this.section(name, ctx, fn) : Promise.resolve(null));
 
-    const [meta, fleet, payH, payT, dcH, dcT, dmsH, dmT, ydayHourly, live, mobH, mobT, channelRows, cohH, cohT, cohYH, ttfp, pool] = await Promise.all([
+    const [meta, fleet, payH, payT, dcH, dcT, dmsH, dmT, ydayHourly, live, mobH, mobT, channelRows, cohH, cohT, cohYH, ttfp, pool, dead] = await Promise.all([
       this.section('clients', ctx, () => this.clientMeta(ctx)),
       this.section('summary', ctx, () => (rw ? this.buildFleetW(rw, presetOf(rw.range, today), now, background) : this.buildFleet(legacyDays === 7 ? '7d' : '30d', now, background))),
       this.section('payments', ctx, () => this.payHist(ctx)),
@@ -1654,6 +1670,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       t(withToday, 'hourly_new_users', () => this.cohortsYdayHourly(ctx)),
       this.section('time_to_first_pay', ctx, () => this.timeToFirstPay(scope, r.start, ctx, withToday ? undefined : r.end)),
       this.section('pool', ctx, () => this.pool(ctx)),
+      fleetScope ? this.section('dead_channels', ctx, () => this.deadChannels(ctx)) : Promise.resolve(null),
     ]);
     if (fleet) ctx.merge(fleet.cache, Date.now());
 
@@ -1829,6 +1846,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     if (fleetScope) {
       notes.push('channels = top 20 fleet-wide by attributed DMs (conversion_event, incl. DMs without a client before 2026-10-26); channels with sends but no DMs are not listed.');
       notes.push('mobiles = top 20 accounts fleet-wide by tg-aut new users; clientId = the client that owned the mobile on its last day in range.');
+      notes.push('deadChannels = channels with delivered >= minDelivered and 0 DMs over the last 30 closed IST days (daily_channel, fleet; fixed window, not the page range); shareOfSends = their sends / every channel\'s sends.');
     } else {
       notes.push('channels = top 20 by attributed DMs (conversion_event); channels with sends but no DMs are not listed.');
     }
@@ -1847,6 +1865,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       distributions: { amount, hourOfDay, timeToFirstPay, repeat },
       mobiles,
       channels,
+      ...(fleetScope ? { deadChannels: dead } : {}),
       pool: pool ? { buffersEligible: p?.eligible ?? 0, buffersTotal: p?.total ?? 0, harsh: p?.harsh ?? 0, promoteActive: p?.promoteActive ?? 0 } : null,
       notes,
       timingsMs: ctx.timings,
@@ -2298,7 +2317,10 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       mobiles.add(a.mobile);
       promote.add(a.mobile);
     }
-    const acct = await this.section('redis_state', ctx, () => this.redisAccountState([...mobiles].sort(), promote, ctx));
+    const [acct, rest] = await Promise.all([
+      this.section('redis_state', ctx, () => this.redisAccountState([...mobiles].sort(), promote, ctx)),
+      this.section('rest_mobiles', ctx, () => this.restMobiles(ctx)),
+    ]);
 
     const entries = (live?.entries ?? []).map((e) => ({ svc: e.svc, clientId: e.clientId, payload: e.payload as Record<string, any> | null, state: classifyHeartbeat(e.payload, now).state }));
     const inputs = {
@@ -2313,8 +2335,10 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       names: new Map((meta ?? []).map((m) => [m.clientId, m.name])),
       routedCols,
       client,
+      rest,
     };
     const body = buildPromotions(inputs);
+    if (rest) body.notes.push(REST_NOTE);
     if (client !== null && meta && !meta.some((m) => m.clientId === client)) ctx.notes.push(`clientId ${client} is not in the clients collection.`);
     // client-scoped: the unscoped totals of the same parts (in memory), for "client · fleet" comparisons
     let fleet: { both: unknown; families: Record<Family, { totals: unknown }> } | undefined;
@@ -2605,6 +2629,37 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     }).then((l) => new Map(l.value));
   }
 
+  /** Mobiles flagged "rest" from yesterday's daily_mobile (REST_RULE). History part: yesterday is closed. */
+  private restMobiles(ctx: Ctx): Promise<Map<string, RestFlag>> {
+    return this.part<Array<[string, RestFlag]>>(ctx, 'history', 'rest_mobiles', async (now, t, bg) => {
+      const day = addDays(istDate(now), -1);
+      const rows = await this.pgRows<{ mobile: string; sent: string; banned: string }>(restMobilesSql(day), t, bg);
+      return [...restFlags(rows, day)];
+    }).then((l) => new Map(l.value));
+  }
+
+  /** Dead channels over the last DEAD_CHANNEL_RULE.DAYS closed IST days (fleet, daily_channel), titles from Mongo. */
+  private deadChannels(ctx: Ctx): Promise<ReturnType<typeof deadChannelsOf>> {
+    return this.part<any[]>(ctx, 'history', 'dead_channels', (now, t, bg) => {
+      const win = deadChannelWindow(istDate(now));
+      return this.pgRows(deadChannelsSql(win.from, win.to), t, bg);
+    }).then(async (l) => {
+      const win = deadChannelWindow(istDate(l.asOf));
+      const ids = l.value.filter((r) => r.channel_id != null).map((r) => String(r.channel_id));
+      const titles = ids.length ? await this.channelTitles(ids, ctx) : new Map<string, string>();
+      return deadChannelsOf(l.value, titles, win.from, win.to);
+    });
+  }
+
+  /** Attribution per (closed IST day, client) from attributionFirstDay(today) to yesterday (fleet-wide, filtered per page). */
+  private attributionDaily(ctx: Ctx): Promise<any[]> {
+    return this.part<any[]>(ctx, 'history', 'attribution_daily', (now, t, bg) => {
+      const today = istDate(now);
+      const from = attributionFirstDay(today);
+      return this.pgRows(attributionDailySql(from, addDays(today, -1), istDayStart(from), istDayStart(today)), t, bg);
+    }).then((l) => l.value);
+  }
+
   /** Route counters per (day, client) when the columns exist: closed days (history) or today. */
   private routedDaily(ctx: Ctx, kind: 'hist' | 'today', cols: string[]): Promise<any[]> {
     if (kind === 'hist') {
@@ -2642,7 +2697,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       : `${client ? `client:${client}` : 'detail:all'}:r:${w.range.from}:${w.range.to}`;
     const routed = await this.section('routed_columns', ctx, () => this.routedColumns(ctx));
     const routedCols = routed?.client ?? [];
-    const [fleet, payH, payT, origin, dmsH, dmY, dmT, dcH, dcT, routedRows, routedToday, detail] = await Promise.all([
+    const [fleet, payH, payT, origin, dmsH, dmY, dmT, dcH, dcT, routedRows, routedToday, detail, attribRows] = await Promise.all([
       this.section('summary', ctx, () => this.snap<FleetResponse>(fleetPage, false)),
       this.section('revenue', ctx, () => this.payHist(ctx)),
       withToday ? this.section('revenue_today', ctx, () => this.payToday(ctx)) : null,
@@ -2655,6 +2710,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       routedCols.length ? this.section('routed', ctx, () => this.routedDaily(ctx, intraday ? 'today' : 'hist', routedCols)) : null,
       routedCols.length && mixed ? this.section('routed', ctx, () => this.routedDaily(ctx, 'today', routedCols)) : null,
       byDay ? this.section('detail', ctx, () => this.snap<any>(detailPage, false)) : null,
+      byDay ? this.section('attribution_daily', ctx, () => this.attributionDaily(ctx)) : null,
     ]);
     if (fleet) ctx.merge(fleet.cache, Date.now());
     if (detail) ctx.merge(detail.cache, Date.now());
@@ -2766,8 +2822,17 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
           }
         : undefined;
 
+    // attribution per closed day in range (null on today-only or when the part failed); overlaps over the window's credits
+    const attribFrom = attributionFirstDay(w.today);
+    const attribution = attribRows
+      ? { from: attribFrom, lookbackDays: ATTRIBUTION_RULE.LOOKBACK_DAYS, daily: attributionDays(attribRows, w.range.from, closedTo, client) }
+      : null;
+    const overlaps = curCredits ? paymentOverlaps(curCredits, client) : null;
+
     const notes = [...historyNotes([w.range, w.prevRange]), ...ctx.notes];
-    notes.push('byOrigin: direct = first attributed DM from a tg-aut promotion (service t), routed = from a promote account (service p); payers/revenue by origin are attributed only (chats with an attributed DM since 2026-10-25), the rest is unattributed.');
+    if (attribution) notes.push(ATTRIBUTION_NOTE);
+    if (overlaps) notes.push(OVERLAP_NOTE);
+    notes.push('byOrigin: direct = first attributed DM from a tg-aut promotion (service t), routed = from a promote account (service p); payers/revenue by origin are attributed only (chats with an attributed DM by the same persona since 2026-10-25, on any client of that persona), the rest is unattributed.');
     notes.push('byOrigin newUsers: direct/routed = attributed DMs of that origin; unattributed = newUsers minus both (floored at 0).');
     if (!routedCols.includes('routes_sent')) notes.push('routed: history starts when counters ship (daily_client route columns not present yet).');
     if (routedCols.includes('routes_sent') && !routedCols.includes('routed_users')) notes.push('routed.routedUsers/reachRate/reachAlert: null until daily_client has the routed_users column (analytics upgrade 2026-10-30).');
@@ -2795,6 +2860,8 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       ttfp: detail?.distributions?.timeToFirstPay ?? null,
       repeat: detail?.distributions?.repeat ?? null,
       ...(fleetBlock ? { fleet: fleetBlock } : {}),
+      attribution,
+      paymentOverlaps: overlaps,
       notes,
       timingsMs: ctx.timings,
       cache: ctx.cache(Date.now()),

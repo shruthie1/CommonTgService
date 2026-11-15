@@ -3302,7 +3302,7 @@
   },
   "notes": [
    "Per-client attribution of DMs and sends begins 2026-10-26; DMs before it are only in fleet totals (unattributed).",
-   "byOrigin: direct = first attributed DM from a tg-aut promotion (service t), routed = from a promote account (service p); payers/revenue by origin are attributed only (chats with an attributed DM since 2026-10-25), the rest is unattributed.",
+   "byOrigin: direct = first attributed DM from a tg-aut promotion (service t), routed = from a promote account (service p); payers/revenue by origin are attributed only (chats with an attributed DM by the same persona since 2026-10-25, on any client of that persona), the rest is unattributed.",
    "byOrigin newUsers: direct/routed = attributed DMs of that origin; unattributed = newUsers minus both (floored at 0).",
    "routed: history starts when counters ship (daily_client route columns not present yet)."
   ],
@@ -3438,7 +3438,7 @@
    }
   },
   "notes": [
-   "byOrigin: direct = first attributed DM from a tg-aut promotion (service t), routed = from a promote account (service p); payers/revenue by origin are attributed only (chats with an attributed DM since 2026-10-25), the rest is unattributed.",
+   "byOrigin: direct = first attributed DM from a tg-aut promotion (service t), routed = from a promote account (service p); payers/revenue by origin are attributed only (chats with an attributed DM by the same persona since 2026-10-25, on any client of that persona), the rest is unattributed.",
    "byOrigin newUsers: direct/routed = attributed DMs of that origin; unattributed = newUsers minus both (floored at 0).",
    "routed: history starts when counters ship (daily_client route columns not present yet).",
    "timeToFirstPay / repeat are 7d/30d only (null for today); payer origins refresh every 10 min."

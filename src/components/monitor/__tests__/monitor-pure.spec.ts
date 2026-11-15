@@ -106,7 +106,11 @@ describe('monitor SQL builders', () => {
 
   it('paid origin: payers come from payment_event_owner (a voided payment is not a payer; works before and after the void migration)', () => {
     const o = paidOriginSql(Date.parse('2026-10-01T00:00:00Z'), Date.parse('2026-10-20T00:00:00Z'));
-    expect(o.sql).toContain('IN (SELECT chat_id, client_id FROM payment_event_owner WHERE ts >= $2::timestamptz AND amount > 0)');
+    expect(o.sql).toContain('FROM (SELECT DISTINCT chat_id, client_id, persona_id FROM payment_event_owner WHERE ts >= $2::timestamptz AND amount > 0) p');
+    // same persona, any client of it: the DM row's client is not part of the join
+    expect(o.sql).toContain('JOIN conversion_event c ON c.chat_id = p.chat_id AND c.profile = p.persona_id');
+    expect(o.sql).not.toMatch(/c\.client_id\s*=/);
+    expect(o.sql).toContain('DISTINCT ON (p.chat_id, p.client_id) p.chat_id, p.client_id, c.service');
     expect(o.sql).not.toMatch(/FROM payment_event\b(?!_owner)/);
     expect(o.sql).not.toContain('voided_at');
   });

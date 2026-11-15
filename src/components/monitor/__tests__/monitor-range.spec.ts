@@ -21,9 +21,35 @@ beforeEach(() => {
   jest.spyOn(Date, 'now').mockReturnValue(NOW);
 });
 
+/** Fields added after the golden (additive only, 2026-11-15 enrichments). Any other new key fails the golden test. */
+const ADDED_KEYS = new Set(['deadChannels', 'attribution', 'paymentOverlaps', 'rest', 'previous']);
+
+/**
+ * `got` projected onto the golden's shape: keys the golden lacks are dropped (each must be in ADDED_KEYS and
+ * is collected in `added`), string arrays keep only the golden's strings (notes gain lines), other arrays
+ * are compared element by element. Every value the golden has must still be equal.
+ */
+function likeGolden(got: any, want: any, added: Set<string>): any {
+  if (Array.isArray(want) && Array.isArray(got)) {
+    if (want.every((x) => typeof x === 'string') && got.every((x) => typeof x === 'string')) return got.filter((x) => want.includes(x));
+    return got.map((x, i) => (i < want.length ? likeGolden(x, want[i], added) : x));
+  }
+  if (want && got && typeof want === 'object' && typeof got === 'object' && !Array.isArray(want)) {
+    const out: any = {};
+    for (const k of Object.keys(got)) {
+      if (k in want) out[k] = likeGolden(got[k], want[k], added);
+      else added.add(k);
+    }
+    return out;
+  }
+  return got;
+}
+
 describe('legacy params are unchanged', () => {
-  it('fleet/detail/client/funnel/promotions/reactions presets equal the pre-change golden', async () => {
-    expect(await legacyResponses()).toEqual(golden);
+  it('fleet/detail/client/funnel/promotions/reactions presets equal the pre-change golden (new fields additive only)', async () => {
+    const added = new Set<string>();
+    expect(likeGolden(await legacyResponses(), golden, added)).toEqual(golden);
+    expect([...added].filter((k) => !ADDED_KEYS.has(k))).toEqual([]);
   });
 });
 

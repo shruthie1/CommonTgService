@@ -3,6 +3,7 @@
  * service loads the parts (Postgres sends, daily_mobile, DMs, Redis spam/route state, heartbeats,
  * assigned promote mobiles) and this module turns them into the response. Mobiles are masked here.
  */
+import type { RestFlag } from './monitor-enrich';
 import { FamSplit, FAMILIES, Family, familyOf } from './monitor-family';
 import type { Credit } from './monitor-merge';
 import { addDays, DateRange, DAY_MS, istDate, RangeKind, RangeWindows, resolvePeriod, Window } from './monitor-time';
@@ -331,6 +332,17 @@ export interface MobilePromo {
   idle: boolean;
   heartbeat: HeartbeatMobile | null;
   route24h: RouteState | null;
+  /** previous IST day banned > 30% of >= 20 sends (REST_RULE); null = not flagged. Absent when the rest part is not loaded. */
+  rest?: RestFlag | null;
+}
+
+/** A client's previous-window sends and rates, for "change vs previous" on the by-client table. */
+export interface ClientPrevious {
+  sent: number;
+  delivered: number;
+  banned: number;
+  deliveryRate: number | null;
+  banRate: number | null;
 }
 
 export type ClientPromo = Promo & {
@@ -341,6 +353,8 @@ export type ClientPromo = Promo & {
   engine?: EngineState | null;
   /** promote only: routedUsers >= REACH_ALERT.MIN_USERS and reachRate < REACH_ALERT.MAX_RATE (null until routed_users exists) */
   reachAlert?: boolean | null;
+  /** same family and client over the previous window (zero sends when the client had none) */
+  previous?: ClientPrevious;
 };
 
 export interface FamilyPromo {
@@ -365,6 +379,8 @@ export interface PromoInputs {
   /** ROUTED_COLUMNS present on daily_mobile */
   routedCols: readonly string[];
   client: string | null;
+  /** unmasked mobile -> rest flag (yesterday); null/undefined = not loaded (mobiles[].rest is then left out) */
+  rest?: Map<string, RestFlag> | null;
 }
 
 const key = (f: Family, c: string | null, m: string | null) => `${f}|${c ?? ''}|${m ?? ''}`;
@@ -518,6 +534,7 @@ export function buildPromotions(i: PromoInputs): PromotionsBody {
           idle: f === 'promote' && assignedSet.has(key('promote', a.clientId, a.mobile)) && a.sent <= PROMO_LIMITS.IDLE_ASSIGNED_SENDS,
           heartbeat: hb,
           route24h: f === 'promote' && i.route && a.mobile ? (i.route.get(a.mobile) ?? null) : null,
+          ...(i.rest ? { rest: (a.mobile && i.rest.get(a.mobile)) || null } : {}),
         };
       })
       .sort((x, y) => y.sent - x.sent || String(x.clientId).localeCompare(String(y.clientId)) || String(x.mobile).localeCompare(String(y.mobile)));
@@ -545,6 +562,7 @@ export function buildPromotions(i: PromoInputs): PromotionsBody {
     if (f === 'tg-aut' && i.heartbeats) for (const id of i.heartbeats.engines.keys()) if (client === null || id === client) ids.add(id);
     const clients: ClientPromo[] = [...ids].map((id) => {
       const mine = fc.filter((a) => a.clientId === id);
+      const before = promo(fp.filter((a) => a.clientId === id), null, w.window, limitedPrev);
       const last = mine.reduce<number | null>((m, a) => (a.lastAt !== null && (m === null || a.lastAt > m) ? a.lastAt : m), null);
       const row: ClientPromo = {
         clientId: id,
@@ -554,6 +572,7 @@ export function buildPromotions(i: PromoInputs): PromotionsBody {
         ...(f === 'promote' ? { reachAlert: reachAlertOf(routedSum(mine, 'routed_reached'), routedSum(mine, 'routed_users')) } : {}),
         mobilesAssigned: f === 'promote' && i.assigned ? assigned.filter((a) => a.clientId === id).length : null,
         lastSendAt: last !== null ? new Date(last).toISOString() : null,
+        previous: { sent: before.sent, delivered: before.delivered, banned: before.banned, deliveryRate: before.deliveryRate, banRate: before.banRate },
       };
       if (f === 'tg-aut') row.engine = i.heartbeats?.engines.get(id) ?? null;
       return row;

@@ -446,21 +446,119 @@ GROUP BY 1, 2, 3`,
 }
 
 /**
- * Origin of the chats that paid since `payFrom`: the first attributed DM conversion of the same
- * (chat, client) since `dmFrom` and its service ('t' direct tg-aut promotion, 'p' routed by a promote
- * account). payment_event's ts index bounds the payers; conversion_event has no chat index, so its
- * scan is the dm rows since dmFrom (same rows dms_hist reads). Chat ids never leave the service.
- * Payers read the payment_event_owner view, so a voided payment (Uncredit, 2026-11-08) is not a payer; the view
- * exists before and after that migration, so this SQL works in either deploy order.
+ * Origin of the chats that paid since `payFrom`: the first attributed DM conversion since `dmFrom` of the
+ * same chat by the same PERSONA (conversion_event.profile = payment_event.persona_id), whatever client
+ * recorded the DM, and its service ('t' direct tg-aut promotion, 'p' routed by a promote account). One row
+ * per paying (chat, client): the key the funnel joins on stays chat|client of the payment.
+ * Why persona: conversion_id is `${profile}:${chatId}` and its Redis claim is per persona, so only the first
+ * client of a persona gets the DM row (prod 2026-11-14: 267 paying rows in 14 d had their DM only on another
+ * client of the same persona). Both columns are written by the same process env (dbcoll), so no Mongo map
+ * from persona to client is needed.
+ * payment_event's ts index bounds the payers; conversion_event has no chat index, so its scan is the dm rows
+ * since dmFrom (same rows dms_hist reads), hash-joined to the payers. Chat ids never leave the service.
+ * Payers read the payment_event_owner view, so a voided payment (Uncredit, 2026-11-08) is not a payer.
  */
 export function paidOriginSql(dmFrom: number, payFrom: number): SqlQuery {
   return q(
     'paid_origin',
-    `SELECT DISTINCT ON (c.chat_id, c.client_id) c.chat_id, c.client_id, c.service
-FROM conversion_event c
+    `SELECT DISTINCT ON (p.chat_id, p.client_id) p.chat_id, p.client_id, c.service
+FROM (SELECT DISTINCT chat_id, client_id, persona_id FROM payment_event_owner WHERE ts >= $2::timestamptz AND amount > 0) p
+JOIN conversion_event c ON c.chat_id = p.chat_id AND c.profile = p.persona_id
 WHERE c.kind = 'dm' AND c.ts >= $1::timestamptz AND c.client_id IS NOT NULL
-  AND (c.chat_id, c.client_id) IN (SELECT chat_id, client_id FROM payment_event_owner WHERE ts >= $2::timestamptz AND amount > 0)
-ORDER BY c.chat_id, c.client_id, c.ts`,
+ORDER BY p.chat_id, p.client_id, c.ts`,
     [iso(dmFrom), iso(payFrom)],
+  );
+}
+
+/** "Rest" rule: a mobile whose ban rate on one IST day was above BAN_RATE on at least MIN_SENDS sends. */
+export const REST_RULE = { MIN_SENDS: 20, BAN_RATE: 0.3 } as const;
+
+/**
+ * Mobiles to rest today: daily_mobile on IST day `day` (yesterday), summed over every client and namespace
+ * of the mobile, with sent >= REST_RULE.MIN_SENDS and banned / sent > REST_RULE.BAN_RATE. Primary-key range
+ * on day (~100 rows). Mobiles never leave the service unmasked.
+ */
+export function restMobilesSql(day: string): SqlQuery {
+  return q(
+    'rest_mobiles',
+    `SELECT mobile, sum(sent) AS sent, sum(banned) AS banned
+FROM daily_mobile
+WHERE day = $1::date
+GROUP BY mobile
+HAVING sum(sent) >= $2::int AND sum(banned) > $3::numeric * sum(sent)`,
+    [day, REST_RULE.MIN_SENDS, REST_RULE.BAN_RATE],
+  );
+}
+
+/** Dead channel rule: delivered >= MIN_DELIVERED and 0 DMs over DAYS closed IST days (fleet, daily_channel). */
+export const DEAD_CHANNEL_RULE = { DAYS: 30, MIN_DELIVERED: 200, LIMIT: 50 } as const;
+
+/**
+ * Dead channels over closed IST days from..to (daily_channel, fleet-wide: it has no client_id): channels with
+ * delivered >= minDelivered and dms = 0. One statement: the summary (count, their sends and delivered, total
+ * sends of every channel) on every row, plus the top `limit` dead channels by delivered (channel_id NULL when
+ * there is none, so the summary still comes back). Primary-key range on day.
+ */
+export function deadChannelsSql(from: string, to: string, minDelivered: number = DEAD_CHANNEL_RULE.MIN_DELIVERED, limit: number = DEAD_CHANNEL_RULE.LIMIT): SqlQuery {
+  return q(
+    'dead_channels',
+    `WITH c AS (
+  SELECT channel_id, sum(sent) AS sent, sum(delivered) AS delivered, sum(dms) AS dms
+  FROM daily_channel WHERE day BETWEEN $1::date AND $2::date GROUP BY channel_id
+), s AS (
+  SELECT coalesce(sum(sent), 0) AS total_sent,
+    count(*) FILTER (WHERE delivered >= $3 AND dms = 0) AS n,
+    coalesce(sum(sent) FILTER (WHERE delivered >= $3 AND dms = 0), 0) AS dead_sent,
+    coalesce(sum(delivered) FILTER (WHERE delivered >= $3 AND dms = 0), 0) AS dead_delivered
+  FROM c
+)
+SELECT s.total_sent, s.n, s.dead_sent, s.dead_delivered, d.channel_id, d.sent, d.delivered
+FROM s LEFT JOIN LATERAL (
+  SELECT channel_id, sent, delivered FROM c WHERE delivered >= $3 AND dms = 0 ORDER BY delivered DESC, channel_id LIMIT $4
+) d ON true`,
+    [from, to, minDelivered, limit],
+  );
+}
+
+/** DM lookback of the attribution-per-day series, and the first day whose lookback the table fully covers. */
+export const ATTRIBUTION_RULE = { LOOKBACK_DAYS: 30, CE_RETENTION_DAYS: 62, CE_FIRST_DAY: '2026-10-03' } as const;
+
+/**
+ * Attribution per (closed IST day, client) over from..to: new users (daily_client, every namespace), DM
+ * conversions (conversion_event kind dm, distinct conversion_id per day and client), revenue (owner_amount of
+ * credits under ₹1,000, as the monitor's revenue) and the part of it whose chat had a DM row by the same
+ * persona in the `lookbackDays` before the payment. Instants: $3 = IST start of `from`, $4 = IST start of the
+ * day after `to`. conversion_event keeps 62 days: the caller keeps from >= today - (62 - lookbackDays).
+ */
+export function attributionDailySql(from: string, to: string, fromMs: number, endMs: number, lookbackDays: number = ATTRIBUTION_RULE.LOOKBACK_DAYS): SqlQuery {
+  return q(
+    'attribution_daily',
+    `WITH nu AS (
+  SELECT day::text AS d, client_id, sum(new_users) AS new_users
+  FROM daily_client WHERE day BETWEEN $1::date AND $2::date GROUP BY 1, 2
+), dm AS (
+  SELECT ${IST}::date::text AS d, client_id, count(DISTINCT conversion_id) AS dms
+  FROM conversion_event WHERE kind = 'dm' AND ts >= $3::timestamptz AND ts < $4::timestamptz GROUP BY 1, 2
+), pay AS (
+  SELECT id, ts, chat_id, client_id, persona_id, owner_amount
+  FROM payment_event_owner WHERE ts >= $3::timestamptz AND ts < $4::timestamptz AND amount > 0 AND amount < 1000
+), hit AS (
+  SELECT DISTINCT p.id
+  FROM pay p JOIN conversion_event c ON c.chat_id = p.chat_id AND c.profile = p.persona_id
+  WHERE c.kind = 'dm' AND c.ts >= $3::timestamptz - make_interval(days => $5) AND c.ts <= p.ts AND c.ts >= p.ts - make_interval(days => $5)
+), rev AS (
+  SELECT (p.ts AT TIME ZONE 'Asia/Kolkata')::date::text AS d, p.client_id, sum(p.owner_amount) AS revenue,
+    coalesce(sum(p.owner_amount) FILTER (WHERE h.id IS NOT NULL), 0) AS revenue_dm
+  FROM pay p LEFT JOIN hit h ON h.id = p.id GROUP BY 1, 2
+), k AS (
+  SELECT d, client_id FROM nu UNION SELECT d, client_id FROM dm UNION SELECT d, client_id FROM rev
+)
+SELECT k.d, k.client_id, coalesce(nu.new_users, 0) AS new_users, coalesce(dm.dms, 0) AS dms,
+  coalesce(rev.revenue, 0) AS revenue, coalesce(rev.revenue_dm, 0) AS revenue_dm
+FROM k
+LEFT JOIN nu ON nu.d = k.d AND nu.client_id IS NOT DISTINCT FROM k.client_id
+LEFT JOIN dm ON dm.d = k.d AND dm.client_id IS NOT DISTINCT FROM k.client_id
+LEFT JOIN rev ON rev.d = k.d AND rev.client_id IS NOT DISTINCT FROM k.client_id`,
+    [from, to, iso(fromMs), iso(endMs), lookbackDays],
   );
 }
