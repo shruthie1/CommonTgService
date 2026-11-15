@@ -108,6 +108,7 @@ import {
   paidChatIdsSql,
   paidChatsSearchSql,
   paidChatsSql,
+  parkedPaidSql,
   ATTRIBUTION_RULE,
   attributionDailySql,
   deadChannelsSql,
@@ -124,6 +125,7 @@ import {
   sendsLiveSql,
   SqlQuery,
 } from './monitor-sql';
+import { chatRows, coverageNotes, coverageOf, foldParked, loadParked, ParkedIO, ParkedLoaded } from './monitor-parked';
 import {
   addDays,
   clientDaysRange,
@@ -201,6 +203,9 @@ export const CHANNEL_CANDIDATES = 40;
 export const LIVE_TTL_MS = 5_000;
 /** activeChannels.reactRestricted counts: served for up to 1 h, then refreshed in the background. */
 export const RESTRICTED_FRESH_MS = 60 * 60_000;
+/** Parked chat route: response cache and Postgres cap. */
+export const PARKED_CHAT_TTL_MS = 30_000;
+export const PARKED_CHAT_PG_TIMEOUT_MS = 3_000;
 /** Whole responses: served fresh for 60 s, then served at once while one background rebuild runs (same IST day). */
 export const SNAPSHOT_FRESH_MS = TODAY_FRESH_MS;
 /**
@@ -700,6 +705,13 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
   private readonly pgGate = new ConcurrencyGate(2, 1);
   /** activeChannels reaction-restricted counts (unindexed scan, ~0.6 s): refreshed at most hourly. */
   private readonly restrictedCache = new SwrCache<Loaded<any>>({ freshMs: RESTRICTED_FRESH_MS, maxKeys: 2 });
+  /** Parked follow-through per IST range (facts fleet-wide; client filters in memory): 60 s when the range has today, else 10 min. */
+  private readonly parkedTodayCache = new SwrCache<Loaded<ParkedLoaded>>({ freshMs: TODAY_FRESH_MS, maxStaleMs: TODAY_MAX_STALE_MS, maxKeys: 10 });
+  private readonly parkedClosedCache = new SwrCache<Loaded<ParkedLoaded>>({ freshMs: HISTORY_FRESH_MS, maxKeys: 20 });
+  /** GET /monitor/parked/chat/:chatId responses, 30 s per chat. */
+  private readonly parkedChatCache = new TtlCache<{ chatId: string; asOf: number; rows: ReturnType<typeof chatRows>; notes: string[] }>(PARKED_CHAT_TTL_MS, 200);
+  /** Chat route Postgres cap (queue + query). */
+  parkedChatPgTimeoutMs = PARKED_CHAT_PG_TIMEOUT_MS;
 
   constructor(
     private readonly pg: AnalyticsPgReader,
@@ -2952,4 +2964,107 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     entries.sort((a, b) => a.svc.localeCompare(b.svc) || a.clientId.localeCompare(b.clientId));
     return { entries, notes: ctx.notes };
   }
+  // ---------------------------------------------------------------- parked follow-through (read-only)
+
+  /**
+   * Reads for monitor-parked.ts. `pgTimeoutMs` (chat route): the whole Postgres read, gate queue included, gives
+   * up after this long (money null + note); a timed-out query still finishes in the background lane.
+   */
+  private parkedIO(timings: Record<string, number>, background: boolean, pgTimeoutMs?: number): ParkedIO {
+    return {
+      find: (coll, filter, projection, name) => this.mongoFind(coll, filter, projection, name, timings),
+      first: async (coll, filter, sort, projection, name) => {
+        const t = Date.now();
+        try {
+          const cursor = this.connection
+            .collection(coll)
+            .find(filter as any, { projection, maxTimeMS: MONGO_MAX_TIME_MS, readPreference: 'secondaryPreferred' } as any)
+            .sort(sort)
+            .limit(1);
+          const docs = (await withTimeout(cursor.toArray(), MONGO_TIMEOUT_MS, name)) as any[];
+          return docs[0] ?? null;
+        } finally {
+          timings[name] = Date.now() - t;
+        }
+      },
+      pg: (q) => (pgTimeoutMs === undefined ? this.pgRows(q, timings, background) : withTimeout(this.pgRows(q, timings, background), pgTimeoutMs, q.name)),
+    };
+  }
+
+  /**
+   * Parked replies of the IST range [from, to] and what followed (logic: monitor-parked.ts). Money (Postgres
+   * payment_event_owner) counts credits after each reply up to the load time; a Postgres failure leaves the
+   * money fields null with a note. A Mongo failure = 503.
+   */
+  async parked(r: DateRange, clientId: string | null) {
+    const now = Date.now();
+    const today = istDate(now);
+    const start = istDayStart(r.from);
+    const end = Math.min(istDayStart(addDays(r.to, 1)), now);
+    const live = r.to >= today;
+    let loaded: Loaded<ParkedLoaded>;
+    try {
+      const res = await (live ? this.parkedTodayCache : this.parkedClosedCache).get(
+        `${r.from}:${r.to}`,
+        async (background) => {
+          const asOf = Date.now();
+          const timings: Record<string, number> = {};
+          const value = await loadParked(this.parkedIO(timings, background), {
+            filter: { status: 'replied', repliedAt: { $gte: new Date(start), $lt: new Date(end) } },
+            until: asOf,
+            now: asOf,
+            paidSql: parkedPaidSql,
+            coverage: true,
+          });
+          if (value.moneyDown) this.logger.warn(`monitor parked money failed: ${value.moneyDown}`);
+          return { value, asOf, timings };
+        },
+        live ? istDayStart(addDays(today, 1)) : Number.POSITIVE_INFINITY,
+      );
+      loaded = res.value;
+    } catch (err) {
+      const msg = String((err as Error)?.message ?? err).slice(0, 200);
+      this.logger.warn(`monitor parked ${r.from}..${r.to} failed: ${msg}`);
+      throw new ServiceUnavailableException(`parked unavailable: ${msg}`);
+    }
+    const v = loaded.value;
+    const scoped = clientId === null ? v.rows : v.rows.filter((x) => x.clientId === clientId);
+    const coverage = coverageOf(scoped, v.coverage?.parkedFrom ?? null, v.coverage?.swapHistoryFrom ?? null);
+    return {
+      from: r.from,
+      to: r.to,
+      tz: 'Asia/Kolkata',
+      asOf: loaded.asOf,
+      clientId,
+      coverage,
+      ...foldParked(v.facts, clientId),
+      notes: coverageNotes(coverage, start, v.moneyDown),
+    };
+  }
+
+  /**
+   * Every parkedChats row of one chat with its follow-through, cached 30 s per chat. No coverage or swap reads.
+   * Postgres runs in the background lane of pgGate (never more than one connection, and behind any queued viewer
+   * read), capped at parkedChatPgTimeoutMs; on timeout money is null with a note. A Mongo failure = 503.
+   */
+  async parkedChat(chatId: string) {
+    try {
+      const hit = await this.parkedChatCache.get(chatId, async () => {
+        const asOf = Date.now();
+        const v = await loadParked(this.parkedIO({}, true, this.parkedChatPgTimeoutMs), {
+          filter: { chatId },
+          until: asOf,
+          now: asOf,
+          paidSql: parkedPaidSql,
+          coverage: false,
+        });
+        return { chatId, asOf, rows: chatRows(v), notes: v.moneyDown ? [`Money unavailable (Postgres): ${v.moneyDown}`] : [] };
+      });
+      return hit.value;
+    } catch (err) {
+      const msg = String((err as Error)?.message ?? err).slice(0, 200);
+      throw new ServiceUnavailableException(`parked chat unavailable: ${msg}`);
+    }
+  }
+
 }

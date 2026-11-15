@@ -562,3 +562,22 @@ LEFT JOIN rev ON rev.d = k.d AND rev.client_id IS NOT DISTINCT FROM k.client_id`
     [from, to, iso(fromMs), iso(endMs), lookbackDays],
   );
 }
+
+/**
+ * Money after parked replies (GET /monitor/parked): one input row per replied parkedChats row (chat,
+ * persona, repliedAt), matched to payment_event_owner on chat_id with persona_id = the parked persona
+ * (payment_event.persona_id is the userData profile, as conversion_event.profile above), credited in
+ * (replied_at, until), 0 < amount < 1000 (owner rule 8, as revenue above: a credit of ₹1,000 or more is never
+ * real). owner_amount is 0 for every payment of a fake-marked chat and voided rows are not in the view. Returns only input rows with payments; `i` is the 1-based input position.
+ */
+export function parkedPaidSql(rows: Array<{ chatId: string; persona: string; repliedAt: number }>, until: number): SqlQuery {
+  return q(
+    'parked_paid',
+    `SELECT r.i, sum(p.owner_amount)::bigint AS paid_rs, count(*)::int AS paid_count
+FROM unnest($1::text[], $2::text[], $3::timestamptz[]) WITH ORDINALITY AS r(chat_id, persona, replied_at, i)
+JOIN payment_event_owner p ON p.chat_id = r.chat_id AND p.persona_id = r.persona
+WHERE p.ts > r.replied_at AND p.ts < $4::timestamptz AND p.amount > 0 AND p.amount < 1000
+GROUP BY r.i`,
+    [rows.map((r) => r.chatId), rows.map((r) => r.persona), rows.map((r) => iso(r.repliedAt)), iso(until)],
+  );
+}

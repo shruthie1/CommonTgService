@@ -8,6 +8,7 @@ import { REVENUE_HISTORY_FROM } from './monitor-util';
 import { LIVE_SVCS, LiveSvc, MonitorService, PAID_SEARCH_LIMIT, PAID_SEARCH_MAX_LIMIT, PAID_SEARCH_MAX_Q, PAID_SEARCH_MIN_Q } from './monitor.service';
 
 const CLIENT_ID_RE = /^[A-Za-z0-9_-]{1,40}$/;
+const CHAT_ID_RE = /^-?\d{1,20}$/;
 
 export function parsePeriod(period?: string): MonitorPeriod {
   if (period === undefined || period === '') return 'today';
@@ -209,6 +210,29 @@ export class MonitorController {
     const r = parseRange(from, to, Date.now());
     const c = parseOptionalClientId(client);
     return r ? this.service.funnelRange(r, c) : this.service.funnel(parsePeriod(period), c);
+  }
+
+  /**
+   * Parked replies (apps promote + tg-aut, parkedChats status replied) of the IST range and what followed:
+   * moved to the main, money after the reply (Postgres), swap cohorts. Default range = today. 400 on a bad
+   * range or client, 503 when Mongo fails (Postgres failure = money null + note). Declared before client/:clientId.
+   */
+  @Get('parked')
+  @ApiQuery({ name: 'from', required: false, description: 'IST YYYY-MM-DD (default today)' })
+  @ApiQuery({ name: 'to', required: false, description: 'IST YYYY-MM-DD inclusive (default = from)' })
+  @ApiQuery({ name: 'client', required: false })
+  parked(@Query('from') from?: string, @Query('to') to?: string, @Query('client') client?: string) {
+    const now = Date.now();
+    const r = parseRange(from, to, now) ?? { from: istDate(now), to: istDate(now) };
+    return this.service.parked(r, parseOptionalClientId(client));
+  }
+
+  /** Every parkedChats row of one chat with its follow-through. 400 on a bad chat id. Declared before client/:clientId. */
+  @Get('parked/chat/:chatId')
+  @ApiParam({ name: 'chatId' })
+  parkedChat(@Param('chatId') chatId: string) {
+    if (!CHAT_ID_RE.test(chatId ?? '')) throw new BadRequestException('invalid chatId');
+    return this.service.parkedChat(chatId);
   }
 
   @Get('client/:clientId')
