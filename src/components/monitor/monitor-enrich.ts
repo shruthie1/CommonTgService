@@ -51,8 +51,8 @@ export interface DeadChannels {
   totalSends: number;
   /** sends / totalSends; null when nothing was sent */
   shareOfSends: number | null;
-  /** top `limit` dead channels by delivered */
-  channels: Array<{ title: string; sends: number; delivered: number }>;
+  /** top `limit` dead channels by delivered; id = daily_channel channel_id (unique per row, titles can repeat) */
+  channels: Array<{ id: string; title: string; sends: number; delivered: number }>;
 }
 
 /** The closed-day window of the dead-channel table: the last DAYS IST days before today. */
@@ -78,7 +78,7 @@ export function deadChannelsOf(rows: any[], titles: Map<string, string>, from: s
       .filter((r) => r.channel_id != null)
       .map((r) => {
         const id = String(r.channel_id);
-        return { title: titles.get(id) ?? `channel …${id.slice(-4)}`, sends: num(r.sent), delivered: num(r.delivered) };
+        return { id, title: titles.get(id) ?? `channel …${id.slice(-4)}`, sends: num(r.sent), delivered: num(r.delivered) };
       }),
   };
 }
@@ -137,7 +137,7 @@ export function attributionDays(rows: any[], from: string, to: string, client: s
   });
 }
 
-export const ATTRIBUTION_NOTE = `attribution.daily: newUserChannelShare = DM conversions (conversion_event kind dm, every DM row has a channel) / new users (daily_client, every namespace); revenueDmShare = revenue (credits under ₹1,000) whose chat had a DM row by the same persona in the ${ATTRIBUTION_RULE.LOOKBACK_DAYS} days before the payment / revenue. Closed IST days only, from today - ${ATTRIBUTION_RULE.CE_RETENTION_DAYS - ATTRIBUTION_RULE.LOOKBACK_DAYS} (conversion_event keeps ${ATTRIBUTION_RULE.CE_RETENTION_DAYS} days).`;
+export const ATTRIBUTION_NOTE = `attribution.daily: newUserChannelShare = DM conversions (conversion_event kind dm, every DM row has a channel) / new users (daily_client, namespace tg-aut, as every other monitor new-user count); revenueDmShare = revenue (credits under ₹1,000) whose chat had a DM row by the same persona in the ${ATTRIBUTION_RULE.LOOKBACK_DAYS} days before the payment / revenue. Closed IST days only, from today - ${ATTRIBUTION_RULE.CE_RETENTION_DAYS - ATTRIBUTION_RULE.LOOKBACK_DAYS} (conversion_event keeps ${ATTRIBUTION_RULE.CE_RETENTION_DAYS} days).`;
 
 // ---------------------------------------------------------------- payment overlaps
 
@@ -151,7 +151,7 @@ export interface PaymentOverlaps {
   doublePairs: number;
   /** of doublePairs: the two credits are on different clients */
   crossClientPairs: number;
-  /** amount of the second credit of each pair */
+  /** owner revenue of the second credit of each pair (Credit.revenue: owner_amount under ₹1,000, as every revenue on the page) */
   doubleAmount: number;
   windowSec: number;
 }
@@ -190,10 +190,10 @@ export function paymentOverlaps(credits: Credit[], client: string | null): Payme
       if (client !== null && a.client !== client && b.client !== client) continue;
       doublePairs++;
       if ((a.client ?? '') !== (b.client ?? '')) crossClientPairs++;
-      doubleAmount += b.amount;
+      doubleAmount += b.revenue;
     }
   }
   return { multiClientChats, doublePairs, crossClientPairs, doubleAmount, windowSec: DOUBLE_CREDIT_WINDOW_MS / 1000 };
 }
 
-export const OVERLAP_NOTE = `paymentOverlaps: multiClientChats = chats with credits on more than one client in the range; doublePairs = consecutive credits of the same chat and amount within ${DOUBLE_CREDIT_WINDOW_MS / 1000} s on any client (possible double credit, research rule), crossClientPairs = of those, on two clients.`;
+export const OVERLAP_NOTE = `paymentOverlaps: multiClientChats = chats with credits on more than one client in the range; doublePairs = consecutive credits of the same chat and amount within ${DOUBLE_CREDIT_WINDOW_MS / 1000} s on any client (possible double credit, research rule), crossClientPairs = of those, on two clients; doubleAmount = owner revenue of the second credit of each pair (credits under ₹1,000, as the page revenue).`;

@@ -521,10 +521,10 @@ FROM s LEFT JOIN LATERAL (
 }
 
 /** DM lookback of the attribution-per-day series, and the first day whose lookback the table fully covers. */
-export const ATTRIBUTION_RULE = { LOOKBACK_DAYS: 30, CE_RETENTION_DAYS: 62, CE_FIRST_DAY: '2026-10-03' } as const;
+export const ATTRIBUTION_RULE = { LOOKBACK_DAYS: 30, CE_RETENTION_DAYS: 62, CE_FIRST_DAY: '2026-10-04' } as const;
 
 /**
- * Attribution per (closed IST day, client) over from..to: new users (daily_client, every namespace), DM
+ * Attribution per (closed IST day, client) over from..to: new users (daily_client, tg-aut only, as the rest of the monitor), DM
  * conversions (conversion_event kind dm, distinct conversion_id per day and client), revenue (owner_amount of
  * credits under ₹1,000, as the monitor's revenue) and the part of it whose chat had a DM row by the same
  * persona in the `lookbackDays` before the payment. Instants: $3 = IST start of `from`, $4 = IST start of the
@@ -534,7 +534,7 @@ export function attributionDailySql(from: string, to: string, fromMs: number, en
   return q(
     'attribution_daily',
     `WITH nu AS (
-  SELECT day::text AS d, client_id, sum(new_users) AS new_users
+  SELECT day::text AS d, client_id, coalesce(sum(new_users) FILTER (WHERE namespace = 'tg-aut'), 0) AS new_users
   FROM daily_client WHERE day BETWEEN $1::date AND $2::date GROUP BY 1, 2
 ), dm AS (
   SELECT ${IST}::date::text AS d, client_id, count(DISTINCT conversion_id) AS dms

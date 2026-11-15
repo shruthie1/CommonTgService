@@ -11,7 +11,7 @@ import {
   restFlags,
 } from '../monitor-enrich';
 import { Credit } from '../monitor-merge';
-import { attributionDailySql, deadChannelsSql, paidOriginSql, restMobilesSql } from '../monitor-sql';
+import { attributionDailySql, dailyClientSql, deadChannelsSql, paidOriginSql, restMobilesSql } from '../monitor-sql';
 import { MonitorService } from '../monitor.service';
 
 const NOW = Date.parse('2026-11-15T06:00:00.000Z'); // 11:30 IST
@@ -94,6 +94,19 @@ describe('SQL builders', () => {
     expect(q.sql).toContain('FROM payment_event_owner');
     expect(q.params).toEqual(['2026-11-02', '2026-11-14', '2026-11-01T18:30:00.000Z', '2026-11-14T18:30:00.000Z', 30]);
   });
+
+  it('attribution: new users count tg-aut only (as dailyClientSql); promote-clients first DMs are not new users', () => {
+    const q = attributionDailySql('2026-11-02', '2026-11-14', Date.parse('2026-11-01T18:30:00Z'), Date.parse('2026-11-14T18:30:00Z'));
+    const nu = /WITH nu AS \(([\s\S]*?)\n\), dm AS/.exec(q.sql)?.[1] ?? '';
+    expect(nu).toContain('FROM daily_client');
+    // every new_users sum in the CTE carries the tg-aut filter; an unfiltered sum would add promote-clients rows
+    const sums = nu.match(/sum\(new_users\)[^,\n]*/g) ?? [];
+    expect(sums).toEqual(["sum(new_users) FILTER (WHERE namespace = 'tg-aut')"]);
+    // same filter text as the per-client new users of the rest of the monitor
+    const monitorNu = dailyClientSql('dc_hist', '2026-11-02', '2026-11-14').sql.match(/sum\(new_users\) FILTER \(WHERE namespace = 'tg-aut'\)/);
+    expect(monitorNu).not.toBeNull();
+    expect(nu).toContain(monitorNu![0]);
+  });
 });
 
 describe('pure folds', () => {
@@ -118,8 +131,8 @@ describe('pure folds', () => {
     const d = deadChannelsOf(rows, new Map([['555', 'Dead One']]), '2026-10-16', '2026-11-14');
     expect(d).toMatchObject({ count: 2, sends: 450, delivered: 420, totalSends: 1000, shareOfSends: 0.45, days: 30, minDelivered: 200 });
     expect(d.channels).toEqual([
-      { title: 'Dead One', sends: 250, delivered: 230 },
-      { title: 'channel …1234', sends: 200, delivered: 190 },
+      { id: '555', title: 'Dead One', sends: 250, delivered: 230 },
+      { id: '-1001234', title: 'channel …1234', sends: 200, delivered: 190 },
     ]);
     const none = deadChannelsOf([{ total_sent: '1000', n: '0', dead_sent: '0', dead_delivered: '0', channel_id: null }], new Map(), 'a', 'b');
     expect(none).toMatchObject({ count: 0, sends: 0, shareOfSends: 0, channels: [] });
@@ -127,7 +140,8 @@ describe('pure folds', () => {
   });
 
   it('attributionFirstDay: retention minus lookback, never before the table start + lookback', () => {
-    expect(attributionFirstDay('2026-11-15')).toBe('2026-11-02');
+    // conversion_event starts 2026-10-03T18:42Z = 2026-10-04 IST (prod min(ts), 2026-11-15); + 30 days = 2026-11-03
+    expect(attributionFirstDay('2026-11-15')).toBe('2026-11-03');
     expect(attributionFirstDay('2026-12-20')).toBe('2026-11-18');
   });
 
@@ -160,6 +174,17 @@ describe('pure folds', () => {
     expect(paymentOverlaps(cs, null)).toEqual({ multiClientChats: 1, doublePairs: 2, crossClientPairs: 1, doubleAmount: 150, windowSec: 120 });
     expect(paymentOverlaps(cs, 'alpha2')).toEqual({ multiClientChats: 1, doublePairs: 1, crossClientPairs: 1, doubleAmount: 50, windowSec: 120 });
     expect(paymentOverlaps([], null)).toEqual({ multiClientChats: 0, doublePairs: 0, crossClientPairs: 0, doubleAmount: 0, windowSec: 120 });
+  });
+
+  it('paymentOverlaps: doubleAmount sums owner revenue (capped), not the gross amount', () => {
+    const own = (c: Credit, revenue: number): Credit => ({ ...c, revenue });
+    const cs = [
+      own(credit('c1', 'alpha1', '2026-11-14T10:00:00', 100), 70),
+      own(credit('c1', 'alpha1', '2026-11-14T10:01:00', 100), 70), // pair: owner share 70, not 100
+      credit('c2', 'alpha1', '2026-11-14T11:00:00', 1500),
+      credit('c2', 'alpha1', '2026-11-14T11:01:00', 1500), // pair at ₹1,000+: revenue 0 (never credited as revenue)
+    ];
+    expect(paymentOverlaps(cs, null)).toMatchObject({ doublePairs: 2, doubleAmount: 70 });
   });
 });
 
@@ -218,7 +243,7 @@ describe('fleet detail: dead channels', () => {
     const { svc, calls } = build(pg);
     const f = await svc.buildFleetDetail(7, NOW);
     expect(f.deadChannels).toMatchObject({ from: '2026-10-16', to: '2026-11-14', count: 1, sends: 300, totalSends: 2000, shareOfSends: 0.15 });
-    expect(f.deadChannels.channels).toEqual([{ title: 'Dead One', sends: 300, delivered: 250 }]);
+    expect(f.deadChannels.channels).toEqual([{ id: '-100555', title: 'Dead One', sends: 300, delivered: 250 }]);
     expect(calls.find((c) => c.name === 'dead_channels')!.params).toEqual(['2026-10-16', '2026-11-14', 200, 50]);
     const c = await svc.buildClient('alpha1', 7, NOW);
     expect('deadChannels' in c).toBe(false);
@@ -244,14 +269,14 @@ describe('funnel: attribution per day and payment overlaps', () => {
     const { svc, calls } = build(pg);
     const r = await svc.funnel('7d', null);
     expect(r.attribution).toEqual({
-      from: '2026-11-02',
+      from: '2026-11-03',
       lookbackDays: 30,
       daily: [{ date: '2026-11-13', newUsers: 20, dmUsers: 6, newUserChannelShare: 0.3, revenue: 100, revenueWithDm: 50, revenueDmShare: 0.5 }],
     });
     expect(r.paymentOverlaps).toEqual({ multiClientChats: 1, doublePairs: 1, crossClientPairs: 1, doubleAmount: 50, windowSec: 120 });
     const q = calls.filter((c) => c.name === 'attribution_daily');
     expect(q).toHaveLength(1);
-    expect(q[0].params.slice(0, 2)).toEqual(['2026-11-02', '2026-11-14']);
+    expect(q[0].params.slice(0, 2)).toEqual(['2026-11-03', '2026-11-14']);
     expect(JSON.stringify(r)).not.toContain('"c1"');
   });
 
