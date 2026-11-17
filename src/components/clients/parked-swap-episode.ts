@@ -30,14 +30,18 @@
  *
  * MIRROR: the document shape, the stop pipeline and the insert-retry must stay IDENTICAL to tg-platform
  * packages/tg-db/src/collections/parked-accounts.repository.ts (`openEpisode`, `stopPipeline`) and the
- * constants in packages/tg-parked/src/constants.ts (PARK_MAX_AGE_MS['tg-aut'] 7 d, FIRST_PASS_DELAY 10-15 min).
+ * constants in packages/tg-parked/src/constants.ts (PARK_MAX_AGE_MS['tg-aut'] 2 d, FIRST_PASS_DELAY 10-15 min).
  * Change both together (field names, counters, GC window, version bump, `open` unset).
  */
 import { AccountRoleEventsCollection, classifyRoleEventReason, recordAccountRoleEventSoon, unparkedReasonCode } from './account-role-events';
 import { parkedMobileForms } from './parked-session-guard';
 import { maskMobile } from '../monitor/monitor-util';
 
-export const TGAUT_PARK_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+/**
+ * Owner 2026-11-17: 2 d (was 7 d). findSafeSetupBufferCandidate skips a buffer with an open, unexpired episode
+ * (parked-session-guard: `expiresAt > $$NOW`), so a 7 d episode kept old mains out of the swap pool.
+ */
+export const TGAUT_PARK_MAX_AGE_MS = 2 * 24 * 60 * 60 * 1000;
 export const SWAP_FIRST_PASS_MIN_MS = 10 * 60 * 1000;
 export const SWAP_FIRST_PASS_MAX_MS = 15 * 60 * 1000;
 /** Server-side cap per Mongo update/find (insertOne does not honour maxTimeMS). */

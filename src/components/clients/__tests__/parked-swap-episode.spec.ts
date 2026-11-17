@@ -93,7 +93,7 @@ describe('openSwapEpisode (real Mongo)', () => {
     logger = { info: jest.fn(), warn: jest.fn() };
   });
 
-  test('inserts the tg-aut episode with the tg-platform document shape (key, anchor, 7 d, first pass +10-15 min)', async () => {
+  test('inserts the tg-aut episode with the tg-platform document shape (key, anchor, 2 d, first pass +10-15 min)', async () => {
     const now = new Date('2026-11-06T06:01:00.000Z');
     expect(await openSwapEpisode(col(), input(), { logger, control: ctl(), now: () => now, random: () => 0.5 })).toBe('inserted');
     const doc = await episodes.findOne({});
@@ -107,7 +107,7 @@ describe('openSwapEpisode (real Mongo)', () => {
       cutoverOpId: `shruthi1:${SWAPPED_AT.getTime()}`,
       liveSince: null,
       parkedAt: SWAPPED_AT,
-      expiresAt: new Date(SWAPPED_AT.getTime() + 7 * 24 * 3600_000),
+      expiresAt: new Date(SWAPPED_AT.getTime() + 2 * 24 * 3600_000),
       nextRunAt: new Date(SWAPPED_AT.getTime() + SWAP_FIRST_PASS_MIN_MS + Math.round((SWAP_FIRST_PASS_MAX_MS - SWAP_FIRST_PASS_MIN_MS) * 0.5)),
       createdBy: 'cms',
       open: true,
@@ -123,7 +123,8 @@ describe('openSwapEpisode (real Mongo)', () => {
       createdAt: now,
       updatedAt: now,
     });
-    expect(TGAUT_PARK_MAX_AGE_MS).toBe(7 * 24 * 3600_000);
+    // Owner 2026-11-17: 2 d (was 7 d). An open episode excludes its mobile as a swap buffer until expiresAt.
+    expect(TGAUT_PARK_MAX_AGE_MS).toBe(2 * 24 * 3600_000);
   });
 
   test('idempotent: a second call (or tg-aut\'s fallback with the same key) is "exists", one document', async () => {
