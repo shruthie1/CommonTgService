@@ -52,6 +52,24 @@ describe('AnalyticsPgReader', () => {
     jest.dontMock('pg');
   });
 
+  it('masks long digit runs (chat ids, mobiles) in the logged query error; onError keeps the raw message', async () => {
+    jest.resetModules();
+    const query = jest.fn(async () => {
+      throw Object.assign(new Error('duplicate key (chat_id)=(1118622422) mobile 919876543210'), { code: '23505' });
+    });
+    jest.doMock('pg', () => ({ Pool: jest.fn(() => ({ on: jest.fn(), query, end: jest.fn().mockResolvedValue(undefined) })) }));
+    const { AnalyticsPgReader: Fresh } = require('../analytics-pg.reader');
+    process.env.ANALYTICS_DB_URL = 'postgres://u:p@127.0.0.1:1/db';
+    const r = new Fresh();
+    const warn = jest.spyOn((r as any).logger, 'warn').mockImplementation(() => undefined);
+    const onError = jest.fn();
+    expect(await r.query('select 1', ['1118622422'], onError)).toBeUndefined();
+    const lines = warn.mock.calls.map((c) => String(c[0]));
+    expect(lines).toEqual(['Analytics Postgres query failed: duplicate key (chat_id)=(****2422) mobile ****3210']);
+    expect(onError.mock.calls[0][0].message).toContain('1118622422');
+    jest.dontMock('pg');
+  });
+
   it('a missing pg module disables the reader instead of crashing', async () => {
     jest.resetModules();
     jest.doMock('pg', () => {

@@ -5,6 +5,7 @@ import { UserData, UserDataDocument } from '../user-data/schemas/user-data.schem
 import { AnalyticsPgError, AnalyticsPgReader } from '../daily-analytics/analytics-pg.reader';
 import { ChannelCategory } from '../bots/channel-category.enum';
 import { getBotsServiceInstance } from '../../utils';
+import { maskDigitRuns } from '../../utils/redact-secrets';
 import { PaymentProofsService } from '../payment-proofs/payment-proofs.service';
 import { parseProofId } from '../payment-proofs/payment-proofs.classify';
 import { FakePaymentHistoryEntry } from '../payment-proofs/payment-proofs.views';
@@ -98,6 +99,11 @@ export class FakePaymentService {
         }
     }
 
+    /** Log form of a chat id: last 4 digits only (owner rule: every log line masks ids). */
+    private static masked(chatId: string): string {
+        return `****${chatId.slice(-4)}`;
+    }
+
     private chatIdOrThrow(chatId: unknown): string {
         const id = typeof chatId === 'string' ? chatId.trim() : '';
         if (!CHAT_ID_RE.test(id)) throw new BadRequestException('chatId must be a numeric Telegram chat id');
@@ -106,6 +112,33 @@ export class FakePaymentService {
 
     private async rows(chatId: string): Promise<Row[]> {
         return this.userDataModel.find({ chatId }, ROW_PROJECTION).lean<Row[]>().exec();
+    }
+
+    /**
+     * One greppable line per mark (owner 2026-11-19: the mark is chat-wide, across every client, persona and account
+     * mobile): what it covered in both stores. Read-only and fire-and-forget: mark() starts it after the response
+     * path (both writes done, notice sent), so the shared 2-connection pool and its 10 s timeout never delay the
+     * response. A failed or rejected read is logged as "pg coverage unavailable", never thrown.
+     */
+    private logMarkCoverage(chatId: string, rows: Row[], postgres: { payerDays: number; payerDaysSkipped: number }): void {
+        const mongoClients = new Set(rows.map((r) => r.clientId).filter(Boolean)).size;
+        const line = (pg: string) =>
+            this.logger.warn(`[fake-mark] chat ${FakePaymentService.masked(chatId)} mongo rows ${rows.length} clients ${mongoClients} | ${pg} | payer-days ${postgres.payerDays} skipped ${postgres.payerDaysSkipped}`);
+        void this.readMarkCoverage(chatId)
+            .then(line)
+            .catch((e: unknown) => line(`pg coverage unavailable (${maskDigitRuns((e as Error)?.message ?? e)})`));
+    }
+
+    private async readMarkCoverage(chatId: string): Promise<string> {
+        const cov = await this.pgCall<{ rows: number; fake: number; clients: number; personas: number; mobiles: number }>(
+            `SELECT count(*)::int AS rows, count(*) FILTER (WHERE is_fake)::int AS fake, count(DISTINCT client_id)::int AS clients,
+                    count(DISTINCT persona_id)::int AS personas, count(DISTINCT mobile)::int AS mobiles
+               FROM payment_event WHERE chat_id = $1`,
+            [chatId],
+        );
+        return cov.row
+            ? `pg rows ${Number(cov.row.rows)} fake ${Number(cov.row.fake)} clients ${Number(cov.row.clients)} personas ${Number(cov.row.personas)} mobiles ${Number(cov.row.mobiles)}`
+            : `pg coverage unavailable (${maskDigitRuns(cov.error)})`;
     }
 
     private async pgCall<T>(sql: string, params: unknown[]): Promise<{ row?: T; error?: string }> {
@@ -206,7 +239,7 @@ export class FakePaymentService {
 
         const pg = await this.pgCall<FakePaymentPgMark>('SELECT * FROM fake_payment_mark($1)', [chatId]);
         if (!pg.row) {
-            this.logger.error(`fake-payment mark ${chatId}: Mongo marked ${newlyMarked}/${rows.length} rows, Postgres failed: ${pg.error}`);
+            this.logger.error(`fake-payment mark ${FakePaymentService.masked(chatId)}: Mongo marked ${newlyMarked}/${rows.length} rows, Postgres failed: ${maskDigitRuns(pg.error)}`);
             this.notify('error', 'Fake payment mark: Postgres FAILED (repeat the mark)', chatId, by, reason, [
                 { label: 'Mongo rows marked', value: `${newlyMarked}/${rows.length}` },
                 { label: 'Postgres error', value: String(pg.error) },
@@ -223,12 +256,13 @@ export class FakePaymentService {
             payerDays: Number(pg.row.payer_days),
             payerDaysSkipped: Number(pg.row.payer_days_skipped),
         };
-        this.logger.warn(`fake-payment mark ${chatId} by ${by}: mongo ${newlyMarked}/${rows.length}, pg ${JSON.stringify(postgres)}`);
+        this.logger.warn(`fake-payment mark ${FakePaymentService.masked(chatId)} by ${by}: mongo ${newlyMarked}/${rows.length}, pg ${JSON.stringify(postgres)}`);
         this.notify('warning', 'Payment marked fake', chatId, by, reason, [
             { label: 'Persona rows', value: `${newlyMarked} newly marked of ${rows.length}` },
             { label: 'Payments excluded', value: postgres.payments ? `${postgres.payments} (₹${postgres.amountMarked} newly)` : 'none in Postgres (no payment_event rows for this chat)' },
             { label: 'Payer-days taken back', value: `${postgres.payerDays} (skipped ${postgres.payerDaysSkipped})` },
         ]);
+        this.logMarkCoverage(chatId, rows, postgres);
         return { chatId, marked: true, mongo, postgres };
     }
 
@@ -274,7 +308,7 @@ export class FakePaymentService {
 
         const pg = await this.pgCall<FakePaymentPgUnmark>('SELECT * FROM fake_payment_unmark($1)', [chatId]);
         if (!pg.row) {
-            this.logger.error(`fake-payment unmark ${chatId}: Mongo unmarked ${rows.length} rows, Postgres failed: ${pg.error}`);
+            this.logger.error(`fake-payment unmark ${FakePaymentService.masked(chatId)}: Mongo unmarked ${rows.length} rows, Postgres failed: ${maskDigitRuns(pg.error)}`);
             this.notify('error', 'Fake payment unmark: Postgres FAILED (repeat the unmark)', chatId, by, reason, [
                 { label: 'Mongo rows unmarked', value: String(rows.length) },
                 { label: 'Postgres error', value: String(pg.error) },
@@ -289,7 +323,7 @@ export class FakePaymentService {
             amountRestored: Number(pg.row.amount_restored),
             payerDays: Number(pg.row.payer_days),
         };
-        this.logger.warn(`fake-payment unmark ${chatId} by ${by}: mongo ${rows.length}, pg ${JSON.stringify(postgres)}`);
+        this.logger.warn(`fake-payment unmark ${FakePaymentService.masked(chatId)} by ${by}: mongo ${rows.length}, pg ${JSON.stringify(postgres)}`);
         this.notify('info', 'Fake payment mark removed', chatId, by, reason, [
             { label: 'Persona rows restored', value: String(rows.length) },
             { label: 'Payments restored', value: `${postgres.unmarkedNow} (₹${postgres.amountRestored})` },
@@ -331,7 +365,7 @@ export class FakePaymentService {
                 },
             },
         })));
-        this.logger.warn(`fake-payment not-fake ${chatId} by ${by}: ${source}, rows unmuted ${muted.length}, asks closed ${closed.proofIds.length}`);
+        this.logger.warn(`fake-payment not-fake ${FakePaymentService.masked(chatId)} by ${by}: ${source}, rows unmuted ${muted.length}, asks closed ${closed.proofIds.length}`);
         this.notify('info', 'Mute lifted (not fake)', chatId, by, reason, [
             { label: 'Source', value: source === 'fraud_block' ? 'payment check fraud block' : 'unknown' },
             { label: 'Persona rows unmuted', value: `${muted.length} of ${rows.length}` },
@@ -354,9 +388,9 @@ export class FakePaymentService {
                     ...(reason ? [{ label: 'Reason', value: reason }] : []),
                     ...extra,
                 ],
-            }).catch((e: unknown) => this.logger.warn(`fake-payment notice failed: ${(e as Error)?.message ?? e}`));
+            }).catch((e: unknown) => this.logger.warn(`fake-payment notice failed: ${maskDigitRuns((e as Error)?.message ?? e)}`));
         } catch (e) {
-            this.logger.warn(`fake-payment notice failed: ${(e as Error)?.message ?? e}`);
+            this.logger.warn(`fake-payment notice failed: ${maskDigitRuns((e as Error)?.message ?? e)}`);
         }
     }
 }

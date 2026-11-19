@@ -107,8 +107,12 @@ describe('PaymentUncreditService', () => {
     const stats = () => connection.collection('stats2').findOne({ chatId: CHAT }) as Promise<any>;
 
     it('void: Postgres payment_void with the proof link, stats2 marker unset (payer taken), userData as the manual 5060 fix, review fake', async () => {
+        const warn = jest.spyOn((service as any).logger, 'warn');
         const res = await service.uncredit(PROOF_ID, { reason: 'resent', by: 'ops-sai' }, NOW);
         expect(res.changed).toBe(true);
+        expect(warn.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith('[payment-void]')))
+            .toEqual([`[payment-void] voided client ${CLIENT} chat ****${CHAT.slice(-4)} msg ${MSG} ₹350 payment 5060 payers_taken=true`]);
+        warn.mockRestore();
         expect(res.postgres).toEqual({ status: 'voided', paymentId: '5060', linked: true, payersTaken: true, day: '2026-11-08' });
         expect(res.stats2).toBe('unset');
         expect(pg.calls[0].params).toEqual([PROOF_ID, CHAT, CLIENT, PROFILE, 350, SERVED.toISOString(), 'resent', 'ops-sai']);
@@ -301,6 +305,27 @@ describe('PaymentUncreditService', () => {
         await expect(service.uncredit(`${CLIENT}-${CHAT}-1`, { reason: 'fake' }, NOW)).rejects.toBeInstanceOf(NotFoundException);
     });
 
+    it('ambiguous old proofId (review 2026-11-19 #003 finding 2): two receiving accounts, same client+chat+msg id: 409 ambiguous_proof, nothing written', async () => {
+        // Telegram message ids are per account: a replacement account of the same client can store a second proof row
+        // (mobile in its key) whose <clientId>-<chatId>-<msgId> id is the same. Neither Uncredit nor Recredit may guess.
+        await proofs.collection.updateOne({ telegramMsgId: MSG }, { $set: { mobile: '919000000001' } });
+        await proofs.collection.insertOne(proofRow(MSG, { mobile: '919000000002', amount: 50, creditAmount: 50 }));
+        const warn = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => undefined);
+        await expect(service.uncredit(PROOF_ID, { reason: 'fake' }, NOW)).rejects.toMatchObject({ status: 409, response: { code: 'ambiguous_proof' } });
+        await expect(service.recredit(PROOF_ID, { by: 'ops' } as any, NOW)).rejects.toMatchObject({ status: 409, response: { code: 'ambiguous_proof' } });
+        expect(pg.calls).toHaveLength(0);
+        const lines = warn.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith('[proof-lookup]'));
+        expect(lines).toEqual(Array(2).fill(`[proof-lookup] ambiguous_proof client ${CLIENT} chat ****${CHAT.slice(-4)} msg ${MSG}: 2+ rows (receiving accounts), refused 409`));
+        expect(lines.join('\n')).not.toContain(CHAT);
+        warn.mockRestore();
+        const rows = await proofs.collection.find({ telegramMsgId: MSG }).toArray() as any[];
+        expect(rows.map((r) => r.uncredited)).toEqual([undefined, undefined]);
+        expect((await user()).lifetimePaid).toBe(850);
+        // One row per old id (the normal case): unchanged behaviour.
+        await proofs.collection.deleteOne({ telegramMsgId: MSG, mobile: '919000000002' });
+        await expect(service.uncredit(PROOF_ID, { reason: 'fake' }, NOW)).resolves.toMatchObject({ changed: true });
+    });
+
     it('Postgres: fake_marked there releases the claim (409); no row yet within an hour is pg_row_pending (409); later it proceeds unlinked', async () => {
         pg.voidRow = { status: 'fake_marked', payment_id: null, amount: null, day: null, payers_taken: false, payers_mobile: null };
         await expect(service.uncredit(PROOF_ID, { reason: 'fake' }, NOW)).rejects.toBeInstanceOf(ConflictException);
@@ -322,7 +347,11 @@ describe('PaymentUncreditService', () => {
 
     it('Postgres: two candidate rows (ambiguous) refuses with 409, claim released, nothing else written', async () => {
         pg.voidRow = { status: 'ambiguous', payment_id: null, amount: null, day: null, payers_taken: false, payers_mobile: null };
+        const warn = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => undefined);
         await expect(service.uncredit(PROOF_ID, { reason: 'fake' }, NOW)).rejects.toMatchObject({ response: { code: 'ambiguous_match' } });
+        expect(warn.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith('[payment-void]')))
+            .toEqual([`[payment-void] ambiguous client ${CLIENT} chat ****${CHAT.slice(-4)} msg ${MSG} ₹350 payment - payers_taken=false`]);
+        warn.mockRestore();
         expect((await proof()).uncredited).toBeUndefined();
         expect((await proof()).review).toMatchObject({ decision: 'fine' });
         expect((await user()).lifetimePaid).toBe(850);

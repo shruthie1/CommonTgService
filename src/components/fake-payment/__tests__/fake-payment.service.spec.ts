@@ -31,6 +31,7 @@ class FakePg {
         if (sql.includes('fake_payment_mark')) return [{ marked_now: 3, payments: 3, amount_marked: '350', payer_days: 2, payer_days_skipped: 0 }];
         if (sql.includes('fake_payment_unmark')) return [{ unmarked_now: 3, amount_restored: '350', payer_days: 2 }];
         if (sql.includes('payment_event_owner')) return [{ payments: 3, amount: '350', fake_payments: 0, owner_amount: '350' }];
+        if (sql.includes('count(DISTINCT client_id)')) return [{ rows: 4, fake: 4, clients: 2, personas: 2, mobiles: 2 }];
         return [];
     }
 }
@@ -85,6 +86,142 @@ describe('FakePaymentService', () => {
         expect(call.params).toEqual(['1118622422']);
         expect(sent).toHaveLength(1);
         expect(sent[0].c).toBe('ACCOUNT_NOTIFICATIONS');
+    });
+
+    it('mark is chat-wide (owner 2026-11-19): every client and persona row of the chat, one fake_payment_mark(chat) call with only the chat id, one [fake-mark] coverage line', async () => {
+        const warn = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => undefined);
+        await service.mark('1118622422', { by: 'ops', reason: 'edited receipt' });
+        await flush();
+        const marked = await model.collection.find({ chatId: '1118622422' }).toArray() as any[];
+        expect(marked.map((r) => [r.clientId, r.fakePaymentAt != null]).sort()).toEqual([['ramya1', true], ['shruthi2', true]]);
+        expect((await raw('999000111', 'ramya')).fakePaymentAt).toBeUndefined();
+        const markCalls = pg.calls.filter((c) => c.sql.includes('fake_payment_mark'));
+        expect(markCalls.map((c) => c.params)).toEqual([['1118622422']]);
+        const lines = warn.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith('[fake-mark]'));
+        expect(lines).toEqual(['[fake-mark] chat ****2422 mongo rows 2 clients 2 | pg rows 4 fake 4 clients 2 personas 2 mobiles 2 | payer-days 2 skipped 0']);
+        expect(lines[0]).not.toContain('1118622422');
+        warn.mockRestore();
+    });
+
+    it('a failed coverage read is logged and never fails the mark', async () => {
+        const warn = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => undefined);
+        const query = pg.query.bind(pg);
+        pg.query = async (sql: string, params: unknown[] = [], onError?: (e: any) => void) => {
+            if (sql.includes('count(DISTINCT client_id)')) { onError?.({ kind: 'query', message: 'timeout' }); return undefined; }
+            return query(sql, params, onError);
+        };
+        await expect(service.mark('1118622422', { by: 'ops', reason: 'x' })).resolves.toBeDefined();
+        await flush();
+        expect(warn.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith('[fake-mark]')))
+            .toEqual(['[fake-mark] chat ****2422 mongo rows 2 clients 2 | pg coverage unavailable (timeout) | payer-days 2 skipped 0']);
+        warn.mockRestore();
+    });
+
+    // Re-review 3: the coverage read runs after the response path; every log line of the service masks the chatId.
+    const flush = async () => { for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r)); };
+    const spyLogs = () => {
+        const logger = (service as any).logger;
+        const spies = ['log', 'warn', 'error', 'debug', 'verbose'].map((m) => jest.spyOn(logger, m as any).mockImplementation(() => undefined));
+        return {
+            lines: () => spies.flatMap((s) => s.mock.calls.map((c) => c.map(String).join(' '))),
+            restore: () => spies.forEach((s) => s.mockRestore()),
+        };
+    };
+
+    it('no log line carries the full chatId: mark, coverage, unmark and not-fake on success', async () => {
+        const logs = spyLogs();
+        await service.mark('1118622422', { by: 'ops', reason: 'r' });
+        await flush();
+        await service.unmark('1118622422', { by: 'ops', reason: 'r' });
+        await service.mark('1118622422', { by: 'ops', reason: 'r' });
+        await flush();
+        await service.notFake('1118622422', { by: 'ops', reason: 'r' }).catch(() => undefined);
+        const lines = logs.lines();
+        logs.restore();
+        expect(lines.length).toBeGreaterThanOrEqual(5);
+        expect(lines.filter((l) => l.includes('1118622422'))).toEqual([]);
+        expect(lines.some((l) => l.startsWith('fake-payment mark ****2422 by ops'))).toBe(true);
+        expect(lines.some((l) => l.startsWith('fake-payment unmark ****2422 by ops'))).toBe(true);
+    });
+
+    it('no log line carries the full chatId when Postgres fails (mark and unmark)', async () => {
+        const logs = spyLogs();
+        pg.fail = { kind: 'query', message: 'connection refused' };
+        await expect(service.mark('1118622422', { by: 'ops', reason: 'r' })).rejects.toBeInstanceOf(HttpException);
+        await expect(service.unmark('1118622422', { by: 'ops', reason: 'r' })).rejects.toBeInstanceOf(HttpException);
+        await flush();
+        const lines = logs.lines();
+        logs.restore();
+        expect(lines.some((l) => l.startsWith('fake-payment mark ****2422: Mongo marked 2/2 rows, Postgres failed'))).toBe(true);
+        expect(lines.some((l) => l.startsWith('fake-payment unmark ****2422: Mongo unmarked 2 rows, Postgres failed'))).toBe(true);
+        expect(lines.filter((l) => l.includes('1118622422'))).toEqual([]);
+    });
+
+    it('mark responds and notifies while the coverage read is still pending; the line lands when it finishes', async () => {
+        const logs = spyLogs();
+        const query = pg.query.bind(pg);
+        let release!: () => void;
+        const gate = new Promise<void>((r) => { release = r; });
+        pg.query = async (sql: string, params: unknown[] = [], onError?: (e: any) => void) => {
+            if (sql.includes('count(DISTINCT client_id)')) await gate;
+            return query(sql, params, onError);
+        };
+        const res = await service.mark('1118622422', { by: 'ops', reason: 'r' });
+        expect(res.marked).toBe(true);
+        expect(sent).toHaveLength(1);
+        expect(logs.lines().filter((l) => l.startsWith('[fake-mark]'))).toEqual([]);
+        release();
+        await flush();
+        expect(logs.lines().filter((l) => l.startsWith('[fake-mark]')))
+            .toEqual(['[fake-mark] chat ****2422 mongo rows 2 clients 2 | pg rows 4 fake 4 clients 2 personas 2 mobiles 2 | payer-days 2 skipped 0']);
+        logs.restore();
+    });
+
+    it('mark responds and notifies when the coverage read rejects; the rejection is logged as pg coverage unavailable', async () => {
+        const logs = spyLogs();
+        const query = pg.query.bind(pg);
+        pg.query = async (sql: string, params: unknown[] = [], onError?: (e: any) => void) => {
+            if (sql.includes('count(DISTINCT client_id)')) throw new Error('pool exhausted');
+            return query(sql, params, onError);
+        };
+        const res = await service.mark('1118622422', { by: 'ops', reason: 'r' });
+        expect(res.marked).toBe(true);
+        expect(sent).toHaveLength(1);
+        await flush();
+        expect(logs.lines().filter((l) => l.startsWith('[fake-mark]')))
+            .toEqual(['[fake-mark] chat ****2422 mongo rows 2 clients 2 | pg coverage unavailable (pool exhausted) | payer-days 2 skipped 0']);
+        logs.restore();
+    });
+
+    it('an error that embeds the full chatId is masked in every log line (mark failure, coverage failure, notice failure)', async () => {
+        const logs = spyLogs();
+        const idErr = 'insert into payment_event (chat_id)=(1118622422) failed';
+        pg.fail = { kind: 'query', message: idErr };
+        mockedGetBots.mockReturnValue({ sendMessageByCategory: async () => { throw new Error(`send to 1118622422 failed`); } } as any);
+        await expect(service.mark('1118622422', { by: 'ops', reason: 'r' })).rejects.toBeInstanceOf(HttpException);
+        pg.fail = null;
+        const query = pg.query.bind(pg);
+        pg.query = async (sql: string, params: unknown[] = [], onError?: (e: any) => void) => {
+            if (sql.includes('count(DISTINCT client_id)')) { onError?.({ kind: 'query', message: idErr }); return undefined; }
+            return query(sql, params, onError);
+        };
+        await service.mark('1118622422', { by: 'ops', reason: 'r' });
+        await flush();
+        pg.query = async (sql: string, params: unknown[] = [], onError?: (e: any) => void) => {
+            if (sql.includes('count(DISTINCT client_id)')) throw new Error(`timeout reading chat 1118622422`);
+            return query(sql, params, onError);
+        };
+        await service.mark('1118622422', { by: 'ops', reason: 'r' });
+        await flush();
+        const lines = logs.lines();
+        logs.restore();
+        expect(lines.filter((l) => l.includes('1118622422'))).toEqual([]);
+        expect(lines).toEqual(expect.arrayContaining([
+            'fake-payment mark ****2422: Mongo marked 2/2 rows, Postgres failed: insert into payment_event (chat_id)=(****2422) failed',
+            '[fake-mark] chat ****2422 mongo rows 2 clients 2 | pg coverage unavailable (insert into payment_event (chat_id)=(****2422) failed) | payer-days 2 skipped 0',
+            '[fake-mark] chat ****2422 mongo rows 2 clients 2 | pg coverage unavailable (timeout reading chat ****2422) | payer-days 2 skipped 0',
+            'fake-payment notice failed: send to ****2422 failed',
+        ]));
     });
 
     it('re-mark is idempotent: the original fakePaymentAt / fakePaymentPrev stay, a hand-released row is blocked again', async () => {

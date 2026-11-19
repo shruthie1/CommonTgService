@@ -109,12 +109,23 @@ export class PaymentUncreditService {
     private async proofOrThrow(rawProofId: string): Promise<ProofRow> {
         const key = parseProofId(rawProofId);
         if (!key) throw new BadRequestException('proofId must be <clientId>-<chatId>-<telegramMsgId>');
-        const proof = await this.proofs.findOne(
+        // Telegram message ids are per account: two receiving accounts of one client (a replacement in the slot) can
+        // store two proof rows (mobile in the key) under one <clientId>-<chatId>-<msgId> id. Never guess which one
+        // (review 2026-11-19 #003 finding 2): refuse until the id names the account.
+        const rows = await this.proofs.find(
             { chatId: key.chatId, clientId: key.clientId, telegramMsgId: key.telegramMsgId },
-            { projection: { shadow: 0, ocr: 0, imageHash: 0 } },
-        ) as ProofRow | null;
-        if (!proof) throw new NotFoundException('no such proof (gone after the 7-day TTL?)');
-        return proof;
+            { projection: { shadow: 0, ocr: 0, imageHash: 0 }, limit: 2 },
+        ).toArray() as unknown as ProofRow[];
+        if (!rows.length) throw new NotFoundException('no such proof (gone after the 7-day TTL?)');
+        if (rows.length > 1) {
+            // One greppable line per refusal (owner 2026-11-19); chat masked to the last 4.
+            this.logger.warn(`[proof-lookup] ambiguous_proof client ${key.clientId} chat ****${String(key.chatId).slice(-4)} msg ${key.telegramMsgId}: 2+ rows (receiving accounts), refused 409`);
+            throw new ConflictException({
+                code: 'ambiguous_proof',
+                message: 'two receiving accounts of this client stored a payment with this message id: not changed; fix it by hand',
+            });
+        }
+        return rows[0];
     }
 
     private async setJournal(id: unknown, set: Record<string, unknown>): Promise<void> {
@@ -184,6 +195,9 @@ export class PaymentUncreditService {
                     [proofId, proof.chatId, proof.clientId, proof.profile, A, new Date(proof.servedAt).toISOString(), voidReason, by],
                 );
                 if (!pg.row) throw new StepError('postgres', pg.error ?? 'no row');
+                // One greppable line per void result (owner 2026-11-19), the unlinked fallback included: voided / already
+                // (linked by proof id or matched), ambiguous, no_row, fake_marked. Chat masked to the last 4.
+                this.logger.warn(`[payment-void] ${pg.row.status} client ${proof.clientId} chat ****${String(proof.chatId).slice(-4)} msg ${proof.telegramMsgId} ₹${A} payment ${pg.row.payment_id ?? '-'} payers_taken=${!!pg.row.payers_taken}`);
                 if (pg.row.status === 'fake_marked') {
                     await this.release(proof._id, journal);
                     throw new ConflictException({ code: 'fake_marked', message: 'the chat is marked fake in Postgres: no payment of it counts already' });

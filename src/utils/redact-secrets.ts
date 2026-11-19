@@ -25,6 +25,14 @@ export function isSecretKey(key: string): boolean {
     return SECRET_KEYS.has(String(key).toLowerCase());
 }
 
+/**
+ * Log lines only: every run of 6+ digits (chat id, mobile, UTR, UPI handle digits) becomes "****" + its last 4.
+ * For raw error messages that may embed an id. Never apply it to stored or returned data.
+ */
+export function maskDigitRuns(text: unknown): string {
+    return String(text).replace(/\d{6,}/g, (run) => `****${run.slice(-4)}`);
+}
+
 export function redactSecretText<T>(text: T): T {
     if (typeof text !== 'string') return text;
     return text.replace(SESSION_LIKE, '[redacted-session]').replace(BOT_TOKEN_LIKE, '$1:[redacted-token]') as unknown as T;

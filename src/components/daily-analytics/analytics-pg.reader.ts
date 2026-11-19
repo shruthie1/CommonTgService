@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { maskDigitRuns } from '../../utils/redact-secrets';
 
 const QUERY_TIMEOUT_MS = 10_000;
 const LOG_INTERVAL_MS = 60_000;
@@ -74,7 +75,8 @@ export class AnalyticsPgReader implements OnModuleDestroy {
     const now = Date.now();
     if (now - this.lastLogAt < LOG_INTERVAL_MS) return;
     this.lastLogAt = now;
-    this.logger.warn(`Analytics Postgres ${what}: ${(err as Error)?.message ?? err}`);
+    // Log only: a pg error can embed a parameter (chat id, mobile); onError keeps the raw message for the caller.
+    this.logger.warn(`Analytics Postgres ${what}: ${maskDigitRuns((err as Error)?.message ?? err)}`);
   }
 
   /**

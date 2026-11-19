@@ -1,6 +1,6 @@
 import { Logger } from '../logger';
 import { parseError } from '../parseError';
-import { redactSecretText } from '../redact-secrets';
+import { maskDigitRuns, redactSecretText } from '../redact-secrets';
 
 // Shape of a GramJS StringSession: "1" + base64 of dc/ip/port/256-byte auth key (~350 chars).
 const SESSION = '1' + 'BQANOTEuMTA4LjU2LjE0MAG7'.repeat(15) + 'Ab+/cD==';
@@ -65,4 +65,14 @@ describe('secret redaction in logs (PENDING 24-5)', () => {
     expect(out).toContain('Session rotated for 919000012345 (1 of 3)');
     expect(out).toContain('"sessionCount"');
   });
+});
+
+describe('maskDigitRuns (log lines: chat ids, mobiles, UTRs to last 4)', () => {
+    it('replaces every run of 6+ digits with **** + last 4; shorter runs and non-strings stay', () => {
+        expect(maskDigitRuns('chat 1118622422 mobile 919876543210 utr 512345678901 port 5432 code 23505'))
+            .toBe('chat ****2422 mobile ****3210 utr ****8901 port 5432 code 23505');
+        expect(maskDigitRuns('(chat_id)=(123456)')).toBe('(chat_id)=(****3456)');
+        expect(maskDigitRuns('no ids here')).toBe('no ids here');
+        expect(maskDigitRuns(undefined)).toBe('undefined');
+    });
 });
