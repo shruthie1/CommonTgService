@@ -172,6 +172,9 @@ type WarmupSimulationEntry = Pick<WarmupDiagnosticEntry, 'mobile' | 'dbPhase' | 
 };
 type WarmupSimulationSkip = { mobile: string; action: string; priority?: number; reason: string };
 
+/** Review 7: the swap candidate was retired or re-sessioned between selection and the cutover commit. */
+export class CandidateChangedException extends ConflictException {}
+
 @Injectable()
 export class BufferClientService extends BaseClientService<BufferClientDocument> {
     private readonly MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT = BUFFER_PROFILE.legacyHealthyCap;
@@ -802,8 +805,11 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         ).exec();
     }
 
-    async setPrimaryInUse(clientId: string, mobile: string, session?: ClientSession): Promise<BufferClientDocument> {
+    async setPrimaryInUse(clientId: string, mobile: string, session?: ClientSession, expectedSession?: string): Promise<BufferClientDocument> {
         const now = new Date();
+        // Review 7: the candidate must still be what the swap selected: active, and (when given) holding the
+        // session the cutover copies. A row retired or re-sessioned since selection aborts the cutover transaction.
+        const candidateFilter = { mobile, clientId, status: 'active', ...(expectedSession ? { session: expectedSession } : {}) };
         // Verify the replacement exists BEFORE revoking the current primary. The partial
         // unique index on { clientId, inUse:true } forces an assign-after-revoke order, so
         // if we revoked first and the target turned out to be missing (e.g. recycled between
@@ -814,6 +820,11 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         const exists = await existsQuery;
         if (!exists) {
             throw new NotFoundException(`Primary buffer client ${mobile} for ${clientId} not found`);
+        }
+        const unchangedQuery = this.bufferClientModel.exists(candidateFilter);
+        if (session) unchangedQuery.session(session);
+        if (!(await unchangedQuery)) {
+            throw new CandidateChangedException(`Candidate ${mobile} for ${clientId} changed since selection (status or session); cutover aborted`);
         }
         const revoked = await this.bufferClientModel.updateMany(
             {
@@ -853,7 +864,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
         const updatedBufferClient = await this.bufferClientModel
             .findOneAndUpdate(
-                { mobile, clientId },
+                candidateFilter,
                 {
                     $set: {
                         inUse: true,
@@ -866,7 +877,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             .exec();
 
         if (!updatedBufferClient) {
-            throw new NotFoundException(`Primary buffer client ${mobile} for ${clientId} not found`);
+            throw new CandidateChangedException(`Candidate ${mobile} for ${clientId} changed since selection (status or session); cutover aborted`);
         }
 
         this.logger.info(`Set primary in-use buffer client for ${clientId}`, {

@@ -87,14 +87,42 @@ describe('EventManagerService', () => {
         it('returns deletedCount', async () => {
             await model.create(evt({ chatId: 'del' }));
             await model.create(evt({ chatId: 'del' }));
-            const result = await service.deleteMultiple('del');
+            const result = await service.deleteMultiple('del', 'p1');
             expect(result).toBe(2);
+        });
+
+        // Review bug 6: the call UI cancels a chat's ladder when the user joins ONE client's call.
+        // The same user can hold another client's scheduled calls/messages; those must survive.
+        it('deletes only the given client events for the chat', async () => {
+            await model.create(evt({ chatId: 'x6', clientId: 'shruthi1' }));
+            await model.create(evt({ chatId: 'x6', clientId: 'shruthi1', type: 'message' }));
+            await model.create(evt({ chatId: 'x6', clientId: 'kavya1' }));
+            await model.create(evt({ chatId: 'other', clientId: 'shruthi1' }));
+            expect(await service.deleteMultiple('x6', 'shruthi1')).toBe(2);
+            expect(await model.countDocuments({ chatId: 'x6', clientId: 'kavya1' })).toBe(1);
+            expect(await model.countDocuments({ chatId: 'other', clientId: 'shruthi1' })).toBe(1);
+        });
+
+        it('deletes nothing without a chatId', async () => {
+            await model.create(evt({ chatId: 'x7', clientId: 'shruthi1' }));
+            expect(await service.deleteMultiple('', 'shruthi1')).toBe(0);
+            expect(await service.deleteMultiple(undefined as any)).toBe(0);
+            expect(await model.countDocuments({ chatId: 'x7' })).toBe(1);
+        });
+
+        // Deploy order: the call page may still send only chatId. Old behaviour, with a warn line.
+        it('without clientId keeps the old chatId-only delete', async () => {
+            await model.create(evt({ chatId: 'x8', clientId: 'shruthi1' }));
+            await model.create(evt({ chatId: 'x8', clientId: 'kavya1' }));
+            await model.create(evt({ chatId: 'other8', clientId: 'shruthi1' }));
+            expect(await service.deleteMultiple('x8')).toBe(2);
+            expect(await service.deleteMultiple('other8', '  ')).toBe(1);
         });
 
         it('returns 0 on error', async () => {
             const badModel: any = { deleteMany: jest.fn().mockRejectedValue(new Error('fail')) };
             const svc = new EventManagerService(badModel);
-            expect(await svc.deleteMultiple('x')).toBe(0);
+            expect(await svc.deleteMultiple('x', 'p1')).toBe(0);
         });
     });
 
@@ -167,10 +195,10 @@ describe('EventManagerService', () => {
             expect(await model.countDocuments({ chatId: 'dup' })).toBe(countBefore);
         });
 
-        it('deleteMultiple calls deleteMany({ chatId })', async () => {
+        it('deleteMultiple deletes the chat events of that client', async () => {
             await model.create(evt({ chatId: 'dm1' }));
             await model.create(evt({ chatId: 'dm1' }));
-            const deleted = await service.deleteMultiple('dm1');
+            const deleted = await service.deleteMultiple('dm1', 'p1');
             expect(deleted).toBe(2);
             expect(await model.countDocuments({ chatId: 'dm1' })).toBe(0);
         });

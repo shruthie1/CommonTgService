@@ -44,9 +44,18 @@ export class EventManagerService {
     }
   }
 
-  async deleteMultiple(chatId: string): Promise<number> {
+  /**
+   * Cancel ONE client's scheduled events for a chat. Events of every client share this collection
+   * keyed by chatId, so a chatId-only delete cancelled other clients' calls and messages for the same
+   * user (review bug 6, 2026-11-19). Same scope as tg-platform EventStore.deleteByChat.
+   * Without clientId it keeps the old chatId-only delete (with a warn line) until every caller sends it.
+   */
+  async deleteMultiple(chatId: string, clientId?: string): Promise<number> {
+    if (!chatId?.trim()) return 0;
+    const client = clientId?.trim();
+    if (!client) this.logger.warn(`deleteMultiple without clientId for chat ****${chatId.slice(-4)}: deleting every client's events (old caller)`);
     try {
-      const result = await this.eventModel.deleteMany({ chatId });
+      const result = await this.eventModel.deleteMany(client ? { chatId, clientId: client } : { chatId });
       return result.deletedCount;
     } catch (error) {
       this.logger.error('Error deleting events', error);

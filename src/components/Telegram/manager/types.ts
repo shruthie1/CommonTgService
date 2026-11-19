@@ -21,6 +21,8 @@ export interface ActiveClientSetup {
     existingMobile: string;
     clientId: string;
     reason?: string;
+    /** Candidate buffer session seen at selection; the cutover commits only while the row still holds it (review 7). */
+    candidateSession?: string;
 }
 
 // ---- Return types for every domain ----

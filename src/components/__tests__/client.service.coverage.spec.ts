@@ -319,6 +319,7 @@ describe('ClientService coverage', () => {
                 'swap-1',
                 '15558880002',
                 expect.anything(),
+                'buffer-session', // review 7: the candidate session seen at selection
             );
             // Old mobile returns to the buffer pool as terminal supply.
             expect(bufferClientService.createOrUpdate).toHaveBeenCalledWith('15558880001', expect.objectContaining({
@@ -506,6 +507,7 @@ describe('ClientService coverage', () => {
                 'cut-1',
                 '15557770002',
                 expect.anything(),
+                undefined, // setup registered without candidateSession: no session check
             );
             expect(archivalSpy).toHaveBeenCalled();
         });

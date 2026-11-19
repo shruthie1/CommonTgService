@@ -15,7 +15,7 @@ import { ClientSession, Model } from 'mongoose';
 import { Client, ClientDocument } from './schemas/client.schema';
 import { CreateClientDto } from './dto/create-client.dto';
 import { SetupClientQueryDto } from './dto/setup-client.dto';
-import { BufferClientService } from '../buffer-clients/buffer-client.service';
+import { BufferClientService, CandidateChangedException } from '../buffer-clients/buffer-client.service';
 import { sleep } from 'telegram/Helpers';
 import { UsersService } from '../users/users.service';
 import {
@@ -1197,6 +1197,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       clientId,
       existingMobile: existingClientMobile,
       newMobile: newBufferClient.mobile,
+      candidateSession: newBufferClient.session,
     });
     try {
       this.logger.info(
@@ -1265,6 +1266,9 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       const ownerOfMobile = await this.clientUsingMobile(newBufferClient.mobile);
       if (ownerOfMobile) {
         this.logger.warn(`[${clientId}] Swap failed on ${maskMobile(newBufferClient.mobile)}, now the live main of ${ownerOfMobile}; leaving it untouched`);
+      } else if (error instanceof CandidateChangedException) {
+        // Review 7: the candidate changed after selection (retired or new session). Clean abort: leave the row as is.
+        this.logger.warn(`[${clientId}] Candidate ${maskMobile(newBufferClient.mobile)} changed after selection; cutover aborted, row left as is`);
       } else if (permanent) {
         // Account is permanently dead — retire it everywhere (user + pools), don't recycle
         await this.usersService.expireAccount(newBufferClient.mobile, `Setup failed permanently: ${errorDetails.message}`);
@@ -1301,7 +1305,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     if (expectedClientId && setup.clientId !== expectedClientId) {
       throw new ConflictException(`Active setup for ${setupMobile} belongs to ${setup.clientId}, not ${expectedClientId}`);
     }
-    const { archiveOld: returnOldToPool, clientId, existingMobile, formalities, newMobile, reason } = setup;
+    const { archiveOld: returnOldToPool, clientId, existingMobile, formalities, newMobile, reason, candidateSession } = setup;
     const days = setup.days ?? 0;
     this.logger.info(`[${clientId}] Starting client session cutover`, {
       existingMobile: maskMobile(existingMobile),
@@ -1353,7 +1357,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         username: updatedUsername,
         session: newSession,
         name: mirroredActiveName,
-      }, degradedPlan);
+      }, degradedPlan, candidateSession);
       cutoverCommitted = true;
       // accountRoleEvents (S1, additive): after the commit, fire-and-forget; never throws or delays the swap. The opId
       // (clientId + clients.swappedAt ms) links this pair with the old main's return in handleReplacedClient.
@@ -1449,6 +1453,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     expectedExistingMobile: string,
     updateClientDto: Pick<UpdateClientDto, 'mobile' | 'username' | 'session' | 'name'>,
     degradedPlan: DegradedSwapPlan | null = null,
+    candidateSession?: string,
   ): Promise<Client> {
     if (!updateClientDto.session?.trim()) {
       throw new BadRequestException('Cannot update client with a blank session');
@@ -1501,6 +1506,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
           clientId,
           cleanUpdateDto.mobile!,
           session,
+          candidateSession,
         );
       });
     } finally {
@@ -1703,11 +1709,15 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     }
   }
 
-  /** Every users doc expired and the buffer row (if any) inactive: expireAccount already ran. */
+  /** Every users doc expired and the buffer and promote rows (if any) inactive: expireAccount already ran. */
   private async isAlreadyRetired(mobile: string): Promise<boolean> {
     try {
       const users = (await this.usersService.findByMobileAnyStatus(mobile)) ?? [];
       if (users.some((u) => u.expired !== true)) return false;
+      // expireAccount also deactivates promoteClients; a retire whose promote cascade failed must run again on retry.
+      const promote = await this.clientModel.db.collection('promoteClients')
+        .findOne({ mobile }, { projection: { status: 1 } });
+      if (promote && promote.status !== 'inactive') return false;
       const buffer = await this.bufferClientService.findOne(mobile, false);
       // No users doc (orphaned pool record): only an inactive buffer row proves a previous retire;
       // without this, every caller retry for such a mobile re-ran expireAccount and re-announced it.

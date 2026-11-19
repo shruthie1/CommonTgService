@@ -296,6 +296,8 @@ describe('spam-aware setupClient swap', () => {
       bufferClientService.findOne.mockResolvedValue(bufferDoc);
       const svc = makeService() as any;
       svc.usersService.findByMobileAnyStatus = jest.fn().mockResolvedValue(users);
+      // No promoteClients row (isAlreadyRetired also checks it; see cutover-revalidation.spec.ts).
+      svc.clientModel.db = { collection: jest.fn(() => ({ findOne: jest.fn().mockResolvedValue(null) })) };
       jest.spyOn(svc, 'notify').mockResolvedValue(undefined);
       return svc;
     }

@@ -53,12 +53,19 @@ describe('EventManagerController', () => {
         expect(stub.createMultiple).toHaveBeenCalledWith(events);
     });
 
-    it('deleteMultiple returns status + entriesDeleted', async () => {
+    it('deleteMultiple returns status + entriesDeleted, scoped to the client', async () => {
         stub.deleteMultiple.mockResolvedValue(3);
-        expect(await controller.deleteMultiple('c1')).toEqual({
+        expect(await controller.deleteMultiple('c1', 'shruthi1')).toEqual({
             status: 'Deleted Sucessfully',
             entriesDeleted: 3,
         });
-        expect(stub.deleteMultiple).toHaveBeenCalledWith('c1');
+        expect(stub.deleteMultiple).toHaveBeenCalledWith('c1', 'shruthi1');
+    });
+
+    // Review bug 6: an old call page sends no clientId; it still works (service keeps the chatId-only delete).
+    it('deleteMultiple without clientId still passes through', async () => {
+        stub.deleteMultiple.mockResolvedValue(1);
+        expect(await controller.deleteMultiple('c1')).toEqual({ status: 'Deleted Sucessfully', entriesDeleted: 1 });
+        expect(stub.deleteMultiple).toHaveBeenCalledWith('c1', undefined);
     });
 });

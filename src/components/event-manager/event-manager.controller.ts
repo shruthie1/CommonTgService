@@ -45,9 +45,9 @@ export class EventManagerController {
   }
 
   @Delete('delete')
-  @ApiOperation({ summary: 'Delete all events for a chatId' })
-  async deleteMultiple(@Query('chatId') chatId: string) {
-    const entriesDeleted = await this.eventManagerService.deleteMultiple(chatId);
+  @ApiOperation({ summary: "Delete one client's events for a chatId (without clientId: every client's, deprecated)" })
+  async deleteMultiple(@Query('chatId') chatId: string, @Query('clientId') clientId?: string) {
+    const entriesDeleted = await this.eventManagerService.deleteMultiple(chatId, clientId);
     return { status: 'Deleted Sucessfully', entriesDeleted };
   }
 }
