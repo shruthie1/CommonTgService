@@ -79,6 +79,71 @@ export const SWAP_REPORT_GRACE_MS = 15 * 60 * 1000;
 /** Refill trusts the main's stored SpamBot verdict only when it is at most this old. */
 export const MAIN_SPAM_STATUS_FRESH_MS = 7 * 24 * 60 * 60 * 1000;
 
+/**
+ * tg-aut's swap threshold for a dated SpamBot limit (tg-platform apps/tg-aut/src/telegram/spam-state.ts
+ * MIN_LIMIT_DAYS_FOR_SWAP, applied as `daysUntil(limitedUntil) >= 3` with days rounded up). A limit with
+ * fewer whole days left is waited out, not swapped. The repos share no package: keep both values equal.
+ */
+export const MIN_LIMIT_DAYS_FOR_SWAP = 3;
+/** Refill never swaps a client whose last cutover (clients.swappedAt) is younger than this (owner 2026-11-19). */
+export const POOL_REFILL_RECENT_SWAP_MS = 24 * 60 * 60 * 1000;
+
+export type PoolRefillSkip = 'skipped_short_limit' | 'skipped_recent_swap';
+
+export const toTimeMs = (value: Date | string | null | undefined): number => {
+  const ms = value ? new Date(value).getTime() : NaN;
+  return Number.isFinite(ms) ? ms : 0;
+};
+
+/**
+ * Why the pool-refill pass must leave this client's main in place (owner 2026-11-19), or null to go on:
+ *   - skipped_recent_swap: clients.swappedAt (the last cutover; update() keeps it on a session-only change)
+ *     is under POOL_REFILL_RECENT_SWAP_MS old. A row written before 2026-11-19, where a session-only change
+ *     stamped sessionChangedAt = swappedAt, is not a swap.
+ *   - skipped_short_limit: a dated limit with fewer than MIN_LIMIT_DAYS_FOR_SWAP whole days left, already
+ *     over, or with no date stored. A harsh (indefinite) limit is never short.
+ */
+/** True for a legacy session-only stamp: a pre-2026-11-19 update() set sessionChangedAt = swappedAt. */
+export function isSessionOnlyStamp(client: { swappedAt?: Date | string | null; sessionChangedAt?: Date | string | null }): boolean {
+  const swappedAtMs = toTimeMs(client.swappedAt);
+  return swappedAtMs > 0 && toTimeMs(client.sessionChangedAt) === swappedAtMs;
+}
+
+export function poolRefillSkip(
+  client: { swappedAt?: Date | string | null; sessionChangedAt?: Date | string | null },
+  health: { spamStatus: string | null; limitedUntilMs: number | null },
+  now: number,
+): PoolRefillSkip | null {
+  const swappedAtMs = toTimeMs(client.swappedAt);
+  if (swappedAtMs > 0 && !isSessionOnlyStamp(client) && now - swappedAtMs < POOL_REFILL_RECENT_SWAP_MS) return 'skipped_recent_swap';
+  if (health.spamStatus === 'harsh') return null;
+  const untilMs = health.limitedUntilMs ?? 0;
+  if (!(untilMs > now)) return 'skipped_short_limit';
+  return Math.ceil((untilMs - now) / (24 * 60 * 60 * 1000)) >= MIN_LIMIT_DAYS_FOR_SWAP ? null : 'skipped_short_limit';
+}
+
+/**
+ * One greppable line per refill decision (owner 2026-11-19), e.g.
+ * `pool-refill kind=skip client=sneha2 reason=recent_swap daysLeft=10 hoursSinceSwap=2.0`.
+ * daysLeft: whole days left rounded up (tg-aut's rule), `harsh`, or `none`; hoursSinceSwap: `none` without swappedAt.
+ */
+export function poolRefillLogLine(
+  kind: 'skip' | 'swap',
+  clientId: string,
+  reason: string,
+  client: { swappedAt?: Date | string | null },
+  health: { spamStatus: string | null; limitedUntilMs: number | null },
+  now: number,
+  extra = '',
+): string {
+  const untilMs = health.limitedUntilMs ?? 0;
+  const daysLeft = health.spamStatus === 'harsh' ? 'harsh'
+    : untilMs > 0 ? String(Math.ceil((untilMs - now) / (24 * 60 * 60 * 1000))) : 'none';
+  const swappedAtMs = toTimeMs(client.swappedAt);
+  const hoursSinceSwap = swappedAtMs > 0 ? ((now - swappedAtMs) / 3_600_000).toFixed(1) : 'none';
+  return `pool-refill kind=${kind} client=${clientId} reason=${reason} daysLeft=${daysLeft} hoursSinceSwap=${hoursSinceSwap}${extra ? ` ${extra}` : ''}`;
+}
+
 /** clients.deadMain: the live main was reported dead by tg-aut (its live session). */
 export interface ClientDeadMainState {
   mobile: string;

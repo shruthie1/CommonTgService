@@ -133,10 +133,17 @@ the query and the probe is skipped before and again after the probe.
     whose new main really is dead still gets through: its handoff gate (`>= now - 60 s x
     2^failedHandoffs`) tries at t0 + 0, 2, 6, 14 and 30 min, and only the 30-min attempt is sure to
     land after the window (DS-134).
-  - `update()` with a new session (manual re-login) also stamps `swappedAt`, plus
-    `sessionChangedAt` when the mobile is unchanged: the running process still holds the old
-    session on the SAME mobile, so `reportedMobile` cannot tell it apart, and reports for the main
-    are answered `cooldown` for the same 15 min (DS-140). A cutover clears `sessionChangedAt`.
+  - `update()` with a new mobile (manual fix) stamps `swappedAt` and clears `sessionChangedAt`. A
+    new session on the SAME mobile stamps only `sessionChangedAt` and keeps `swappedAt` (owner
+    2026-11-19: `swappedAt` is the last real swap, read by the 24 h refill guard, DS-149/150). The
+    running process still holds the old session on the same mobile, so `reportedMobile` cannot tell
+    it apart, and reports for the main are answered `cooldown` for the same 15 min, counted from
+    the later of `swappedAt` and `sessionChangedAt` (DS-140). A cutover clears `sessionChangedAt`.
+    A row still holding the legacy pair (`swappedAt` = `sessionChangedAt`) gets both advanced
+    together on a session refresh, so it stays session-only (DS-152).
+  - Refill decides on a snapshot read before rescue and upgrade run. Inside the swap lease it
+    re-reads the client and re-runs the refill rules; a changed mobile, a new `swappedAt`, a limit
+    that is gone or now short answers `stale_main` and touches nothing (DS-153).
   - `reportedMobile` is never a 400: a repeated param (Express array) takes its first element; a
     non-string is absent or implicitly stringified and then unparseable, i.e. absent (DS-141).
   - A pinned `?mobile=` call (operator) writes no `deadMain` and skips the grace window.
@@ -483,8 +490,20 @@ and HTTP are faked). DS-J01 is in `src/control-plane/jobs/scheduled-jobs.service
 | DS-137 | Review 3 | P5: pinned `?mobile=` dead call | no `deadMain` | `-t "DS-137 "` |
 | DS-138 | Review 3 | a setup stalls 18 min (lease TTL 10) in its probe | leases renewed past now; another process gets `cooldown`; swapped, both leases gone after | `-t "DS-138 "` |
 | DS-139 | Review 3 | `reportedMobile=n/a` | counts as absent: normal swap, no 400 | `-t "DS-139 "` |
-| DS-140 | Review 4 | `update()` with a new session, then late dead reports (with `reportedMobile` = the main, and without) at 2 min; again at 31 min | `swappedAt` set, `deadMain` cleared; both `cooldown`, no swap; at 31 min swapped MAIN -> T1, `sessionChangedAt` cleared | `-t "DS-140 "` |
+| DS-140 | Review 4 | `update()` with a new session, then late dead reports (with `reportedMobile` = the main, and without) at 2 min; again at 31 min | `sessionChangedAt` set (`swappedAt` kept), `deadMain` cleared; both `cooldown`, no swap; at 31 min swapped MAIN -> T1, `sessionChangedAt` cleared | `-t "DS-140 "` |
 | DS-141 | Review 4 | `reportedMobile` as string, garbage, empty, repeated (array), object, number through the real `ValidationPipe` (main.ts options) | never a 400; array -> first element; object / number stringified | `-t "DS-141 "` |
+| DS-142 | Owner 2026-11-19 | refill: main limited 1 day out (under MIN_LIMIT_DAYS_FOR_SWAP = 3) | skipped_short_limit; no setup, no retry episode, main kept | `-t "DS-142 "` |
+| DS-143 | Owner 2026-11-19 | refill: limit 4 days out, last swap 25 h ago | swapped | `-t "DS-143 "` |
+| DS-144 | Owner 2026-11-19 | refill: client swapped 2 h ago, 10-day limit | skipped_recent_swap; no setup, main kept | `-t "DS-144 "` |
+| DS-145 | Owner 2026-11-19 | refill: harsh main swapped 2 h ago; harsh main swapped 25 h ago | first skipped_recent_swap; second swapped | `-t "DS-145 "` |
+| DS-146 | Owner 2026-11-19 | refill: session-only change 2 h ago (sessionChangedAt = swappedAt), 4-day limit | swapped (a session change is not a swap) | `-t "DS-146 "` |
+| DS-147 | Owner 2026-11-19 | refill: stored limit already over, or limited with no date | no refill row, no setup | `-t "DS-147 "` |
+| DS-148 | Owner 2026-11-19 | poolRefillSkip boundaries | days rounded up >= 3 swaps (tg-aut rule); over/none short; harsh never short; recent swap < 24 h | `-t "DS-148 "` |
+| DS-149 | Owner 2026-11-19 (Codex P1) | cutover 2 h ago, then `update()` with a new session on the same mobile, then refill (10-day limit) | `swappedAt` unchanged, `sessionChangedAt` set, `client-update kind=session_refresh swappedAt=kept` logged; refill skipped_recent_swap | `-t "DS-149 "` |
+| DS-150 | Owner 2026-11-19 (Codex P1) | `update()` with only a new mobile, then refill | `swappedAt` stamped; refill skipped_recent_swap | `-t "DS-150 "` |
+| DS-151 | Owner 2026-11-19 (Codex P1) | open swapRetry episode (2 attempts, nextAt +1 h), refill skipped for recent swap; then swap 25 h ago | episode unchanged by the skip; next refill answers skipped_cooldown with attempts 2 | `-t "DS-151 "` |
+| DS-152 | Owner 2026-11-19 (Codex P1a) | legacy session-only pair (`swappedAt` = `sessionChangedAt`, 2 h old), then `update()` with a new session, then refill (10-day limit) | both advanced to the same time (still session-only for refill and tg-aut parked.ts), `client-update kind=session_refresh swappedAt=legacy_session_only` logged; refill swapped | `-t "DS-152 "` |
+| DS-153 | Owner 2026-11-19 (Codex P1b) | another process cuts over to T3 after the refill snapshot, before the setup lease | `stale_main`: T3 kept, no setup, no retry episode, `pool-refill kind=skip reason=stale_main ... detail=mobile_changed` logged, no `kind=swap` line | `-t "DS-153 "` |
 | DS-J01 | Scheduler | two CMS processes, same slot; a UMS-scheduler process | swap maintenance and the daily summary run once per slot, CMS only; not registered under `UMS_SCHEDULER` | scheduled-jobs.service.spec.ts `-t "DS-J01"` |
 | DS-J02 | Scheduler | previous slot's claim still live; then completed | slot skipped; then runs with a 60-min claim | scheduled-jobs.service.spec.ts `-t "DS-J02"` |
 

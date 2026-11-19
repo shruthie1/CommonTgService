@@ -29,7 +29,7 @@ import { startMongo, stopMongo, MongoTestContext } from '../../__tests__/api-tes
 import { ClientService } from '../client.service';
 import {
   DEAD_MAIN_HANDOFF_WAIT_MS, isDeadSwapReason, MAIN_SPAM_STATUS_FRESH_MS, parseDegradedSwapTiers, passRetryDelayMs, PASS_MAX_ATTEMPTS,
-  POOL_REFILL_MAX_PER_RUN, RESCUE_MAX_PER_RUN, swapPoolFingerprint, SWAP_LEASE_RENEW_MS, SWAP_LEASE_TTL_MS, SWAP_REPORT_GRACE_MS, UPGRADE_MAX_PER_RUN,
+  MIN_LIMIT_DAYS_FOR_SWAP, POOL_REFILL_MAX_PER_RUN, POOL_REFILL_RECENT_SWAP_MS, poolRefillSkip, RESCUE_MAX_PER_RUN, swapPoolFingerprint, SWAP_LEASE_RENEW_MS, SWAP_LEASE_TTL_MS, SWAP_REPORT_GRACE_MS, UPGRADE_MAX_PER_RUN,
 } from '../degraded-swap';
 import {
   CLIENT, DAY, MAIN, SIBLING, SIBLING_MAIN, FakeTelegram, Fixture, deadReq, defaultProbe, fakeClock, harsh, limited, limitedReq, makeFixture, probeAs,
@@ -49,6 +49,14 @@ const T3 = '919000915704';
 const T1 = '919000911111';
 const setup = (fx: Fixture, req: any = deadReq()) => fx.svc.setupClient(CLIENT, req);
 const maintain = (fx: Fixture) => fx.svc.runSwapMaintenance();
+/** runSwapMaintenance plus every ClientService logger.log line it wrote (owner 2026-11-19 decision lines). */
+const maintainLogged = async (fx: Fixture) => {
+  const spy = jest.spyOn(fx.svc.logger, 'log');
+  try {
+    const out = await maintain(fx);
+    return { ...out, logs: spy.mock.calls.map((c: any[]) => String(c[0])) };
+  } finally { spy.mockRestore(); }
+};
 const sibling = async (fx: Fixture, spares: string[], extra: (m: string) => Record<string, unknown> = () => ({}), user: (m: string) => Record<string, unknown> = () => ({})) => {
   await fx.addClient(SIBLING, SIBLING_MAIN, { dbcoll: 'Sneha' });
   for (const m of spares) await fx.addBuffer(m, { clientId: SIBLING, ...extra(m) }, user(m));
@@ -571,11 +579,13 @@ const rows: Row[] = [
   { id: 'DS-96', name: 'new "No buffer" episode after the mobile changes by a manual fix or another process (D4)',
     setup: async (fx) => { await fx.world(); },
     run: async (fx) => {
-      await setup(fx);
+      // reportedMobile = the main at the time (today's tg-aut): a manual mobile change stamps swappedAt
+      // (owner 2026-11-19), so a report WITHOUT reportedMobile is held for the cutover grace window.
+      await setup(fx, deadReq('FROZEN_METHOD_INVALID', { reportedMobile: MAIN }));
       await fx.svc.update(CLIENT, { mobile: '919000955555' });
-      await setup(fx);
+      await setup(fx, deadReq('FROZEN_METHOD_INVALID', { reportedMobile: '919000955555' }));
       await fx.writeClient(CLIENT, { mobile: '919000966666' });
-      await setup(fx);
+      await setup(fx, deadReq('FROZEN_METHOD_INVALID', { reportedMobile: '919000966666' }));
     },
     expect: (_o, fx) => { expect(fx.count('No buffer')).toBe(3); } },
   { id: 'DS-97', name: 'degrade notice exactly once per degraded swap',
@@ -1355,7 +1365,9 @@ const rows: Row[] = [
       } finally { clock.restore(); }
     },
     expect: async (r, fx) => {
-      expect(r.mid.swappedAt).toBeInstanceOf(Date);
+      // Owner 2026-11-19: a session-only change stamps sessionChangedAt and keeps swappedAt (the last cutover).
+      expect(r.mid.sessionChangedAt).toBeInstanceOf(Date);
+      expect(r.mid.swappedAt).toBeUndefined();
       expect(r.mid.deadMain).toBeUndefined();
       expect(r.late).toMatchObject({ status: 'cooldown', swapped: false });
       expect(r.oldBundle).toMatchObject({ status: 'cooldown', swapped: false });
@@ -1380,6 +1392,190 @@ const rows: Row[] = [
     },
     expect: (out) => {
       expect(out).toEqual({ string: MAIN, garbage: 'abc', empty: '', repeated: MAIN, object: '[object Object]', number: MAIN });
+    } },
+  // ── Owner rule 2026-11-19: refill skips short limits and clients swapped in the last 24 h ───────────
+  { id: 'DS-142', name: 'refill skips a main whose dated limit lifts in 1 day (under tg-aut MIN_LIMIT_DAYS_FOR_SWAP = 3): no setup, main kept',
+    setup: async (fx) => { await fx.world({}, { mainBuffer: limited(1) }); await fx.addBuffer(T1); },
+    run: (fx) => maintainLogged(fx),
+    expect: async (out, fx) => {
+      expect(out.refill).toEqual([{ clientId: CLIENT, status: 'skipped_short_limit' }]);
+      expect(fx.tg.setActiveClientSetup).not.toHaveBeenCalled();
+      expect((await fx.client()).mobile).toBe(MAIN);
+      expect((await fx.client()).swapRetry).toBeUndefined();
+      expect(out.logs).toContain(`pool-refill kind=skip client=${CLIENT} reason=short_limit daysLeft=1 hoursSinceSwap=none`);
+    } },
+  { id: 'DS-143', name: 'refill still swaps a main limited 4 days out whose last swap was 25 h ago',
+    setup: async (fx) => { await fx.world({ swappedAt: new Date(Date.now() - 25 * 3600_000) }, { mainBuffer: limited(4) }); await fx.addBuffer(T1); },
+    run: (fx) => maintainLogged(fx),
+    expect: async (out, fx) => {
+      expect(out.refill).toEqual([{ clientId: CLIENT, status: 'swapped', newMobile: T1 }]);
+      expect((await fx.client()).mobile).toBe(T1);
+      expect(out.logs).toContain(`pool-refill kind=swap client=${CLIENT} reason=POOL_REFILL daysLeft=4 hoursSinceSwap=25.0 result=swapped`);
+    } },
+  { id: 'DS-144', name: 'refill skips a client swapped 2 h ago (clients.swappedAt), even with a 10-day limit: no setup, main kept',
+    setup: async (fx) => { await fx.world({ swappedAt: new Date(Date.now() - 2 * 3600_000) }, { mainBuffer: limited(10) }); await fx.addBuffer(T1); },
+    run: (fx) => maintainLogged(fx),
+    expect: async (out, fx) => {
+      expect(out.refill).toEqual([{ clientId: CLIENT, status: 'skipped_recent_swap' }]);
+      expect(fx.tg.setActiveClientSetup).not.toHaveBeenCalled();
+      expect((await fx.client()).mobile).toBe(MAIN);
+      expect(out.logs).toContain(`pool-refill kind=skip client=${CLIENT} reason=recent_swap daysLeft=10 hoursSinceSwap=2.0`);
+    } },
+  { id: 'DS-145', name: 'refill skips a harsh main swapped 2 h ago; a harsh main last swapped 25 h ago is swapped',
+    setup: async (fx) => {
+      await fx.addClient('hr1', '919000950001', { dbcoll: 'h1', swappedAt: new Date(Date.now() - 2 * 3600_000) }, { mainBuffer: harsh() });
+      await fx.addBuffer('919000950011', { clientId: 'hr1' });
+      await fx.addClient('hr2', '919000950002', { dbcoll: 'h2', swappedAt: new Date(Date.now() - 25 * 3600_000) }, { mainBuffer: harsh() });
+      await fx.addBuffer('919000950012', { clientId: 'hr2' });
+    },
+    run: (fx) => maintain(fx),
+    expect: (out) => {
+      expect(out.refill).toEqual([
+        { clientId: 'hr1', status: 'skipped_recent_swap' },
+        expect.objectContaining({ clientId: 'hr2', status: 'swapped', newMobile: '919000950012' }),
+      ]);
+    } },
+  { id: 'DS-146', name: 'a session-only change 2 h ago (sessionChangedAt = swappedAt) is not a swap: refill still swaps a 4-day limit',
+    setup: async (fx) => {
+      const at = new Date(Date.now() - 2 * 3600_000);
+      await fx.world({ swappedAt: at, sessionChangedAt: at }, { mainBuffer: limited(4) });
+      await fx.addBuffer(T1);
+    },
+    run: (fx) => maintain(fx),
+    expect: (out) => { expect(out.refill).toEqual([{ clientId: CLIENT, status: 'swapped', newMobile: T1 }]); } },
+  { id: 'DS-147', name: 'refill never swaps a main whose stored limit is already over (1 h ago) or limited with no date',
+    setup: async (fx) => {
+      await fx.addClient('ov1', '919000960001', { dbcoll: 'v1' }, { mainBuffer: { spamStatus: 'limited', limitedUntil: new Date(Date.now() - 3600_000), spamCheckedAt: new Date() } });
+      await fx.addBuffer('919000960011', { clientId: 'ov1' });
+      await fx.addClient('ov2', '919000960002', { dbcoll: 'v2' }, { mainBuffer: { spamStatus: 'limited', limitedUntil: null, spamCheckedAt: new Date() } });
+      await fx.addBuffer('919000960012', { clientId: 'ov2' });
+    },
+    run: (fx) => maintain(fx),
+    expect: (out, fx) => { expect(out.refill).toEqual([]); expect(fx.tg.setActiveClientSetup).not.toHaveBeenCalled(); } },
+  { id: 'DS-148', name: 'poolRefillSkip boundaries match tg-aut (whole days rounded up >= 3 swaps; 24 h recent-swap window)',
+    run: async () => {
+      const now = Date.parse('2026-11-19T12:00:00Z');
+      const H = 3600_000;
+      const lim = (days: number | null) => ({ spamStatus: 'limited', limitedUntilMs: days === null ? null : now + days * DAY });
+      return {
+        limits: [0.5, 1, 2, 2.01, 3, 4, -0.1, null].map((d) => poolRefillSkip({}, lim(d), now)),
+        harsh: poolRefillSkip({}, { spamStatus: 'harsh', limitedUntilMs: null }, now),
+        swapped: [23.9, 24, 25].map((h) => poolRefillSkip({ swappedAt: new Date(now - h * H) }, lim(10), now)),
+      };
+    },
+    expect: (r) => {
+      expect(MIN_LIMIT_DAYS_FOR_SWAP).toBe(3);
+      expect(POOL_REFILL_RECENT_SWAP_MS).toBe(24 * 3600_000);
+      expect(r.limits).toEqual(['skipped_short_limit', 'skipped_short_limit', 'skipped_short_limit', null, null, null, 'skipped_short_limit', 'skipped_short_limit']);
+      expect(r.harsh).toBeNull();
+      expect(r.swapped).toEqual(['skipped_recent_swap', null, null]);
+    } },
+  { id: 'DS-149', name: 'cutover 2 h ago, then a session-only update(): swappedAt keeps the cutover time and refill skips (skipped_recent_swap)',
+    setup: async (fx) => { await fx.world({ swappedAt: new Date(Date.now() - 2 * 3600_000) }, { mainBuffer: limited(10) }); await fx.addBuffer(T1); },
+    run: async (fx) => {
+      const before = (await fx.client()).swappedAt;
+      const spy = jest.spyOn(fx.svc.logger, 'log');
+      await fx.svc.update(CLIENT, { session: 'refreshed-session' } as any);
+      const updateLogs = spy.mock.calls.map((c: any[]) => String(c[0]));
+      spy.mockRestore();
+      const mid = await fx.client();
+      return { before, mid, updateLogs, out: await maintain(fx) };
+    },
+    expect: async (r, fx) => {
+      expect(r.mid.swappedAt).toEqual(r.before);
+      expect(r.mid.sessionChangedAt).toBeInstanceOf(Date);
+      expect(r.updateLogs).toContain(`client-update kind=session_refresh swappedAt=kept client=${CLIENT} hoursSinceSwap=2.0`);
+      expect(r.out.refill).toEqual([{ clientId: CLIENT, status: 'skipped_recent_swap' }]);
+      expect((await fx.client()).mobile).toBe(MAIN);
+    } },
+  { id: 'DS-150', name: 'a mobile-only update() is a cutover: it stamps swappedAt, so refill skips the new main for 24 h',
+    setup: async (fx) => {
+      await fx.world({}, { mainBuffer: limited(10) });
+      await fx.addBuffer(T3, { inUse: false, ...limited(10) });
+      await fx.addBuffer(T1);
+    },
+    run: async (fx) => {
+      await fx.svc.update(CLIENT, { mobile: T3 } as any);
+      const mid = await fx.client();
+      return { mid, out: await maintain(fx) };
+    },
+    expect: (r) => {
+      expect(r.mid.mobile).toBe(T3);
+      expect(r.mid.swappedAt).toBeInstanceOf(Date);
+      expect(r.mid.sessionChangedAt).toBeUndefined();
+      expect(r.out.refill).toEqual([{ clientId: CLIENT, status: 'skipped_recent_swap' }]);
+    } },
+  { id: 'DS-151', name: 'a refill episode survives a skip untouched and is consulted once the client qualifies again',
+    setup: async (fx) => {
+      await fx.world({ swappedAt: new Date(Date.now() - 2 * 3600_000) }, { mainBuffer: limited(10) });
+      await fx.addBuffer(T1);
+      const all = await fx.clientModel.find({}).lean();
+      const fp = await fx.svc.poolFingerprint(await fx.client(), all);
+      await fx.clientModel.collection.updateOne({ clientId: CLIENT }, { $set: { swapRetry: {
+        pass: 'refill', mobile: MAIN, attempts: 2, nextAt: new Date(Date.now() + 3600_000), poolFingerprint: fp, since: new Date(Date.now() - 3600_000),
+      } } });
+    },
+    run: async (fx) => {
+      const before = (await fx.client()).swapRetry;
+      const skipped = (await maintain(fx)).refill;
+      const afterSkip = (await fx.client()).swapRetry;
+      await fx.clientModel.collection.updateOne({ clientId: CLIENT }, { $set: { swappedAt: new Date(Date.now() - 25 * 3600_000) } });
+      const qualified = (await maintain(fx)).refill;
+      return { before, skipped, afterSkip, qualified };
+    },
+    expect: (r, fx) => {
+      expect(r.skipped).toEqual([{ clientId: CLIENT, status: 'skipped_recent_swap' }]);
+      expect(r.afterSkip).toEqual(r.before);
+      expect(r.qualified).toEqual([{ clientId: CLIENT, status: 'skipped_cooldown', attempts: 2 }]);
+      expect(fx.tg.setActiveClientSetup).not.toHaveBeenCalled();
+    } },
+  { id: 'DS-152', name: 'a legacy session-only pair (swappedAt = sessionChangedAt) stays session-only after a new session refresh: refill is not held',
+    setup: async (fx) => {
+      const legacy = new Date(Date.now() - 2 * 3600_000);
+      await fx.world({ swappedAt: legacy, sessionChangedAt: legacy } as any, { mainBuffer: limited(10) });
+      await fx.addBuffer(T1);
+    },
+    run: async (fx) => {
+      const spy = jest.spyOn(fx.svc.logger, 'log');
+      await fx.svc.update(CLIENT, { session: 'refreshed-session' } as any);
+      const updateLogs = spy.mock.calls.map((c: any[]) => String(c[0]));
+      spy.mockRestore();
+      const mid = await fx.client();
+      return { mid, updateLogs, out: await maintain(fx) };
+    },
+    expect: (r) => {
+      // tg-platform parked.ts boot fallback reads an equal pair as session-only (no episode).
+      expect(r.mid.sessionChangedAt).toBeInstanceOf(Date);
+      expect(new Date(r.mid.swappedAt).getTime()).toBe(new Date(r.mid.sessionChangedAt).getTime());
+      expect(Date.now() - new Date(r.mid.swappedAt).getTime()).toBeLessThan(60_000);
+      expect(r.updateLogs.some((l: string) => l.startsWith(`client-update kind=session_refresh swappedAt=legacy_session_only client=${CLIENT}`))).toBe(true);
+      expect(r.out.refill).toEqual([{ clientId: CLIENT, status: 'swapped', newMobile: T1 }]);
+    } },
+  { id: 'DS-153', name: 'a cutover between the refill snapshot and the setup lease aborts the refill (stale_main): new main kept, no retry episode',
+    setup: async (fx) => {
+      await fx.world({ swappedAt: new Date(Date.now() - 25 * 3600_000) }, { mainBuffer: limited(10) });
+      await fx.addBuffer(T1);
+    },
+    run: async (fx) => {
+      const svc = fx.svc as any;
+      const original = svc.busyCandidateMobiles.bind(svc);
+      // Runs after runSwapMaintenance took its snapshot and before runSetup: another process cuts over to T3.
+      const busy = jest.spyOn(svc, 'busyCandidateMobiles').mockImplementationOnce(async (...args: any[]) => {
+        await fx.clientModel.collection.updateOne({ clientId: CLIENT }, { $set: { mobile: T3, swappedAt: new Date() } });
+        return original(...args);
+      });
+      const out = await maintainLogged(fx);
+      busy.mockRestore();
+      return out;
+    },
+    expect: async (out, fx) => {
+      expect(out.refill).toEqual([{ clientId: CLIENT, status: 'stale_main' }]);
+      const after = await fx.client();
+      expect(after.mobile).toBe(T3);
+      expect(after.swapRetry).toBeUndefined();
+      expect(fx.tg.setActiveClientSetup).not.toHaveBeenCalled();
+      expect(out.logs.some((l: string) => l.startsWith(`pool-refill kind=skip client=${CLIENT} reason=stale_main `) && l.endsWith('detail=mobile_changed'))).toBe(true);
+      expect(out.logs.some((l: string) => l.startsWith(`pool-refill kind=swap client=${CLIENT}`))).toBe(false);
     } },
 ];
 

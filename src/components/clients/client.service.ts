@@ -89,6 +89,11 @@ import {
   type SwapRetryPass,
   POOL_REFILL_MAX_PER_RUN,
   POOL_REFILL_REASON,
+  isSessionOnlyStamp,
+  poolRefillLogLine,
+  poolRefillSkip,
+  toTimeMs,
+  type PoolRefillSkip,
   probeAcceptanceForTier,
   RESCUE_MAX_PER_RUN,
   SIBLING_MIN_SPARES_AFTER,
@@ -160,7 +165,7 @@ interface SetupProbeBudget {
 /** One row of a swap-maintenance pass (rescue / upgrade / pool refill). */
 export interface SwapMaintenanceResult {
   clientId: string;
-  status: SetupClientStatus | 'cleared' | 'skipped_cooldown' | 'stopped' | 'waiting_handoff';
+  status: SetupClientStatus | 'cleared' | 'skipped_cooldown' | 'stopped' | 'waiting_handoff' | PoolRefillSkip;
   /** rescue / upgrade / refill: attempts used in this episode after this run. */
   attempts?: number;
   /** rescue / upgrade / refill: the pool changed since the last attempt, so a stopped or cooling episode re-armed. */
@@ -209,6 +214,11 @@ interface SetupInternalOptions {
   jobPass?: boolean;
   /** Set by runSetup: the owner of this run's clients.swapLease and bufferClients.probeLease rows. */
   leaseOwner?: string;
+  /**
+   * Refill pass: the main the sweep decided on (snapshot taken before rescue / upgrade ran). Re-checked
+   * inside the swap lease before any probe; a changed main answers stale_main and nothing is done.
+   */
+  refillSnapshot?: { mobile: string; swappedAtMs: number };
 }
 
 export type SetupClientStatus =
@@ -219,7 +229,9 @@ export type SetupClientStatus =
   | 'no_candidate'
   | 'failed'
   /** The caller's reportedMobile is not this client's main any more (a late report from a replaced process). Nothing was done. */
-  | 'stale_report';
+  | 'stale_report'
+  /** Refill only: the main changed (cutover, limit gone) after the sweep's snapshot. Nothing was done. */
+  | 'stale_main';
 
 export interface SetupClientResult {
   status: SetupClientStatus;
@@ -542,8 +554,8 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       let newMainMobile: string | null = null;
       let oldMainMobile: string | null = null;
       if (cleanUpdateDto.mobile !== undefined || cleanUpdateDto.session !== undefined) {
-        const current = await this.clientModel.findOne({ clientId }, { mobile: 1, session: 1, degraded: 1, deadMain: 1 })
-          .lean<Pick<Client, 'mobile' | 'session' | 'degraded' | 'deadMain'>>().exec();
+        const current = await this.clientModel.findOne({ clientId }, { mobile: 1, session: 1, degraded: 1, deadMain: 1, swappedAt: 1, sessionChangedAt: 1 })
+          .lean<Pick<Client, 'mobile' | 'session' | 'degraded' | 'deadMain' | 'swappedAt' | 'sessionChangedAt'>>().exec();
         const mobileChanged = !!current && cleanUpdateDto.mobile !== undefined && this.canonicalMobile(current.mobile) !== cleanUpdateDto.mobile;
         const sessionChanged = !!current && cleanUpdateDto.session !== undefined && current.session !== cleanUpdateDto.session;
         if (mobileChanged) {
@@ -563,10 +575,25 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         // process still holds the old session until its restart. A session-only fix keeps the mobile,
         // so reportedMobile cannot tell the old process from the restarted one: sessionChangedAt holds
         // those reports for the window too (screenSetupReport).
+        // Owner 2026-11-19: swappedAt is the last cutover only. A mobile change is one (stamped here); a
+        // session-only fix is not and keeps swappedAt, so the refill pass's 24 h rule still sees the real swap.
         const extraSet: Record<string, unknown> = {};
-        if (sessionChanged) extraSet.swappedAt = new Date();
-        if (sessionChanged && !mobileChanged) extraSet.sessionChangedAt = extraSet.swappedAt;
-        else if (mobileChanged) unset.sessionChangedAt = '';
+        if (mobileChanged) {
+          extraSet.swappedAt = new Date();
+          unset.sessionChangedAt = '';
+        } else if (sessionChanged && isSessionOnlyStamp(current!)) {
+          // Legacy pair (pre-2026-11-19 session-only stamp, swappedAt = sessionChangedAt): its swappedAt is not a
+          // swap. Advance both together so readers (refill 24 h rule, tg-aut parked boot fallback) still see
+          // session-only, never a fresh cutover at the old time.
+          const at = new Date();
+          extraSet.swappedAt = at;
+          extraSet.sessionChangedAt = at;
+          this.logger.log(`client-update kind=session_refresh swappedAt=legacy_session_only client=${clientId}`);
+        } else if (sessionChanged) {
+          extraSet.sessionChangedAt = new Date();
+          const keptMs = current!.swappedAt ? new Date(current!.swappedAt).getTime() : NaN;
+          this.logger.log(`client-update kind=session_refresh swappedAt=kept client=${clientId} hoursSinceSwap=${Number.isFinite(keptMs) ? ((Date.now() - keptMs) / 3_600_000).toFixed(1) : 'none'}`);
+        }
         if (Object.keys(unset).length || Object.keys(extraSet).length) {
           clientUpdate = { $set: { ...cleanUpdateDto, ...extraSet }, ...(Object.keys(unset).length ? { $unset: unset } : {}) };
         }
@@ -829,10 +856,15 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         },
       };
     }
-    const swappedAtMs = current.swappedAt ? new Date(current.swappedAt).getTime() : 0;
+    // The window opens on a cutover (swappedAt) or a session-only change (sessionChangedAt): both leave a
+    // process running on what it replaced until its restart.
+    const swappedAtMs = Math.max(
+      current.swappedAt ? new Date(current.swappedAt).getTime() : 0,
+      current.sessionChangedAt ? new Date(current.sessionChangedAt).getTime() : 0,
+    ) || 0;
     const graceLeftMs = swappedAtMs + SWAP_REPORT_GRACE_MS - Date.now();
     if (dto?.reason && !dto?.mobile && swappedAtMs && graceLeftMs > 0) {
-      this.logger.warn(`[${clientId}] setupClient report without reportedMobile ${Math.round((Date.now() - swappedAtMs) / 1000)}s after a cutover; ignored (may be the replaced process)`, { reason: dto.reason });
+      this.logger.warn(`[${clientId}] setupClient report without reportedMobile ${Math.round((Date.now() - swappedAtMs) / 1000)}s after a cutover or session change; ignored (may be the replaced process)`, { reason: dto.reason });
       return {
         answer: {
           status: 'cooldown',
@@ -956,6 +988,9 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     const renewal = setInterval(() => { void this.renewSetupLeases(clientId, leaseOwner); }, this.leaseRenewMs);
     renewal.unref?.();
     try {
+      if (internal.refillSnapshot && await this.refillTargetStale(clientId, internal.refillSnapshot)) {
+        return { status: 'stale_main', swapped: false, clientId, message: 'Refill target changed since the sweep snapshot' };
+      }
       return await this.handleSetupClient(clientId, setupClientQueryDto, { ...internal, leaseOwner });
     } finally {
       clearInterval(renewal);
@@ -966,6 +1001,32 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         this.logger.warn(`[${clientId}] Lease release failed (expires in ${SWAP_LEASE_TTL_MS / 60_000} min): ${parseError(error, '', false).message}`);
       }
     }
+  }
+
+  /**
+   * Codex P1b (2026-11-19): the refill sweep decides on a snapshot read before rescue / upgrade ran. Inside
+   * the swap lease (no other setupClient can cut over now), re-read the client and re-run the refill rules on
+   * the fresh row: a different main, a new cutover, a limit that is gone or now short means the decision is
+   * stale. One `pool-refill kind=skip reason=stale_main` line; the retry episode is left alone.
+   */
+  private async refillTargetStale(clientId: string, snapshot: { mobile: string; swappedAtMs: number }): Promise<boolean> {
+    const fresh = await this.clientModel.findOne({ clientId }).lean<Client>().exec();
+    if (!fresh) return false; // handleSetupClient answers client_not_found
+    const now = Date.now();
+    let detail: string | null = null;
+    let health: { spamStatus: string | null; limitedUntilMs: number | null } = { spamStatus: null, limitedUntilMs: null };
+    if (this.canonicalMobile(fresh.mobile) !== this.canonicalMobile(snapshot.mobile)) detail = 'mobile_changed';
+    else if (toTimeMs(fresh.swappedAt) !== snapshot.swappedAtMs) detail = 'swapped';
+    else {
+      const state = await this.readMainState(fresh);
+      health = state.health;
+      const skip = state.limited ? poolRefillSkip(fresh, state.health, now) : null;
+      if (!state.limited) detail = 'limit_gone';
+      else if (skip) detail = skip === 'skipped_recent_swap' ? 'recent_swap' : 'short_limit';
+    }
+    if (!detail) return false;
+    this.logger.log(poolRefillLogLine('skip', clientId, 'stale_main', fresh, health, now, `detail=${detail}`));
+    return true;
   }
 
   private async renewSetupLeases(clientId: string, leaseOwner: string): Promise<void> {
@@ -2396,6 +2457,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     const refill = await this.refillLimitedMains(
       clients.filter((c) => !handled.has(c.clientId) && !c.degraded && states.get(c.clientId)?.limited),
       clients,
+      states,
     );
     return { rescue, upgrade, refill };
   }
@@ -2544,7 +2606,8 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       return { clientId: client.clientId, status: 'failed', attempts: await this.notePassOutcome(pass, client, all, decision, false) };
     }
     // Nothing was probed: CMS cooldown / another process's lease, or AUTO_CLIENT_SETUP off.
-    if (result.status === 'cooldown' || result.status === 'disabled') return { clientId: client.clientId, status: result.status };
+    // stale_main (refill): the main changed under the sweep; this client's retry episode is not touched.
+    if (result.status === 'cooldown' || result.status === 'disabled' || result.status === 'stale_main') return { clientId: client.clientId, status: result.status };
     const used = await this.notePassOutcome(pass, client, all, decision, result.swapped);
     return {
       clientId: client.clientId,
@@ -2678,14 +2741,30 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       && markerUntil <= now;
   }
 
-  /** Pool-refill pass: swap a SpamBot-limited (alive, not degraded) main once a tier-1 buffer exists. */
-  private async refillLimitedMains(clients: Client[], all: Client[]): Promise<SwapMaintenanceResult[]> {
+  /**
+   * Pool-refill pass: swap a SpamBot-limited (alive, not degraded) main once a tier-1 buffer exists. Owner
+   * 2026-11-19: never when the limit is short (poolRefillSkip) or the client was swapped in the last 24 h;
+   * such a skip touches no retry episode.
+   */
+  private async refillLimitedMains(
+    clients: Client[],
+    all: Client[],
+    states: Map<string, Awaited<ReturnType<ClientService['readMainState']>>>,
+  ): Promise<SwapMaintenanceResult[]> {
     const results: SwapMaintenanceResult[] = [];
     const today = ClientHelperUtils.getTodayDateString();
     let attempts = 0;
     for (const client of clients) {
       if (attempts >= POOL_REFILL_MAX_PER_RUN) break;
       try {
+        // runSwapMaintenance passes only clients whose state says limited, so the state is always there.
+        const health = states.get(client.clientId)!.health;
+        const skip = poolRefillSkip(client, health, Date.now());
+        if (skip) {
+          this.logger.log(poolRefillLogLine('skip', client.clientId, skip === 'skipped_recent_swap' ? 'recent_swap' : 'short_limit', client, health, Date.now()));
+          results.push({ clientId: client.clientId, status: skip });
+          continue;
+        }
         const decision = await this.passDecision('refill', client, all);
         if (decision.kind !== 'due') {
           results.push({ clientId: client.clientId, status: decision.kind === 'stopped' ? 'stopped' : 'skipped_cooldown', attempts: decision.attempts });
@@ -2700,8 +2779,14 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         );
         if (!spare.length) continue;
         attempts++;
-        results.push(await this.runPassAttempt('refill', client, all, decision,
-          { days: 0, archiveOld: true, formalities: true, reason: POOL_REFILL_REASON }, {}));
+        const row = await this.runPassAttempt('refill', client, all, decision,
+          { days: 0, archiveOld: true, formalities: true, reason: POOL_REFILL_REASON },
+          { refillSnapshot: { mobile: client.mobile, swappedAtMs: toTimeMs(client.swappedAt) } });
+        // stale_main already wrote its own kind=skip line inside the lease.
+        if (row.status !== 'stale_main') {
+          this.logger.log(poolRefillLogLine('swap', client.clientId, POOL_REFILL_REASON, client, health, Date.now(), `result=${row.status}`));
+        }
+        results.push(row);
       } catch (error) {
         parseError(error, `[${client.clientId}] pool refill failed`, false);
         results.push({ clientId: client.clientId, status: 'failed' });
