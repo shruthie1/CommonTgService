@@ -12,6 +12,8 @@ export interface PromoHealthRetryBase {
   proc: string;
   success: number;
   failed: number;
+  /** Set when tg re-took the base after the retry (a restart): evidence counts from here. */
+  at?: number;
 }
 
 /**
@@ -112,10 +114,54 @@ export function stripTgOwnedPaths(update: Record<string, unknown> | null | undef
   }
 }
 
-// Read-only for CMS: every model update path (PUT /promote-stats/:client sends its body to findOneAndUpdate) drops
+/** Removes tg-owned paths from a plain document or a hydrated one (insert and save paths). Exported for tests. */
+export function stripTgOwnedFromDoc(doc: unknown): void {
+  if (!doc || typeof doc !== 'object') return;
+  for (const path of TG_OWNED_PROMOTE_STAT_PATHS) {
+    const hydrated = doc as { set?: (path: string, value: unknown) => void; $__?: unknown };
+    if (hydrated.$__ && typeof hydrated.set === 'function') hydrated.set(path, undefined);
+    else delete (doc as Record<string, unknown>)[path];
+  }
+}
+
+/**
+ * Strips tg-owned paths from every write of a Model.bulkWrite op list, in place: updateOne/updateMany updates,
+ * replaceOne replacements and insertOne documents. Exported for tests.
+ */
+export function stripTgOwnedFromBulkOps(ops: unknown): void {
+  if (!Array.isArray(ops)) return;
+  for (const op of ops as Array<Record<string, any>>) {
+    if (!op || typeof op !== 'object') continue;
+    if (op.updateOne?.update) stripTgOwnedPaths(op.updateOne.update);
+    if (op.updateMany?.update) stripTgOwnedPaths(op.updateMany.update);
+    if (op.replaceOne?.replacement) stripTgOwnedPaths(op.replaceOne.replacement);
+    if (op.insertOne?.document) stripTgOwnedFromDoc(op.insertOne.document);
+  }
+}
+
+// Read-only for CMS: every model write path (PUT /promote-stats/:client sends its body to findOneAndUpdate) drops
 // tg-owned paths, so a CMS body or a future writer cannot clobber the cycle tg conditions its writes on.
-for (const op of ['updateOne', 'updateMany', 'findOneAndUpdate'] as const) {
+// A replace (replaceOne, findOneAndReplace, a bulk replaceOne) cannot set the cycle, but by its nature it still
+// removes a stored one; tg then reads no cycle (a paused main retries at once at count 0), the same as a daily reset.
+for (const op of ['updateOne', 'updateMany', 'findOneAndUpdate', 'replaceOne', 'findOneAndReplace'] as const) {
   PromoteStatSchema.pre(op, function stripTgOwned() {
     stripTgOwnedPaths(this.getUpdate() as Record<string, unknown> | null);
   });
 }
+
+PromoteStatSchema.pre('bulkWrite', function stripTgOwnedBulk(ops: unknown) {
+  stripTgOwnedFromBulkOps(ops);
+});
+
+PromoteStatSchema.pre('insertMany', function stripTgOwnedInsertMany(docs: unknown) {
+  for (const doc of Array.isArray(docs) ? docs : [docs]) stripTgOwnedFromDoc(doc);
+});
+
+// save() and Model.create(): a new doc never carries the cycle; an existing doc never sends a changed one.
+PromoteStatSchema.pre('save', function stripTgOwnedSave() {
+  if (this.isNew) {
+    for (const path of TG_OWNED_PROMOTE_STAT_PATHS) this.set(path, undefined);
+    return;
+  }
+  for (const path of this.modifiedPaths()) if (isTgOwnedPath(path)) this.unmarkModified(path);
+});
