@@ -98,6 +98,7 @@ import {
   RESCUE_MAX_PER_RUN,
   SIBLING_MIN_SPARES_AFTER,
   SwapProbeAcceptance,
+  swapRetryReadFilter,
 } from './degraded-swap';
 
 // Configuration constants
@@ -632,24 +633,6 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       const errorDetails = parseError(error, `Failed to update client ${clientId} | mobile: ${updateClientDto.mobile || 'N/A'}`);
       throw new BadRequestException(errorDetails.message);
     }
-  }
-
-  async remove(clientId: string): Promise<Client> {
-    this.ensureInitialized();
-    try {
-      const deletedClient = await this.executeWithRetry(() =>
-        this.clientModel.findOneAndDelete({ clientId }).lean().exec(),
-      );
-      if (!deletedClient) {
-        throw new NotFoundException(`Client with ID "${clientId}" not found`);
-      }
-      this.clientsMap.delete(clientId);
-      this.logger.log(`Client removed: ${clientId}`);
-      return deletedClient;
-    } catch (error) {
-      const errorDetails = parseError(error, `Failed to remove client ${clientId}`);
-      throw new InternalServerErrorException(errorDetails.message);
-    };
   }
 
   async search(filter: ClientSearchFilter | ClientMongoQuery): Promise<Client[]> {
@@ -2536,8 +2519,10 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
 
   /**
    * Persist the outcome of one attempt. A swap ends the episode (the cutover also $unsets it). A
-   * miss counts; the PASS_MAX_ATTEMPTS-th miss is the hard stop with ONE notice. Guarded on the
-   * mobile so a concurrent cutover is never overwritten.
+   * miss counts; the PASS_MAX_ATTEMPTS-th miss is the hard stop with ONE notice. Both writes run
+   * after runSetup released its lease, so each is conditional on the mobile and the swapRetry state
+   * this pass read (swapRetryReadFilter): a stale pass never erases or overwrites a newer episode or
+   * a concurrent cutover. A skipped write logs `swap-retry kind=skip`.
    */
   private async notePassOutcome(
     pass: SwapRetryPass,
@@ -2546,8 +2531,23 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     decision: Extract<SwapRetryDecision, { kind: 'due' }>,
     swapped: boolean,
   ): Promise<number> {
+    const read = client.swapRetry || null;
     if (swapped) {
-      await this.clientModel.updateOne({ clientId: client.clientId, swapRetry: { $exists: true } }, { $unset: { swapRetry: '' } }).exec();
+      // The cutover already $unsets swapRetry in its transaction; this clear is only for a swap
+      // path that left the read episode in place.
+      if (!read) {
+        this.logger.log(`swap-retry kind=skip op=clear reason=no_state client=${client.clientId} pass=${pass}`);
+        return 0;
+      }
+      const cleared = await this.clientModel.updateOne(
+        { clientId: client.clientId, ...swapRetryReadFilter(read) },
+        { $unset: { swapRetry: '' } },
+      ).exec();
+      if ((cleared.matchedCount || 0) === 1) {
+        this.logger.log(`swap-retry kind=cleared client=${client.clientId} pass=${pass}`);
+      } else {
+        this.logger.log(`swap-retry kind=skip op=clear reason=not_current client=${client.clientId} pass=${pass}`);
+      }
       return 0;
     }
     const attempts = decision.attempts + 1;
@@ -2565,10 +2565,15 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       stoppedAt: stopped ? new Date(now) : null,
     };
     const written = await this.clientModel.updateOne(
-      { clientId: client.clientId, mobile: client.mobile },
+      { clientId: client.clientId, ...this.passGenerationFilter(client) },
       { $set: { swapRetry: state } },
     ).exec();
-    if (stopped && (written.matchedCount || 0) === 1) {
+    if ((written.matchedCount || 0) !== 1) {
+      this.logger.log(`swap-retry kind=skip op=record reason=not_current client=${client.clientId} pass=${pass} attempts=${attempts}`);
+      return attempts;
+    }
+    this.logger.log(`swap-retry kind=recorded client=${client.clientId} pass=${pass} attempts=${attempts}${stopped ? ' stopped=true' : ''}`);
+    if (stopped) {
       const text = {
         rescue: { severity: 'critical' as const, title: 'Rescue stopped', summary: `${client.clientId} stuck on dead main, rescue stopped after ${attempts} tries, will retry when the pool changes` },
         upgrade: { severity: 'warning' as const, title: 'Upgrade stopped', summary: `${client.clientId} stays on its degraded (tier ${client.degraded?.tier ?? '?'}) account, upgrade stopped after ${attempts} tries, will retry when the pool changes` },
@@ -2584,6 +2589,22 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       });
     }
     return attempts;
+  }
+
+  /**
+   * Matches the clients row only while it is still the generation a swap pass read: same main
+   * (mobile, swappedAt), same session (sessionChangedAt: a same-mobile session refresh advances it
+   * and clears deadMain) and the same swapRetry state. Writes that run after the setup lease is
+   * released (notePassOutcome, the upgrade pass's degraded clear) carry it, so a stale pass never
+   * overwrites a repair or a newer episode.
+   */
+  private passGenerationFilter(client: Client): Record<string, unknown> {
+    return {
+      mobile: client.mobile,
+      swappedAt: client.swappedAt ?? null,
+      sessionChangedAt: client.sessionChangedAt ?? null,
+      ...(client.swapRetry ? swapRetryReadFilter(client.swapRetry) : { swapRetry: null }),
+    };
   }
 
   /**
@@ -2678,11 +2699,20 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       try {
         const state = states?.get(client.clientId) ?? await this.readMainState(client);
         if (this.currentMeetsTier1(client, state)) {
+          // Fenced on the degraded marker and the generation this sweep read (passGenerationFilter):
+          // a newer retry episode, swap or session refresh since the snapshot keeps the row untouched.
           const cleared = await this.clientModel.updateOne(
-            { clientId: client.clientId, mobile: client.mobile, degraded: { $exists: true } },
+            {
+              clientId: client.clientId,
+              ...this.passGenerationFilter(client),
+              'degraded.tier': fromTier,
+            },
             { $unset: { degraded: '', swapRetry: '' } },
           ).exec();
-          if ((cleared.modifiedCount || 0) === 1) {
+          if ((cleared.modifiedCount || 0) !== 1) {
+            this.logger.log(`degraded-clear kind=skip reason=not_current client=${client.clientId} tier=${fromTier}`);
+          } else {
+            this.logger.log(`degraded-clear kind=cleared client=${client.clientId} tier=${fromTier}`);
             const cached = this.clientsMap.get(client.clientId);
             if (cached) {
               const { degraded: _dropped, ...rest } = cached;

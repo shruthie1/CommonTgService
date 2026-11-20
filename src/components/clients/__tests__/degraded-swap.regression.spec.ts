@@ -1577,6 +1577,152 @@ const rows: Row[] = [
       expect(out.logs.some((l: string) => l.startsWith(`pool-refill kind=skip client=${CLIENT} reason=stale_main `) && l.endsWith('detail=mobile_changed'))).toBe(true);
       expect(out.logs.some((l: string) => l.startsWith(`pool-refill kind=swap client=${CLIENT}`))).toBe(false);
     } },
+  { id: 'DS-154', name: 'a failed pass records its attempt and logs swap-retry kind=recorded',
+    setup: deadWorld,
+    run: (fx) => maintainLogged(fx),
+    expect: async (out, fx) => {
+      expect(out.rescue[0]).toEqual({ clientId: CLIENT, status: 'no_candidate', attempts: 1 });
+      expect((await fx.client()).swapRetry).toMatchObject({ pass: 'rescue', mobile: MAIN, attempts: 1 });
+      expect(out.logs).toContain(`swap-retry kind=recorded client=${CLIENT} pass=rescue attempts=1`);
+    } },
+  { id: 'DS-155', name: 'a stale failed pass never overwrites a newer swapRetry written during its run (Codex 2026-11-20)',
+    setup: deadWorld,
+    run: async (fx) => {
+      const svc = fx.svc as any;
+      const original = svc.runSetup.bind(svc);
+      const newer = { pass: 'rescue', mobile: MAIN, attempts: 4, nextAt: new Date(Date.now() + 3600_000), poolFingerprint: 'other', since: new Date(), stoppedAt: null };
+      const spy = jest.spyOn(svc, 'runSetup').mockImplementationOnce(async (...args: any[]) => {
+        const r = await original(...args);
+        // Another process recorded a newer attempt after this run released its lease.
+        await fx.clientModel.collection.updateOne({ clientId: CLIENT }, { $set: { swapRetry: newer } });
+        return r;
+      });
+      const out = await maintainLogged(fx);
+      spy.mockRestore();
+      return out;
+    },
+    expect: async (out, fx) => {
+      expect((await fx.client()).swapRetry).toMatchObject({ attempts: 4, poolFingerprint: 'other' });
+      expect(out.logs).toContain(`swap-retry kind=skip op=record reason=not_current client=${CLIENT} pass=rescue attempts=1`);
+      expect(out.logs.some((l: string) => l.startsWith('swap-retry kind=recorded'))).toBe(false);
+    } },
+  { id: 'DS-156', name: 'a successful pass never erases a newer episode written after its cutover (Codex 2026-11-20)',
+    setup: async (fx) => {
+      await lateWorld(fx);
+      await fx.clientModel.collection.updateOne({ clientId: CLIENT }, { $set: { swapRetry: {
+        pass: 'rescue', mobile: MAIN, attempts: 1, nextAt: new Date(Date.now() - 60_000), poolFingerprint: 'old', since: new Date(Date.now() - 3600_000), stoppedAt: null,
+      } } });
+    },
+    run: async (fx) => {
+      const svc = fx.svc as any;
+      const original = svc.runSetup.bind(svc);
+      const spy = jest.spyOn(svc, 'runSetup').mockImplementationOnce(async (...args: any[]) => {
+        const r = await original(...args);
+        // A new episode on the new main, written by another process after the cutover.
+        await fx.clientModel.collection.updateOne({ clientId: CLIENT }, { $set: { swapRetry: {
+          pass: 'refill', mobile: T1, attempts: 1, nextAt: new Date(Date.now() + 3600_000), poolFingerprint: 'new', since: new Date(), stoppedAt: null,
+        } } });
+        return r;
+      });
+      const out = await maintainLogged(fx);
+      spy.mockRestore();
+      return out;
+    },
+    expect: async (out, fx) => {
+      expect(out.rescue[0]).toMatchObject({ clientId: CLIENT, status: 'swapped', newMobile: T1 });
+      const after = await fx.client();
+      expect(after.mobile).toBe(T1);
+      expect(after.swapRetry).toMatchObject({ pass: 'refill', mobile: T1, attempts: 1 });
+      expect(out.logs).toContain(`swap-retry kind=skip op=clear reason=not_current client=${CLIENT} pass=rescue`);
+    } },
+  { id: 'DS-157', name: 'a successful pass with no episode read logs swap-retry kind=skip op=clear reason=no_state',
+    setup: lateWorld,
+    run: (fx) => maintainLogged(fx),
+    expect: async (out, fx) => {
+      expect(out.rescue[0]).toMatchObject({ clientId: CLIENT, status: 'swapped', newMobile: T1 });
+      expect((await fx.client()).swapRetry).toBeUndefined();
+      expect(out.logs).toContain(`swap-retry kind=skip op=clear reason=no_state client=${CLIENT} pass=rescue`);
+    } },
+  { id: 'DS-158', name: 'a swap that left the read episode in place clears it and logs swap-retry kind=cleared',
+    setup: async (fx) => {
+      await lateWorld(fx);
+      await fx.clientModel.collection.updateOne({ clientId: CLIENT }, { $set: { swapRetry: {
+        pass: 'rescue', mobile: MAIN, attempts: 1, nextAt: new Date(Date.now() - 60_000), poolFingerprint: 'old', since: new Date(Date.now() - 3600_000), stoppedAt: null,
+      } } });
+    },
+    run: async (fx) => {
+      const spy = jest.spyOn(fx.svc as any, 'runSetup').mockResolvedValueOnce({ status: 'swapped', swapped: true, clientId: CLIENT, newMobile: T1 } as any);
+      const out = await maintainLogged(fx);
+      spy.mockRestore();
+      return out;
+    },
+    expect: async (out, fx) => {
+      expect((await fx.client()).swapRetry).toBeUndefined();
+      expect(out.logs).toContain(`swap-retry kind=cleared client=${CLIENT} pass=rescue`);
+    } },
+  { id: 'DS-159', name: 'a same-mobile session refresh during a failed rescue is never overwritten by the stale miss (Codex 2026-11-20)',
+    setup: deadWorld,
+    run: async (fx) => {
+      const svc = fx.svc as any;
+      const original = svc.runSetup.bind(svc);
+      const spy = jest.spyOn(svc, 'runSetup').mockImplementationOnce(async (...args: any[]) => {
+        const r = await original(...args);
+        // Operator repairs the main with a new session on the same mobile (stamps sessionChangedAt, clears deadMain).
+        await fx.svc.update(CLIENT, { session: 'repaired-session' } as any);
+        return r;
+      });
+      const out = await maintainLogged(fx);
+      spy.mockRestore();
+      return out;
+    },
+    expect: async (out, fx) => {
+      const after = await fx.client();
+      expect(after.mobile).toBe(MAIN);
+      expect(after.sessionChangedAt).toBeInstanceOf(Date);
+      expect(after.swapRetry).toBeUndefined();
+      expect(out.logs).toContain(`swap-retry kind=skip op=record reason=not_current client=${CLIENT} pass=rescue attempts=1`);
+    } },
+  { id: 'DS-160', name: 'the upgrade pass never clears degraded + a newer swapRetry written after its snapshot (Codex 2026-11-20)',
+    setup: async (fx) => {
+      await fx.world({ degraded: degradedState(3, { limitedUntil: new Date(Date.now() - DAY) }) }, { mainBuffer: limited(-1) });
+      await fx.addBuffer(T1);
+    },
+    run: async (fx) => {
+      const svc = fx.svc as any;
+      const original = svc.currentMeetsTier1.bind(svc);
+      const newer = { pass: 'upgrade', mobile: MAIN, attempts: 2, nextAt: new Date(Date.now() + 3600_000), poolFingerprint: 'newer', since: new Date(), stoppedAt: null };
+      let competing: Promise<unknown> = Promise.resolve();
+      const spy = jest.spyOn(svc, 'currentMeetsTier1').mockImplementationOnce((...args: any[]) => {
+        competing = fx.clientModel.collection.updateOne({ clientId: CLIENT }, { $set: { swapRetry: newer } });
+        return original(...args);
+      });
+      // currentMeetsTier1 is sync: the clear awaits the competing write first, so the order is enforced.
+      const realUpdate = fx.clientModel.updateOne.bind(fx.clientModel);
+      const upd = jest.spyOn(fx.clientModel, 'updateOne').mockImplementation(((...a: any[]) => ({
+        exec: async () => { await competing; return (realUpdate as any)(...a).exec(); },
+      })) as any);
+      const out = await maintainLogged(fx);
+      spy.mockRestore(); upd.mockRestore();
+      return out;
+    },
+    expect: async (out, fx) => {
+      const after = await fx.client();
+      expect(after.degraded).toMatchObject({ tier: 3 });
+      expect(after.swapRetry).toMatchObject({ attempts: 2, poolFingerprint: 'newer' });
+      expect(fx.count('Degraded cleared')).toBe(0);
+      expect(out.logs).toContain(`degraded-clear kind=skip reason=not_current client=${CLIENT} tier=3`);
+    } },
+  { id: 'DS-161', name: 'the upgrade pass clears a current degraded marker and logs degraded-clear kind=cleared',
+    setup: async (fx) => {
+      await fx.world({ degraded: degradedState(3, { limitedUntil: new Date(Date.now() - DAY) }) }, { mainBuffer: limited(-1) });
+      await fx.addBuffer(T1);
+    },
+    run: (fx) => maintainLogged(fx),
+    expect: async (out, fx) => {
+      expect(out.upgrade).toEqual([{ clientId: CLIENT, fromTier: 3, status: 'cleared' }]);
+      expect((await fx.client()).degraded).toBeUndefined();
+      expect(out.logs).toContain(`degraded-clear kind=cleared client=${CLIENT} tier=3`);
+    } },
 ];
 
 describe('degraded swap regression suite (DS matrix)', () => {

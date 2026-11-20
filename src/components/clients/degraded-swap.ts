@@ -197,6 +197,20 @@ export interface ClientSwapRetryState {
   stoppedAt?: Date | null;
 }
 
+/**
+ * Mongo filter that matches clients.swapRetry only while it is still the state a pass read (pass,
+ * mobile, attempts and nextAt; nextAt changes on every recorded attempt). notePassOutcome writes
+ * after the setup lease is released, so its writes carry this to never replace a newer episode.
+ */
+export function swapRetryReadFilter(read: ClientSwapRetryState): Record<string, unknown> {
+  return {
+    'swapRetry.pass': read.pass,
+    'swapRetry.mobile': read.mobile,
+    'swapRetry.attempts': read.attempts,
+    'swapRetry.nextAt': read.nextAt ? new Date(read.nextAt) : read.nextAt,
+  };
+}
+
 export type SwapRetryDecision =
   | { kind: 'due'; attempts: number; rearmed: boolean }
   | { kind: 'cooldown'; attempts: number }

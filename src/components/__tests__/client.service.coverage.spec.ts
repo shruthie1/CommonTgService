@@ -206,7 +206,7 @@ describe('ClientService coverage', () => {
     // ─── CRUD ────────────────────────────────────────────────────────────────
 
     describe('CRUD', () => {
-        it('create + update + remove + search', async () => {
+        it('create + update + search', async () => {
             await service.onModuleInit();
             const created = await service.create(makeClientData({ clientId: 'crud-1', name: 'First' }));
             expect(created.clientId).toBe('crud-1');
@@ -214,8 +214,6 @@ describe('ClientService coverage', () => {
             expect(updated.name).toBe('Renamed');
             const searched = await service.search({ name: 'Renamed' } as any);
             expect(searched).toHaveLength(1);
-            const removed = await service.remove('crud-1');
-            expect(removed.clientId).toBe('crud-1');
         });
 
         it('update throws BadRequest for unknown client', async () => {
@@ -223,9 +221,41 @@ describe('ClientService coverage', () => {
             await expect(service.update('ghost', { name: 'x' })).rejects.toThrow();
         });
 
-        it('remove throws for unknown client', async () => {
+        it('reads never return the retired mainAccount field; the stored data stays', async () => {
+            await ClientModel.collection.insertOne({ ...makeClientData({ clientId: 'legacy-1' }), mainAccount: 'old_handle' } as any);
             await service.onModuleInit();
-            await expect(service.remove('ghost')).rejects.toThrow();
+            const reads: Record<string, any> = {
+                findAll: (await service.findAll()).find((c) => c.clientId === 'legacy-1'),
+                findOne: await service.findOne('legacy-1'),
+                findAllMasked: (await service.findAllMasked()).find((c) => c.clientId === 'legacy-1'),
+                findOneMasked: await service.findOneMasked('legacy-1'),
+                search: (await service.search({ clientId: 'legacy-1' } as any))[0],
+                executeQuery: (await service.executeQuery({ clientId: 'legacy-1' } as any))[0],
+                update: await service.update('legacy-1', { name: 'Renamed' }),
+                lean: await ClientModel.findOne({ clientId: 'legacy-1' }).lean(),
+                exclusive: await ClientModel.findOne({ clientId: 'legacy-1' }, { _id: 0, updatedAt: 0 }).lean(),
+            };
+            for (const [name, doc] of Object.entries(reads)) {
+                expect([name, doc?.clientId]).toEqual([name, 'legacy-1']);
+                expect([name, Object.prototype.hasOwnProperty.call(doc, 'mainAccount')]).toEqual([name, false]);
+            }
+            // Inclusive projections keep working (no mixed-projection error) and stay narrow.
+            expect(await ClientModel.findOne({ clientId: 'legacy-1' }, { mobile: 1 }).lean()).toHaveProperty('mobile');
+            expect(Object.keys((await ClientModel.findOne({ clientId: 'legacy-1' }, { _id: 1 }).lean()) as any)).toEqual(['_id']);
+            expect(Object.keys((await ClientModel.findOne({ clientId: 'legacy-1' }).select('clientId -_id').lean()) as any)).toEqual(['clientId']);
+            // $slice alone is exclusion-style: mainAccount is still dropped.
+            const sliced: any = await ClientModel.findOne({ clientId: 'legacy-1' }, { firstNames: { $slice: 1 } }).lean();
+            expect(sliced.clientId).toBe('legacy-1');
+            expect(sliced).not.toHaveProperty('mainAccount');
+            // Hydrated (non-lean) reads too.
+            const hydrated: any = await ClientModel.findOne({ clientId: 'legacy-1' });
+            expect(hydrated.toObject()).not.toHaveProperty('mainAccount');
+            // Data is never removed.
+            expect(await ClientModel.collection.findOne({ clientId: 'legacy-1' })).toHaveProperty('mainAccount', 'old_handle');
+        });
+
+        it('has no delete method: the clients row is never deleted (owner 2026-11-20)', () => {
+            expect((service as any).remove).toBeUndefined();
         });
 
         it('executeQuery applies sort/limit/skip', async () => {

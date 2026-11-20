@@ -1,3 +1,6 @@
+import 'reflect-metadata';
+import { RequestMethod } from '@nestjs/common';
+import { METHOD_METADATA } from '@nestjs/common/constants';
 import { ClientController } from '../client.controller';
 
 describe('ClientController', () => {
@@ -16,7 +19,6 @@ describe('ClientController', () => {
             getExistingAssignments: jest.fn().mockResolvedValue('assignments'),
             findOne: jest.fn().mockResolvedValue('one'),
             update: jest.fn().mockResolvedValue('updated'),
-            remove: jest.fn().mockResolvedValue('removed'),
             executeQuery: jest.fn().mockResolvedValue(['queried']),
         };
         controller = new ClientController(stub as any);
@@ -92,9 +94,13 @@ describe('ClientController', () => {
         expect(stub.update).toHaveBeenCalledWith('c1', dto);
     });
 
-    it('remove delegates', async () => {
-        await expect(controller.remove('c1')).resolves.toBe('removed');
-        expect(stub.remove).toHaveBeenCalledWith('c1');
+    it('has no DELETE route: DELETE /clients/:clientId was removed (owner 2026-11-20)', () => {
+        const proto = ClientController.prototype as any;
+        expect(proto.remove).toBeUndefined();
+        const handlers = Object.getOwnPropertyNames(proto).filter((k) => k !== 'constructor' && typeof proto[k] === 'function');
+        const methodOf = (k: string) => Reflect.getMetadata(METHOD_METADATA, proto[k]);
+        expect(methodOf('update')).toBe(RequestMethod.PATCH); // the metadata read works
+        expect(handlers.filter((k) => methodOf(k) === RequestMethod.DELETE)).toEqual([]);
     });
 
     it('executeQuery destructures and delegates', async () => {

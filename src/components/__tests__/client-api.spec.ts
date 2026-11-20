@@ -311,43 +311,8 @@ describe('Client API', () => {
     // ─── DELETE ──────────────────────────────────────────────────────────────
 
     describe('remove()', () => {
-        it('deletes an existing client and returns the deleted doc', async () => {
-            const data = makeClientData({ clientId: 'del-1', mobile: '15550500001' });
-            await service.create(data);
-
-            const deleted = await service.remove('del-1');
-            expect(deleted.clientId).toBe('del-1');
-            expect(deleted.mobile).toBe('15550500001');
-
-            // Verify gone from DB
-            const doc = await ClientModel.findOne({ clientId: 'del-1' }).lean();
-            expect(doc).toBeNull();
-        });
-
-        it('removes from cache after delete — findOne throws NotFoundException', async () => {
-            const data = makeClientData({ clientId: 'del-cache', mobile: '15550500002' });
-            await service.create(data);
-
-            await service.remove('del-cache');
-
-            await expect(service.findOne('del-cache'))
-                .rejects.toThrow('not found');
-        });
-
-        it('throws for unknown clientId', async () => {
-            await expect(service.remove('nonexistent'))
-                .rejects.toThrow();
-        });
-
-        it('does not affect other documents', async () => {
-            await service.create(makeClientData({ clientId: 'del-a', mobile: '15550500003' }));
-            await service.create(makeClientData({ clientId: 'del-b', mobile: '15550500004' }));
-
-            await service.remove('del-a');
-
-            const remaining = await ClientModel.find({}).lean();
-            expect(remaining).toHaveLength(1);
-            expect(remaining[0].clientId).toBe('del-b');
+        it('does not exist: clients rows are never deleted (owner 2026-11-20)', () => {
+            expect((service as any).remove).toBeUndefined();
         });
     });
 
@@ -493,15 +458,5 @@ describe('Client API', () => {
             expect(clientB.name).toBe('Client B');
         });
 
-        it('removing client A does not remove client B', async () => {
-            await service.create(makeClientData({ clientId: 'iso-rem-a', mobile: '15550900003' }));
-            await service.create(makeClientData({ clientId: 'iso-rem-b', mobile: '15550900004' }));
-
-            await service.remove('iso-rem-a');
-
-            const clientB = await service.findOne('iso-rem-b');
-            expect(clientB).toBeTruthy();
-            expect(clientB.clientId).toBe('iso-rem-b');
-        });
     });
 });

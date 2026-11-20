@@ -145,3 +145,30 @@ export class Client {
 }
 
 export const ClientSchema = SchemaFactory.createForClass(Client);
+
+/**
+ * Stored on old clients rows, no longer in the schema and read by nothing (mainAccount: dropped from
+ * the schema 2026-11-08). The data stays (no $unset); every model read projects it out so API
+ * responses and the clients cache stop returning it. Inclusive projections already leave it out.
+ */
+export const RETIRED_CLIENT_FIELDS = ['mainAccount'] as const;
+
+/**
+ * True when Mongo would treat the projection as inclusion: any field set to 1/true (an `_id`-only
+ * `{_id: 1}` included) or an `$elemMatch` / `$meta` operator. `$slice` alone and 0/false values
+ * are exclusion-style, so the retired fields are added to those.
+ */
+export function isInclusiveProjection(projection: unknown): boolean {
+    if (!projection || typeof projection !== 'object') return false;
+    const entries = Object.entries(projection as Record<string, unknown>);
+    const included = (v: unknown) => v === 1 || v === true
+        || (typeof v === 'object' && v !== null && ('$elemMatch' in v || '$meta' in v));
+    if (entries.some(([k, v]) => k !== '_id' && included(v))) return true;
+    return entries.length > 0 && entries.every(([k, v]) => k === '_id' && included(v));
+}
+
+ClientSchema.pre(['find', 'findOne', 'findOneAndUpdate', 'findOneAndReplace', 'findOneAndDelete'], function () {
+    const projection = this.projection();
+    if (isInclusiveProjection(projection)) return;
+    this.projection({ ...(projection || {}), ...Object.fromEntries(RETIRED_CLIENT_FIELDS.map((f) => [f, 0])) });
+});

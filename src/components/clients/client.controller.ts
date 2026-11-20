@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Delete, Query, Patch, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, Patch, UseInterceptors } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody, ApiParam, ApiQuery, ApiCreatedResponse, ApiOkResponse, ApiNotFoundResponse } from '@nestjs/swagger';
 import { ClientService } from './client.service';
 import { CreateClientDto } from './dto/create-client.dto';
@@ -116,15 +116,6 @@ export class ClientController {
   @ApiNotFoundResponse({ description: 'Client not found.' })
   async update(@Param('clientId') clientId: string, @Body() updateClientDto: UpdateClientDto): Promise<Client> {
     return await this.clientService.update(clientId, updateClientDto);
-  }
-
-  @Delete(':clientId')
-  @ApiOperation({ summary: 'Delete client' })
-  @ApiParam({ name: 'clientId' })
-  @ApiOkResponse({ type: Client })
-  @ApiNotFoundResponse({ description: 'Client not found.' })
-  async remove(@Param('clientId') clientId: string): Promise<Client> {
-    return await this.clientService.remove(clientId);
   }
 
   @Post('query')
