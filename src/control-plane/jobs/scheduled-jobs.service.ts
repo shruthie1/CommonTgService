@@ -6,7 +6,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
-import type { Connection } from 'mongoose';
+import { Types, type Connection } from 'mongoose';
 import * as schedule from 'node-schedule-tz';
 import {
   ActiveChannelsService,
@@ -301,14 +301,14 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  private istDateKey(): string {
+  private istDateKey(now: Date = new Date()): string {
     return new Intl.DateTimeFormat('en-CA', {
       timeZone: IST,
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
     })
-      .format(new Date())
+      .format(now)
       .replace(/\//g, '-');
   }
 
@@ -508,13 +508,18 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Restores the legacy UMS-test reporting-window reset without reviving the
-   * old mixed maintenance job. `stats2` is deliberately cleared globally:
-   * tg-aut's /getuserstats2 reads this collection as its daily report window.
+   * old mixed maintenance job. `stats2` is tg-aut's daily window (/getuserstats2,
+   * paid-today payAmount, the dailyPaidCountedAt marker keyed by the IST day).
+   * Only rows CREATED before today 00:00 IST (ObjectId time) are deleted: the
+   * job runs at 00:25 IST, and a row created after midnight already holds
+   * today's funnel event or payment marker (stats2 audit B2, owner 2026-11-20).
    * The paid-user adjustment is the other legacy operation from that window.
    */
   private async runDailyUserStatsReset(): Promise<void> {
     const db = this.requireDatabase('daily user stats reset');
-    const jobId = `daily-user-stats-reset:${this.istDateKey()}`;
+    const now = new Date();
+    const dayKey = this.istDateKey(now);
+    const jobId = `daily-user-stats-reset:${dayKey}`;
     if (!(await this.claimJob(db.collection<any>('controlPlaneJobRuns'), jobId))) {
       this.logger.warn(
         `Daily user stats reset already claimed or completed: ${jobId}`,
@@ -526,6 +531,7 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
       const result = await this.resetUserStatsWithRetries(
         db.collection<any>('stats2'),
         db.collection<any>('userData'),
+        new Date(`${dayKey}T00:00:00+05:30`),
       );
       await db.collection<any>('controlPlaneJobRuns').updateOne(
         { _id: jobId },
@@ -586,39 +592,53 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
     throw lastError instanceof Error ? lastError : new Error(String(lastError));
   }
 
+  /**
+   * `cutoff` = today 00:00 IST. Every attempt (and every recovery run) issues the same
+   * bounded delete, so a retry after a failed userData update can never erase rows of today.
+   * tg-aut's paid-today readers also require today's dailyPaidCountedAt, so a row of yesterday never counts as a
+   * payer of today while it waits for this run.
+   */
   private async resetUserStatsWithRetries(
     stats2: any,
     userData: any,
+    cutoff: Date,
   ): Promise<{
     stats2DeletedCount: number;
     paidUsersMatchedCount: number;
     paidUsersModifiedCount: number;
   }> {
     let lastError: unknown;
+    // Rows deleted by every attempt: a retry after a failed userData update runs the same bounded delete again
+    // (it finds nothing new), and the count of an earlier attempt is kept, not lost.
+    let stats2DeletedCount = 0;
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
         const now = Date.now();
-        const [stats2Result, paidUsersResult] = await Promise.all([
-          stats2.deleteMany({}),
-          userData.updateMany(
-            { payAmount: { $gt: 10 }, windowCount: { $gt: DAILY_RESET_WINDOW_ABOVE } },
-            {
-              $set: {
-                // windowCount replaced totalCount (userData batch 2). 10 = tg-aut WINDOW_COUNT_ESTABLISHED, the value
-                // totalCount was reset to: the next inbound reads 11, as before (0 would read 1, which tg-aut takes
-                // for a first message, and would skip the >= 10 prompts). msgCount (lifetime) is never touched.
-                windowCount: DAILY_RESET_WINDOW_VALUE,
-                limitTime: now,
-                paidReply: true,
-              },
+        const stats2Result = await stats2.deleteMany({
+          _id: { $lt: Types.ObjectId.createFromTime(Math.floor(cutoff.getTime() / 1000)) },
+        });
+        stats2DeletedCount += stats2Result.deletedCount ?? 0;
+        this.logger.log(
+          `stats2-reset kind=deleted count=${stats2Result.deletedCount ?? 0} cutoff=${cutoff.toISOString()} attempt=${attempt}`,
+        );
+        const paidUsersResult = await userData.updateMany(
+          { payAmount: { $gt: 10 }, windowCount: { $gt: DAILY_RESET_WINDOW_ABOVE } },
+          {
+            $set: {
+              // windowCount replaced totalCount (userData batch 2). 10 = tg-aut WINDOW_COUNT_ESTABLISHED, the value
+              // totalCount was reset to: the next inbound reads 11, as before (0 would read 1, which tg-aut takes
+              // for a first message, and would skip the >= 10 prompts). msgCount (lifetime) is never touched.
+              windowCount: DAILY_RESET_WINDOW_VALUE,
+              limitTime: now,
+              paidReply: true,
             },
-          ),
-        ]);
+          },
+        );
         this.logger.log(
           `window-count kind=daily-reset selector=payAmount>10,windowCount>${DAILY_RESET_WINDOW_ABOVE} value=${DAILY_RESET_WINDOW_VALUE} matched=${paidUsersResult.matchedCount ?? 0} modified=${paidUsersResult.modifiedCount ?? 0}`,
         );
         return {
-          stats2DeletedCount: stats2Result.deletedCount ?? 0,
+          stats2DeletedCount,
           paidUsersMatchedCount: paidUsersResult.matchedCount ?? 0,
           paidUsersModifiedCount: paidUsersResult.modifiedCount ?? 0,
         };

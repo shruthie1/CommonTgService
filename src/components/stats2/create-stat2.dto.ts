@@ -8,7 +8,7 @@ export class CreateStat2Dto {
   @ApiProperty({ description: 'Count' })
   count: number;
 
-  @ApiProperty({ description: 'Pay Amount' })
+  @ApiProperty({ description: 'Paid today: must be 0 on create and cannot be updated (set only by a tg-aut credit)' })
   payAmount: number;
 
   @ApiProperty({ description: 'Demo Given' })

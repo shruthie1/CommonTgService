@@ -1,8 +1,15 @@
-import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Stat2Service } from './stat2.service';
 import { CreateStat2Dto } from './create-stat2.dto';
 import { UpdateStat2Dto } from './update-stat2.dto';
+
+/** The row key is {chatId, profile, client}: without client a sibling client's row could match (stats2 audit A4). */
+function requireClient(client: string | undefined): string {
+  const value = typeof client === 'string' ? client.trim() : '';
+  if (!value) throw new BadRequestException('client query parameter is required (?client=<clientId>)');
+  return value;
+}
 
 @ApiTags('stats2')
 @Controller('stats2')
@@ -15,22 +22,26 @@ export class Stat2Controller {
   }
 
   @Get(':chatId/:profile')
-  async findByChatIdAndProfile(@Param('chatId') chatId: string, @Param('profile') profile: string) {
-    return this.statService.findByChatIdAndProfile(chatId, profile);
+  @ApiQuery({ name: 'client', required: true, description: 'clientId of the row (sibling clients share a persona)' })
+  async findByChatIdAndProfile(@Param('chatId') chatId: string, @Param('profile') profile: string, @Query('client') client: string) {
+    return this.statService.findByChatIdAndProfile(chatId, profile, requireClient(client));
   }
 
   @Put(':chatId/:profile')
+  @ApiQuery({ name: 'client', required: true, description: 'clientId of the row (sibling clients share a persona)' })
   async update(
     @Param('chatId') chatId: string,
     @Param('profile') profile: string,
+    @Query('client') client: string,
     @Body() updateStatDto: UpdateStat2Dto,
   ) {
-    return this.statService.update(chatId, profile, updateStatDto);
+    return this.statService.update(chatId, profile, requireClient(client), updateStatDto);
   }
 
   @Delete(':chatId/:profile')
-  async deleteOne(@Param('chatId') chatId: string, @Param('profile') profile: string) {
-    return this.statService.deleteOne(chatId, profile);
+  @ApiQuery({ name: 'client', required: true, description: 'clientId of the row (sibling clients share a persona)' })
+  async deleteOne(@Param('chatId') chatId: string, @Param('profile') profile: string, @Query('client') client: string) {
+    return this.statService.deleteOne(chatId, profile, requireClient(client));
   }
 
   @Delete()

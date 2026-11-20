@@ -18,6 +18,12 @@ import { fetchWithTimeout } from '../../utils';
 import { sendBotNotice } from '../../utils/bot-notice';
 import { ScheduledJobsService } from './scheduled-jobs.service';
 
+/** Today 00:00 IST, the stats2 reset cutoff (tg-aut's stats2 day key is the IST day). */
+function istTodayStart(now: Date = new Date()): Date {
+  const key = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+  return new Date(`${key}T00:00:00+05:30`);
+}
+
 const scheduleJob = schedule.scheduleJob as jest.Mock;
 
 describe('ScheduledJobsService scheduler ownership', () => {
@@ -401,7 +407,16 @@ describe('ScheduledJobsService scheduler ownership', () => {
 
     await (service as any).runDailyUserStatsReset();
 
-    expect(stats2.deleteMany).toHaveBeenCalledWith({});
+    // stats2 audit B2: only rows created before today 00:00 IST, never the whole collection.
+    expect(stats2.deleteMany).toHaveBeenCalledTimes(1);
+    const filter = stats2.deleteMany.mock.calls[0][0];
+    const cutoff = istTodayStart();
+    expect(Object.keys(filter)).toEqual(['_id']);
+    expect(filter._id.$lt).toBeInstanceOf(mongoose.Types.ObjectId);
+    expect(filter._id.$lt.getTimestamp().getTime()).toBe(cutoff.getTime());
+    expect(log.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith('stats2-reset '))).toEqual([
+      `stats2-reset kind=deleted count=12 cutoff=${cutoff.toISOString()} attempt=1`,
+    ]);
     // userData batch 2: windowCount replaced totalCount; reset to 10 (the old totalCount value), totalCount untouched.
     expect(userData.updateMany).toHaveBeenCalledWith(
       { payAmount: { $gt: 10 }, windowCount: { $gt: 30 } },
@@ -417,6 +432,38 @@ describe('ScheduledJobsService scheduler ownership', () => {
         _id: expect.stringMatching(/^daily-user-stats-reset:/),
       }),
     );
+  });
+
+  it('retries the stats2 reset with the same bounded delete when the paid-user update fails', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+    try {
+      // The first delete removes 4 rows, then the userData update fails; the retry's delete finds nothing new.
+      const stats2 = {
+        deleteMany: jest.fn().mockResolvedValueOnce({ deletedCount: 4 }).mockResolvedValueOnce({ deletedCount: 0 }),
+      };
+      const userData = {
+        updateMany: jest
+          .fn()
+          .mockRejectedValueOnce(new Error('userData down'))
+          .mockResolvedValueOnce({ matchedCount: 1, modifiedCount: 1 }),
+      };
+      const service = createService(['UMS_TEST_SCHEDULER']);
+      const log = jest.spyOn((service as any).logger, 'log');
+      const cutoff = istTodayStart();
+      const run = (service as any).resetUserStatsWithRetries(stats2, userData, cutoff);
+      await jest.advanceTimersByTimeAsync(30_000);
+      await expect(run).resolves.toEqual({ stats2DeletedCount: 4, paidUsersMatchedCount: 1, paidUsersModifiedCount: 1 }); // 4 + 0, not the retry's 0
+      expect(stats2.deleteMany).toHaveBeenCalledTimes(2);
+      expect(log.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith('stats2-reset '))).toEqual([
+        `stats2-reset kind=deleted count=4 cutoff=${cutoff.toISOString()} attempt=1`,
+        `stats2-reset kind=deleted count=0 cutoff=${cutoff.toISOString()} attempt=2`,
+      ]);
+      for (const [filter] of stats2.deleteMany.mock.calls) {
+        expect(filter._id.$lt.getTimestamp().getTime()).toBe(cutoff.getTime());
+      }
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('uses the injected Nest connection for the complete legacy promoteStats reset', async () => {
@@ -518,10 +565,14 @@ describe('ScheduledJobsService scheduler ownership', () => {
       .asPromise();
 
     try {
+      const cutoffSec = Math.floor(istTodayStart().getTime() / 1000);
       await connection.db.collection('stats2').insertMany([
-        { client: 'a', chatId: '1' },
-        { client: 'b', chatId: '2' },
-      ]);
+        { _id: mongoose.Types.ObjectId.createFromTime(cutoffSec - 3600), client: 'a', chatId: '1' },
+        { _id: mongoose.Types.ObjectId.createFromTime(cutoffSec - 1), client: 'b', chatId: '2' },
+        // Created after midnight IST (00:00-00:25, before the job): today's row, with today's paid marker.
+        { _id: mongoose.Types.ObjectId.createFromTime(cutoffSec), client: 'c', chatId: '3', dailyPaidCountedAt: 'today' },
+        { client: 'd', chatId: '4' },
+      ] as any[]);
       await connection.db.collection('userData').insertMany([
         { profile: 'p1', chatId: '1', payAmount: 11, windowCount: 31, msgCount: 400, paidReply: false },
         { profile: 'p2', chatId: '2', payAmount: 10, windowCount: 99, paidReply: false },
@@ -531,7 +582,7 @@ describe('ScheduledJobsService scheduler ownership', () => {
 
       await (service as any).runDailyUserStatsReset();
 
-      expect(await connection.db.collection('stats2').countDocuments()).toBe(0);
+      expect((await connection.db.collection('stats2').find({}).toArray()).map((r) => r.client).sort()).toEqual(['c', 'd']);
       const p1 = await connection.db.collection('userData').findOne({ profile: 'p1' });
       expect(p1).toEqual(expect.objectContaining({ windowCount: 10, msgCount: 400, paidReply: true }));
       expect(p1).not.toHaveProperty('totalCount');
