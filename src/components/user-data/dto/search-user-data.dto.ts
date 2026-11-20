@@ -2,8 +2,8 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, TransformFnParams } from 'class-transformer';
 
 export class SearchDto {
-  @ApiPropertyOptional({ description: 'Total count', type: Number })
-  totalCount?: number;
+  @ApiPropertyOptional({ description: 'Reply-window count', type: Number })
+  windowCount?: number;
 
   @ApiPropertyOptional({ description: 'Picture count', type: Number })
   picCount?: number;

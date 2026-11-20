@@ -12,7 +12,7 @@ import { UserDataService } from '../user-data.service';
 import { USER_DATA_WORKFLOW_OWNED_KEYS } from '../user-data.owned-keys';
 
 const base = (chatId: string): any => ({
-    chatId, profile: 'p1', totalCount: 1, picCount: 0, lastMsgTimeStamp: Date.now(), limitTime: 0,
+    chatId, profile: 'p1', picCount: 0, lastMsgTimeStamp: Date.now(), limitTime: 0,
     paidCount: 0, prfCount: 0, canReply: 1, payAmount: 0, highestPayAmount: 0, cheatCount: 0, callTime: 0,
 });
 const STORED: Record<string, unknown> = {

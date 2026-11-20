@@ -17,9 +17,6 @@ export class UserData {
     chatId: string;
 
     @Prop({ required: true, default: 0 })
-    totalCount: number;
-
-    @Prop({ required: true, default: 0 })
     picCount: number;
 
     @Prop({ required: true, default: 0 })
@@ -131,15 +128,18 @@ export class UserData {
     @Prop({ type: Number, required: false })
     firstPaidAt?: number;
 
-    /** True inbound-message counter ($inc only by tg-aut). */
+    /** Lifetime inbound-message counter ($inc only by tg-aut; 0 after a user-data reset). */
     @Prop({ type: Number, required: false })
     msgCount?: number;
 
-    /** "Treat as established" flag, numeric, $set freely by tg-aut. */
+    /**
+     * The reply-window counter that replaced totalCount (userData batch 2, 2026-11-20): tg-aut $inc per inbound and
+     * $set 10 on a reopen; the daily reset (scheduled-jobs.service.ts) sets 10 on payers past 30. Admission cap 100.
+     */
     @Prop({ type: Number, required: false })
     windowCount?: number;
 
-    /** Grace-period flag set by tg-aut (boolean in prod: 231 rows on 2026-10-04). */
+    /** The grace grant (one free complaint show), set by tg-aut. The only grace marker: cheatCount is never -2. */
     @Prop({ type: Boolean, required: false })
     graceFlag?: boolean;
 

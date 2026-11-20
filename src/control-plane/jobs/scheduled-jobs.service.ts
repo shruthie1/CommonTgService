@@ -30,6 +30,10 @@ const IST = 'Asia/Kolkata';
  * must outlive the run; a crashed run blocks at most the next one or two slots.
  */
 export const SWAP_MAINTENANCE_CLAIM_TTL_MS = 60 * 60 * 1000;
+/** Daily user reset: payers (payAmount > 10) whose reply window passed this many messages get it reopened. */
+export const DAILY_RESET_WINDOW_ABOVE = 30;
+/** ...at this windowCount (tg-platform @tg/parked/constants WINDOW_COUNT_ESTABLISHED; the old totalCount reset value). */
+export const DAILY_RESET_WINDOW_VALUE = 10;
 
 @Injectable()
 export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
@@ -597,23 +601,22 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
         const [stats2Result, paidUsersResult] = await Promise.all([
           stats2.deleteMany({}),
           userData.updateMany(
-            { payAmount: { $gt: 10 }, totalCount: { $gt: 30 } },
+            { payAmount: { $gt: 10 }, windowCount: { $gt: DAILY_RESET_WINDOW_ABOVE } },
             {
               $set: {
-                totalCount: 10,
-                // D3: totalCount is being split. `windowCount` is the "treat as established"
-                // flag that every tg-platform site pairs with a totalCount of 10 (outhandler.ts,
-                // ExistingUserHandler.ts, utils.ts). Resetting totalCount without it would leave
-                // these rows half-reset once tg-platform's readers move to windowCount.
-                // `msgCount` is deliberately NOT touched here: it is the honest inbound-message
-                // counter and is $inc-only, never $set (dbservice.ts:1935).
-                windowCount: 1,
+                // windowCount replaced totalCount (userData batch 2). 10 = tg-aut WINDOW_COUNT_ESTABLISHED, the value
+                // totalCount was reset to: the next inbound reads 11, as before (0 would read 1, which tg-aut takes
+                // for a first message, and would skip the >= 10 prompts). msgCount (lifetime) is never touched.
+                windowCount: DAILY_RESET_WINDOW_VALUE,
                 limitTime: now,
                 paidReply: true,
               },
             },
           ),
         ]);
+        this.logger.log(
+          `window-count kind=daily-reset selector=payAmount>10,windowCount>${DAILY_RESET_WINDOW_ABOVE} value=${DAILY_RESET_WINDOW_VALUE} matched=${paidUsersResult.matchedCount ?? 0} modified=${paidUsersResult.modifiedCount ?? 0}`,
+        );
         return {
           stats2DeletedCount: stats2Result.deletedCount ?? 0,
           paidUsersMatchedCount: paidUsersResult.matchedCount ?? 0,

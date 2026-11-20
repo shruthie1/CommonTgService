@@ -42,7 +42,7 @@ describe('UserDataController', () => {
     });
 
     it('updateAll delegates', async () => {
-        const dto = { totalCount: 1 } as any;
+        const dto = { windowCount: 1 } as any;
         await expect(controller.updateAll('chat1', dto)).resolves.toEqual({ modifiedCount: 2 });
         expect(service.updateAll).toHaveBeenCalledWith('chat1', dto);
     });
@@ -53,7 +53,7 @@ describe('UserDataController', () => {
     });
 
     it('update delegates', async () => {
-        const dto = { totalCount: 5 } as any;
+        const dto = { windowCount: 5 } as any;
         await expect(controller.update('p', 'c', dto)).resolves.toEqual({ id: 1 });
         expect(service.update).toHaveBeenCalledWith('p', 'c', dto);
     });

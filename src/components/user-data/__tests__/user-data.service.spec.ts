@@ -9,6 +9,8 @@ import mongoose, { Connection, Model } from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { UserData, UserDataDocument, UserDataSchema } from '../schemas/user-data.schema';
 import { UserDataService } from '../user-data.service';
+import { USER_DATA_RESET_KEEPS, userDataResetFields } from '../user-data.reset';
+import { Logger } from '../../../utils';
 
 jest.mock('../../../utils', () => ({
     ...jest.requireActual('../../../utils'),
@@ -24,7 +26,8 @@ function buildUserData(overrides: Partial<UserData> = {}): any {
     seq++;
     return {
         chatId: `chat-${seq}`,
-        totalCount: 5,
+        windowCount: 5,
+        msgCount: 5,
         picCount: 1,
         lastMsgTimeStamp: Date.now(),
         limitTime: Date.now(),
@@ -167,9 +170,9 @@ describe('UserDataService', () => {
 
     describe('update', () => {
         it('updates an existing record and strips _id/profile/chatId from dto', async () => {
-            await model.create(buildUserData({ profile: 'p1', chatId: 'c1', totalCount: 1 }));
-            const res = await service.update('p1', 'c1', { totalCount: 99, _id: 'x', profile: 'evil', chatId: 'evil' } as any);
-            expect(res.totalCount).toBe(99);
+            await model.create(buildUserData({ profile: 'p1', chatId: 'c1', windowCount: 1 }));
+            const res = await service.update('p1', 'c1', { windowCount: 99, _id: 'x', profile: 'evil', chatId: 'evil' } as any);
+            expect(res.windowCount).toBe(99);
             expect(res.profile).toBe('p1');
             expect(res.chatId).toBe('c1');
         });
@@ -186,38 +189,73 @@ describe('UserDataService', () => {
         it('updates many matching chatId', async () => {
             await model.create(buildUserData({ chatId: 'shared', profile: 'p1' }));
             await model.create(buildUserData({ chatId: 'shared', profile: 'p2' }));
-            const res = await service.updateAll('shared', { totalCount: 7, _id: 'x' } as any);
+            const res = await service.updateAll('shared', { windowCount: 7, _id: 'x' } as any);
             expect(res.modifiedCount).toBe(2);
             const docs = await model.find({ chatId: 'shared' }).lean();
-            expect(docs.every(d => d.totalCount === 7)).toBe(true);
+            expect(docs.every(d => d.windowCount === 7)).toBe(true);
         });
 
         it('is a no-op when no docs match (no phantom upsert insert)', async () => {
-            const res = await service.updateAll('chatId-that-matches-nothing', { totalCount: 5 } as any);
+            const res = await service.updateAll('chatId-that-matches-nothing', { windowCount: 5 } as any);
             expect(res.upsertedCount).toBe(0);
             expect(await model.countDocuments({})).toBe(0);
         });
     });
 
-    describe('remove', () => {
-        it('skips bot message when botsService is null then deletes', async () => {
-            mockedGetBots.mockReturnValue(null as any);
-            await model.create(buildUserData({ profile: 'p1', chatId: 'c1' }));
-            const deleted = await service.remove('p1', 'c1');
-            expect(deleted.profile).toBe('p1');
-            expect(await model.findOne({ profile: 'p1', chatId: 'c1' })).toBeNull();
+    describe('remove (DELETE route): resets, never deletes (owner 2026-11-20, A11)', () => {
+        const KEPT = {
+            clientId: 'p1a', username: 'raju', accessHash: 'ah', lastMsgTimeStamp: 1_700_000_000_000,
+            lifetimePaid: 450, lifetimeCredits: 3, creditKeys: ['k1', 'k2'], firstPaidAt: 1_600_000_000_000, lastPaidAt: 1_650_000_000_000,
+            fakePaymentAt: new Date(5), fakePaymentBy: 'op', fakePaymentReason: 'edited', fakePaymentPrev: { payAmount: 50, canReply: 1 },
+            attributionChannelIds: ['-1001'], attributionUpdatedAt: 99, demoCompletions: 1, showCompletions: 2,
+        };
+        const DIRTY = {
+            payAmount: 150, highestPayAmount: 350, demoGiven: true, secondShow: true, fullShow: 3, callTime: 5, videos: ['1', '2'],
+            cheatCount: 4, graceFlag: true, canReply: 0, limitTime: 9e12, paidCount: 2, picCount: 3, prfCount: 1, picsSent: 4,
+            paidReply: false, msgCount: 300, windowCount: 120, cycleVideoBase: 2, cyclePaid: 350, showsPaidTo: 3,
+            callProgress: { 1: { positionSec: 3, durationSec: 10, updatedAt: 1, completed: false } },
+        };
+        const logs = () => (Logger.prototype.log as jest.Mock).mock.calls.concat((Logger.prototype.warn as jest.Mock).mock.calls)
+            .map((c) => String(c[0])).filter((l) => l.startsWith('user-data-reset '));
+
+        beforeEach(() => {
+            jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+            jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+        });
+        afterEach(() => jest.restoreAllMocks());
+
+        it('the row still exists, payment history and the fake mark are kept, the rest is a fresh row', async () => {
+            await model.create(buildUserData({ profile: 'p1', chatId: 'c1234', ...KEPT, ...DIRTY } as any));
+            const reset = await service.remove('p1', 'c1234');
+            const row = await model.findOne({ profile: 'p1', chatId: 'c1234' }).lean();
+            expect(row).not.toBeNull();
+            expect(await model.countDocuments({})).toBe(1);
+            expect(reset).toEqual(expect.objectContaining({ ...KEPT, chatId: 'c1234', profile: 'p1' }));
+            expect(row).toEqual(expect.objectContaining({ ...KEPT, ...userDataResetFields() }));
+            expect(logs()).toEqual([`user-data-reset kind=cms-delete-route chat=****1234 fields=${Object.keys(userDataResetFields()).length} matched=1`]);
         });
 
-        it('sends a bot message when botsService present', async () => {
+        it('the reset set is a fresh row minus the kept keys: no kept key is written, every written key is in the schema', () => {
+            const fields = Object.keys(userDataResetFields());
+            expect(fields.filter((k) => (USER_DATA_RESET_KEEPS as readonly string[]).includes(k))).toEqual([]);
+            const schemaPaths = Object.keys(UserDataSchema.paths);
+            expect(fields.filter((k) => !schemaPaths.includes(k))).toEqual([]);
+            expect(fields).toHaveLength(22);
+        });
+
+        it('sends a masked bot message when botsService present', async () => {
             mockedGetBots.mockReturnValue(botsStub as any);
             await model.create(buildUserData({ profile: 'p2', chatId: 'c2' }));
             await service.remove('p2', 'c2');
             expect(botsStub.sendMessageByCategory).toHaveBeenCalledTimes(1);
+            expect(JSON.stringify(botsStub.sendMessageByCategory.mock.calls[0])).not.toContain('"c2"');
         });
 
-        it('throws NotFound when nothing to delete', async () => {
+        it('404 and a matched=0 line when no row matches; nothing is created', async () => {
             mockedGetBots.mockReturnValue(null as any);
-            await expect(service.remove('none', 'none')).rejects.toBeInstanceOf(NotFoundException);
+            await expect(service.remove('none', 'none9876')).rejects.toBeInstanceOf(NotFoundException);
+            expect(await model.countDocuments({})).toBe(0);
+            expect(logs()).toEqual([`user-data-reset kind=cms-delete-route chat=****9876 fields=22 matched=0`]);
         });
     });
 
@@ -243,12 +281,12 @@ describe('UserDataService', () => {
         });
 
         it('runs with sort/limit/skip chained', async () => {
-            await model.create(buildUserData({ totalCount: 1 }));
-            await model.create(buildUserData({ totalCount: 2 }));
-            await model.create(buildUserData({ totalCount: 3 }));
-            const res = await service.executeQuery({}, { totalCount: -1 }, 2, 1);
+            await model.create(buildUserData({ windowCount: 1 }));
+            await model.create(buildUserData({ windowCount: 2 }));
+            await model.create(buildUserData({ windowCount: 3 }));
+            const res = await service.executeQuery({}, { windowCount: -1 }, 2, 1);
             expect(res.length).toBe(2);
-            expect(res[0].totalCount).toBe(2);
+            expect(res[0].windowCount).toBe(2);
         });
 
         it('throws InternalServerError on a bad query', async () => {

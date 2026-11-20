@@ -4,9 +4,6 @@ export class CreateUserDataDto {
     @ApiProperty({ description: 'Chat ID' })
     chatId: string;
 
-    @ApiProperty({ description: 'Total count' })
-    totalCount: number;
-
     @ApiProperty({ description: 'Picture count' })
     picCount: number;
 
@@ -105,10 +102,10 @@ export class CreateUserDataDto {
     @ApiPropertyOptional({ description: 'Epoch ms of the most recent accepted payment' })
     lastPaidAt?: number;
 
-    @ApiPropertyOptional({ description: 'True inbound-message count' })
+    @ApiPropertyOptional({ description: 'Lifetime inbound-message count' })
     msgCount?: number;
 
-    @ApiPropertyOptional({ description: '"Treat as established" marker set by tg-aut' })
+    @ApiPropertyOptional({ description: 'Reply-window count (replaced totalCount): admission cap and prompts' })
     windowCount?: number;
 
     @ApiPropertyOptional({ description: 'Grace granted' })

@@ -397,16 +397,21 @@ describe('ScheduledJobsService scheduler ownership', () => {
       }),
     };
     const service = createService(['UMS_TEST_SCHEDULER'], { db });
+    const log = jest.spyOn((service as any).logger, 'log');
 
     await (service as any).runDailyUserStatsReset();
 
     expect(stats2.deleteMany).toHaveBeenCalledWith({});
+    // userData batch 2: windowCount replaced totalCount; reset to 10 (the old totalCount value), totalCount untouched.
     expect(userData.updateMany).toHaveBeenCalledWith(
-      { payAmount: { $gt: 10 }, totalCount: { $gt: 30 } },
+      { payAmount: { $gt: 10 }, windowCount: { $gt: 30 } },
       {
-        $set: expect.objectContaining({ totalCount: 10, windowCount: 1, paidReply: true }),
+        $set: { windowCount: 10, limitTime: expect.any(Number), paidReply: true },
       },
     );
+    expect(log.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith('window-count '))).toEqual([
+      'window-count kind=daily-reset selector=payAmount>10,windowCount>30 value=10 matched=3 modified=3',
+    ]);
     expect(controlPlaneJobRuns.insertOne).toHaveBeenCalledWith(
       expect.objectContaining({
         _id: expect.stringMatching(/^daily-user-stats-reset:/),
@@ -518,18 +523,22 @@ describe('ScheduledJobsService scheduler ownership', () => {
         { client: 'b', chatId: '2' },
       ]);
       await connection.db.collection('userData').insertMany([
-        { profile: 'p1', chatId: '1', payAmount: 11, totalCount: 31, paidReply: false },
-        { profile: 'p2', chatId: '2', payAmount: 10, totalCount: 99, paidReply: false },
+        { profile: 'p1', chatId: '1', payAmount: 11, windowCount: 31, msgCount: 400, paidReply: false },
+        { profile: 'p2', chatId: '2', payAmount: 10, windowCount: 99, paidReply: false },
+        { profile: 'p3', chatId: '3', payAmount: 50, windowCount: 30, paidReply: false },
       ]);
       const service = createService(['UMS_TEST_SCHEDULER'], connection);
 
       await (service as any).runDailyUserStatsReset();
 
       expect(await connection.db.collection('stats2').countDocuments()).toBe(0);
-      expect(await connection.db.collection('userData').findOne({ profile: 'p1' }))
-        .toEqual(expect.objectContaining({ totalCount: 10, windowCount: 1, paidReply: true }));
+      const p1 = await connection.db.collection('userData').findOne({ profile: 'p1' });
+      expect(p1).toEqual(expect.objectContaining({ windowCount: 10, msgCount: 400, paidReply: true }));
+      expect(p1).not.toHaveProperty('totalCount');
       expect(await connection.db.collection('userData').findOne({ profile: 'p2' }))
-        .toEqual(expect.objectContaining({ totalCount: 99, paidReply: false }));
+        .toEqual(expect.objectContaining({ windowCount: 99, paidReply: false }));
+      expect(await connection.db.collection('userData').findOne({ profile: 'p3' }))
+        .toEqual(expect.objectContaining({ windowCount: 30, paidReply: false }));
       const runs = (await connection.db.collection('controlPlaneJobRuns').find({}).toArray())
         .filter((run) => String(run._id).startsWith('daily-user-stats-reset:'));
       expect(runs).toHaveLength(1);

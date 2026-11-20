@@ -84,10 +84,10 @@ export class UserDataController {
   }
 
   @Delete(':profile/:chatId')
-  @ApiOperation({ summary: 'Delete user data by profile and chat ID', description: 'Deletes a specific user data entry identified by profile and chat ID.' })
+  @ApiOperation({ summary: 'Reset user data by profile and chat ID', description: 'Resets the row to a fresh row (conversation and tier state). Never deletes: identity, payment history, the fake-payment mark, attribution and completion counters stay.' })
   @ApiParam({ name: 'profile', description: 'User profile identifier', type: String})
   @ApiParam({ name: 'chatId', description: 'Chat ID associated with the user', type: String})
-  @ApiResponse({ status: 200, description: 'User data successfully deleted.', type: UserData })
+  @ApiResponse({ status: 200, description: 'The reset row.', type: UserData })
   @ApiResponse({ status: 404, description: 'User data not found.' })
   async remove(@Param('profile') profile: string, @Param('chatId') chatId: string): Promise<UserData> {
     return this.userDataService.remove(profile, chatId);

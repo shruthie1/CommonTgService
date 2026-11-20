@@ -9,7 +9,7 @@ import { UserDataDocument, UserDataSchema } from '../schemas/user-data.schema';
 import { UserDataService } from '../user-data.service';
 
 const base = (chatId: string): any => ({
-    chatId, profile: 'p1', totalCount: 1, picCount: 0, lastMsgTimeStamp: Date.now(), limitTime: 0,
+    chatId, profile: 'p1', picCount: 0, lastMsgTimeStamp: Date.now(), limitTime: 0,
     paidCount: 0, prfCount: 0, canReply: 1, payAmount: 0, highestPayAmount: 0, cheatCount: 0, callTime: 0,
 });
 const OWNED = { lifetimePaid: 499, lifetimeCredits: 2, creditKeys: ['k1', 'k2'], firstPaidAt: 1760000000000, msgCount: 7, windowCount: 3, graceFlag: true, lastPaidAt: 1760000500000 };

@@ -13,6 +13,7 @@ import { parseError } from '../../utils/parseError';
 import { getBotsServiceInstance, Logger } from '../../utils';
 import { ChannelCategory } from '../bots';
 import { stripWorkflowOwned } from './user-data.owned-keys';
+import { userDataResetFields } from './user-data.reset';
 
 @Injectable()
 export class UserDataService {
@@ -169,23 +170,34 @@ export class UserDataService {
             .exec();
     }
 
+    /**
+     * DELETE /userData/:profile/:chatId: resets the row to a fresh row's state (user-data.reset.ts), keeping identity,
+     * payment history, the fake-payment mark, attribution and the completion counters. Never deletes (owner
+     * 2026-11-20, A11). One `user-data-reset` line. 404 when no row matches.
+     */
     async remove(profile: string, chatId: string): Promise<UserDataDocument> {
+        const fields = userDataResetFields();
+        const resetUser = await this.userDataModel
+            .findOneAndUpdate(await this.userRowFilter(profile, chatId), { $set: fields }, { returnDocument: 'after', upsert: false })
+            .lean()
+            .exec();
+        if (!resetUser) {
+            this.logger.warn(`user-data-reset kind=cms-delete-route chat=****${String(chatId ?? '').slice(-4)} fields=${Object.keys(fields).length} matched=0`);
+            throw new NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
+        }
+        this.logger.log(`user-data-reset kind=cms-delete-route chat=****${String(chatId ?? '').slice(-4)} fields=${Object.keys(fields).length} matched=1`);
         const botsService = getBotsServiceInstance();
         if (botsService) {
             botsService.sendMessageByCategory(
                 ChannelCategory.PROM_LOGS2,
                 {
                     severity: 'warning',
-                    title: 'Deleting data',
-                    fields: [{ label: 'Profile', value: profile }, { label: 'Chat', value: chatId }],
+                    title: 'User data reset',
+                    fields: [{ label: 'Profile', value: profile }, { label: 'Chat', value: `****${String(chatId ?? '').slice(-4)}` }],
                 },
             );
         }
-        const deletedUser = await this.userDataModel.findOneAndDelete(await this.userRowFilter(profile, chatId)).lean().exec();
-        if (!deletedUser) {
-            throw new NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
-        }
-        return deletedUser;
+        return resetUser;
     }
 
     async search(filter: any): Promise<UserDataDocument[]> {
