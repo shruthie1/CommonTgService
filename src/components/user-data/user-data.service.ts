@@ -12,7 +12,7 @@ import { UpdateUserDataDto } from './dto/update-user-data.dto';
 import { parseError } from '../../utils/parseError';
 import { getBotsServiceInstance, Logger } from '../../utils';
 import { ChannelCategory } from '../bots';
-import { stripWorkflowOwned } from './user-data.owned-keys';
+import { stripWorkflowOwned, USER_DATA_IDENTITY_KEYS } from './user-data.owned-keys';
 import { userDataResetFields } from './user-data.reset';
 
 @Injectable()
@@ -40,15 +40,25 @@ export class UserDataService {
     }
 
     /**
-     * Drop workflow-owned keys (user-data.owned-keys.ts) from a generic-route body; one greppable line when any were sent.
+     * Drop workflow-owned keys and non-numeric $inc-counter writes (user-data.owned-keys.ts) from a generic-route body;
+     * one greppable line per reason when any were sent.
      * Every generic write (create, update, updateAll, and POST /updateUserData through update) passes here.
      */
     private withoutOwnedKeys<T extends object>(body: T, chatId: unknown): T {
-        const { kept, stripped } = stripWorkflowOwned({ ...(body ?? {}) } as Record<string, unknown>);
-        if (stripped.length) {
-            this.logger.warn(`user-data-update kind=stripped_owned keys=${stripped.join(',')} chat=****${String(chatId ?? '').slice(-4)}`);
-        }
+        const { kept, stripped, invalid } = stripWorkflowOwned({ ...(body ?? {}) } as Record<string, unknown>);
+        const chat = `chat=****${String(chatId ?? '').slice(-4)}`;
+        if (stripped.length) this.logger.warn(`user-data-update kind=stripped_owned keys=${stripped.join(',')} ${chat}`);
+        if (invalid.length) this.logger.warn(`user-data-update kind=stripped_invalid_counter keys=${invalid.join(',')} ${chat}`);
         return kept as T;
+    }
+
+    /** A copy of `body` without the row identity keys (_id, chatId, profile): the update paths' filter owns them. */
+    private withoutIdentity(body: Record<string, unknown>): Record<string, unknown> {
+        const kept = { ...body };
+        for (const key of Object.keys(kept)) {
+            if ((USER_DATA_IDENTITY_KEYS as readonly string[]).some((k) => key === k || key.startsWith(`${k}.`))) delete kept[key];
+        }
+        return kept;
     }
 
     async create(createUserDataDto: CreateUserDataDto): Promise<UserDataDocument> {
@@ -144,11 +154,8 @@ export class UserDataService {
     }
 
     async update(profile: string, chatId: string, updateUserDataDto: UpdateUserDataDto): Promise<UserDataDocument> {
-        const sanitizedDto = this.withoutOwnedKeys({ ...updateUserDataDto } as Record<string, unknown>, chatId);
-        delete (sanitizedDto as any)._id;
-        delete (sanitizedDto as any).profile;
-        delete (sanitizedDto as any).chatId;
-        
+        const sanitizedDto = this.withoutIdentity(this.withoutOwnedKeys({ ...updateUserDataDto } as Record<string, unknown>, chatId));
+
         const updatedUser = await this.userDataModel
             .findOneAndUpdate(await this.userRowFilter(profile, chatId), { $set: sanitizedDto }, { returnDocument: 'after', upsert: false })
             .lean()
@@ -162,8 +169,8 @@ export class UserDataService {
     }
 
     async updateAll(chatId: string, updateUserDataDto: UpdateUserDataDto) {
-        const sanitizedDto = this.withoutOwnedKeys({ ...updateUserDataDto } as Record<string, unknown>, chatId);
-        delete (sanitizedDto as any)._id;
+        // Same identity rule as update(): updateMany on { chatId } must not move rows to another chatId or persona.
+        const sanitizedDto = this.withoutIdentity(this.withoutOwnedKeys({ ...updateUserDataDto } as Record<string, unknown>, chatId));
 
         return this.userDataModel
             .updateMany({ chatId }, { $set: sanitizedDto })

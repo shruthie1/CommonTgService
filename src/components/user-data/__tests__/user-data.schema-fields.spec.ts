@@ -34,15 +34,17 @@ describe('UserData schema field contract', () => {
 
     const raw = (chatId: string) => model.collection.findOne({ chatId });
 
+    // The payment keys are workflow-owned (user-data.owned-keys.ts): the generic service strips them, so the schema
+    // contract (declared = kept) is checked on the model, the path the owning CMS workflows use.
     it('keeps all six tg-platform fields on create', async () => {
-        await service.create({ ...base('c1'), ...OWNED } as any);
+        await model.create({ ...base('c1'), ...OWNED } as any);
         const row: any = await raw('c1');
         for (const [k, v] of Object.entries(OWNED)) expect(row[k]).toEqual(v);
     });
 
     it('keeps all six tg-platform fields on update', async () => {
         await service.create(base('c2') as any);
-        await service.update('p1', 'c2', { ...OWNED } as any);
+        await model.findOneAndUpdate({ chatId: 'c2' }, { $set: { ...OWNED } });
         const row: any = await raw('c2');
         for (const [k, v] of Object.entries(OWNED)) expect(row[k]).toEqual(v);
     });
@@ -107,9 +109,9 @@ describe('UserData schema field contract', () => {
     };
 
     it('keeps the fake-payment mark fields on create and update', async () => {
-        await service.create({ ...base('f1'), ...FAKE } as any);
+        await model.create({ ...base('f1'), ...FAKE } as any);
         await service.create(base('f2') as any);
-        await service.update('p1', 'f2', { ...FAKE } as any);
+        await model.findOneAndUpdate({ chatId: 'f2' }, { $set: { ...FAKE } });
         for (const id of ['f1', 'f2']) {
             const row: any = await raw(id);
             for (const [k, v] of Object.entries(FAKE)) expect(row[k]).toEqual(v);

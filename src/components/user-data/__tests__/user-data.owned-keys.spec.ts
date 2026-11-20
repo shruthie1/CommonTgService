@@ -19,15 +19,35 @@ const STORED: Record<string, unknown> = {
     showsPaidTo: 2,
     demoCompletions: 1,
     showCompletions: 3,
+    lifetimePaid: 499,
+    lifetimeCredits: 2,
+    creditKeys: ['k1', 'k2'],
+    firstPaidAt: 1760000000000,
+    lastPaidAt: 1760000500000,
+    fakePaymentAt: new Date('2026-11-07T10:00:00Z'),
+    fakePaymentBy: 'ops',
+    fakePaymentReason: 'edited',
+    fakePaymentPrev: { payAmount: 350, canReply: 1 },
     fakePaymentHistory: [{ action: 'mark', by: 'ops', reason: 'edited', at: new Date('2026-11-07T10:00:00Z'), proofIds: ['p-1'] }],
     fakePaymentProofIds: ['p-1'],
+    msgCount: 41,
 };
 const ATTEMPT: Record<string, unknown> = {
     showsPaidTo: 9,
     demoCompletions: 9,
     showCompletions: 9,
+    lifetimePaid: 99999,
+    lifetimeCredits: 9,
+    creditKeys: [],
+    firstPaidAt: 1,
+    lastPaidAt: 1,
+    fakePaymentAt: null,
+    fakePaymentBy: 'evil',
+    fakePaymentReason: 'evil',
+    fakePaymentPrev: null,
     fakePaymentHistory: [],
     fakePaymentProofIds: ['evil'],
+    msgCount: 0,
 };
 
 jest.setTimeout(60_000);
@@ -55,7 +75,7 @@ describe('UserData workflow-owned keys', () => {
     const raw = (chatId: string) => model.collection.findOne({ chatId });
     const lines = () => warn.mock.calls.map((c) => String(c[0])).filter((m) => m.startsWith('user-data-update '));
 
-    it('lists exactly the five keys the audit found missing from the schema', () => {
+    it('lists exactly the workflow-owned keys (audit A1/A2/A10, payment, fake-payment mark, msgCount)', () => {
         expect([...USER_DATA_WORKFLOW_OWNED_KEYS].sort()).toEqual(Object.keys(STORED).sort());
     });
 
@@ -107,6 +127,54 @@ describe('UserData workflow-owned keys', () => {
         const row: any = await raw('7000004321');
         for (const k of USER_DATA_WORKFLOW_OWNED_KEYS) expect(row).not.toHaveProperty(k);
         expect(lines()).toEqual([`user-data-update kind=stripped_owned keys=${Object.keys(ATTEMPT).join(',')} chat=****4321`]);
+    });
+
+    it('PATCH /userData/updateAll/:chatId cannot change chatId or profile (silent, like PATCH /userData/:profile/:chatId)', async () => {
+        const chatId = '7000008888';
+        await model.collection.insertMany([base(chatId), { ...base(chatId), profile: 'p2' }]);
+        await service.updateAll(chatId, { chatId: '1', profile: 'evil', _id: 'x', 'profile.x': 1, limitTime: 7 } as any);
+        const rows = await model.collection.find({ chatId }).sort({ profile: 1 }).toArray() as any[];
+        expect(rows.map((r) => [r.chatId, r.profile, r.limitTime])).toEqual([[chatId, 'p1', 7], [chatId, 'p2', 7]]);
+        expect(await model.collection.countDocuments({ chatId: '1' })).toBe(0);
+        expect(lines()).toEqual([]);
+    });
+
+    it('PATCH /userData/:profile/:chatId cannot change chatId or profile', async () => {
+        const chatId = '7000007777';
+        await model.collection.insertOne(base(chatId));
+        await service.update('p1', chatId, { chatId: '1', profile: 'evil', payAmount: 5 } as any);
+        const row: any = await raw(chatId);
+        expect([row.chatId, row.profile, row.payAmount]).toEqual([chatId, 'p1', 5]);
+    });
+
+    it('windowCount (the daily counter) stays writable through PATCH (tg-chats edits it); msgCount does not', async () => {
+        const chatId = '7000006666';
+        await model.collection.insertOne({ ...base(chatId), msgCount: 41, windowCount: 90 });
+        await service.update('p1', chatId, { windowCount: 10, msgCount: 0 } as any);
+        const row: any = await raw(chatId);
+        expect([row.windowCount, row.msgCount]).toEqual([10, 41]);
+        expect(lines()).toEqual(['user-data-update kind=stripped_owned keys=msgCount chat=****6666']);
+    });
+
+    it('windowCount accepts only a finite number on create, PATCH and updateAll; the next inbound $inc still works', async () => {
+        const inbound = (chatId: string) => model.collection.updateMany({ chatId }, { $inc: { msgCount: 1, windowCount: 1 } });
+        await service.create({ ...base('7000005551'), windowCount: null } as any);
+        await model.collection.insertOne({ ...base('7000005552'), msgCount: 3, windowCount: 7 });
+        await service.update('p1', '7000005552', { windowCount: '', payAmount: 4 } as any);
+        await model.collection.insertMany([{ ...base('7000005553'), msgCount: 2, windowCount: 5 }, { ...base('7000005553'), profile: 'p2', msgCount: 2, windowCount: 5 }]);
+        await service.updateAll('7000005553', { windowCount: 'x', 'windowCount.a': 1 } as any);
+        for (const id of ['7000005551', '7000005552', '7000005553']) await inbound(id);
+        expect((await raw('7000005551') as any).windowCount).toBe(1);
+        expect([(await raw('7000005552') as any).windowCount, (await raw('7000005552') as any).msgCount, (await raw('7000005552') as any).payAmount]).toEqual([8, 4, 4]);
+        expect((await model.collection.find({ chatId: '7000005553' }).toArray() as any[]).map((r) => [r.windowCount, r.msgCount])).toEqual([[6, 3], [6, 3]]);
+        expect(lines()).toEqual([
+            'user-data-update kind=stripped_invalid_counter keys=windowCount chat=****5551',
+            'user-data-update kind=stripped_invalid_counter keys=windowCount chat=****5552',
+            'user-data-update kind=stripped_invalid_counter keys=windowCount,windowCount.a chat=****5553',
+        ]);
+        await service.update('p1', '7000005552', { windowCount: 0 } as any);
+        expect((await raw('7000005552') as any).windowCount).toBe(0);
+        expect(lines()).toHaveLength(3);
     });
 
     it('a body with no owned key logs nothing', async () => {
