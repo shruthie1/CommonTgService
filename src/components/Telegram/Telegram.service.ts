@@ -178,24 +178,39 @@ export class TelegramService implements OnModuleDestroy {
         // "No user has X as username"). Permanent at the channel level — delete from both
         // collections so it is never re-queued. Central choke point: every join path
         // (queue + /joinchannel endpoint) routes through tryJoiningChannel -> here.
+        // Owner 2026-11-20: delete only the row whose exact channelId is the one that failed. Never
+        // resolve an id from the username: usernames are not unique (121 exact duplicate groups), so
+        // the first match can be another channel. No channelId here means no delete.
         if (isDeadChannelError(error)) {
-            try {
-                let deadId = channelId;
-                if (!deadId && username) {
-                    const found = (await this.channelsService.search({ username }))[0];
-                    deadId = found?.channelId;
+            const deadId = String(channelId ?? '').trim();
+            if (!deadId) {
+                this.logger.info(mobile, `channel-dead kind=skip reason=no_channel_id`);
+                return;
+            }
+            const last4 = deadId.slice(-4);
+            // Each collection on its own: a failure in one never skips the other. 1 = row deleted.
+            const removeFrom = async (collection: string, remove: () => Promise<boolean>): Promise<number | null> => {
+                try {
+                    return (await remove()) ? 1 : 0;
+                } catch (removeError) {
+                    this.logger.warn(mobile, `channel-dead kind=error collection=${collection} channel=${last4}: ${removeError instanceof Error ? removeError.message : String(removeError)}`);
+                    return null;
                 }
-                if (deadId) {
-                    await this.channelsService.remove(deadId);
-                    await this.activeChannelsService.remove(deadId);
-                    this.logger.debug(mobile, `Removed dead channel [${deadId}] @${username}`);
-                } else {
-                    this.logger.debug(mobile, `Dead channel @${username} but no channelId to remove`);
-                }
-            } catch (searchError) {
-                this.logger.debug(mobile, "Failed to remove dead channel: ", parseError(searchError));
+            };
+            const channels = await removeFrom('channels', () => this.channelsService.remove(deadId));
+            const activeChannels = await removeFrom('activeChannels', () => this.activeChannelsService.remove(deadId));
+            if (channels || activeChannels) {
+                this.logger.info(mobile, `channel-dead kind=deleted channel=${last4} channels=${channels ?? 'error'} activeChannels=${activeChannels ?? 'error'}`);
+            } else if (channels === 0 && activeChannels === 0) {
+                this.logger.info(mobile, `channel-dead kind=skip reason=no_row channel=${last4}`);
             }
         } else if (error.errorMessage === "CHANNEL_PRIVATE") {
+            // update() rejects an id whose normalized key is blank ('', '  ', '-', '-100'); skip here
+            // so the caller still rethrows the join error. Same strip rule as the services' channelKey.
+            if (!String(channelId ?? '').trim().replace(/^-100/, '').replace(/^-/, '')) {
+                this.logger.info(mobile, `channel-update kind=skip reason=no_channel_id`);
+                return;
+            }
             await this.channelsService.update(channelId, { private: true })
             await this.activeChannelsService.update(channelId, { private: true });
         }

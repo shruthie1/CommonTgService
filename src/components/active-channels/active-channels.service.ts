@@ -9,7 +9,14 @@ import { parseError } from '../../utils/parseError';
 import { sendBotNotice } from '../../utils/bot-notice';
 import { getBotsServiceInstance } from '../../utils';
 import { ChannelCategory } from '../bots';
-import { buildDurableChannelUpsertPipeline, isOperatorBan } from '../../utils/telegram-utils/durable-channel-upsert';
+import {
+  BAN_GUARDED_FIELDS,
+  buildDurableChannelUpsertPipeline,
+  castUpdateFields,
+  guardedChangeRefused,
+  isOperatorBan,
+  keepOnOperatorBan,
+} from '../../utils/telegram-utils/durable-channel-upsert';
 import { normalizeTelegramChannelId } from '../../utils/telegram-utils/channel-live-facts';
 import { ChannelIntelligenceReadService } from './channel-intelligence-read.service';
 
@@ -225,24 +232,27 @@ export class ActiveChannelsService {
     return rows.map((row) => row.channelId).filter((channelId): channelId is string => Boolean(channelId));
   }
 
-  async update(channelId: string, updateActiveChannelDto: UpdateActiveChannelDto): Promise<ActiveChannel> {
+  async update(channelId: string, updateActiveChannelDto: UpdateActiveChannelDto): Promise<ActiveChannel | null> {
     try {
       delete updateActiveChannelDto["_id"]
-      if (!channelId) {
+      // Validate the normalized key: '  ' or '-100' normalize to '' and would target a blank-id row.
+      const key = this.channelKey(channelId);
+      if (!key) {
         throw new BadRequestException('Channel ID is required');
       }
 
-      const cleanDto: Record<string, any> = Object.fromEntries(
+      // Cast by the schema before any rule reads the values ('true' -> true), so the ban and
+      // sendability rules below see exactly what is written. A pipeline skips Mongoose casting.
+      const cleanDto: Record<string, any> = castUpdateFields(this.activeChannelModel, Object.fromEntries(
         Object.entries(updateActiveChannelDto).filter(
           ([key, value]) => value !== undefined && this.writableFields.has(key),
         )
-      );
+      ));
 
       if (Object.keys(cleanDto).length === 0) {
         throw new BadRequestException('At least one field to update is required');
       }
 
-      const existing = await this.activeChannelModel.findOne({ channelId: this.channelKey(channelId) }).lean().exec();
       if (cleanDto.banned === true) {
         cleanDto.bannedAt = cleanDto.bannedAt ?? Date.now();
         cleanDto.canSendMsgs = false;
@@ -254,27 +264,40 @@ export class ActiveChannelsService {
         cleanDto.canSendMsgs = false;
         cleanDto.lastHydrationStatus = 'needs_hydration';
         cleanDto.lastHydrationReason = 'operator_unbanned';
-      } else if (isOperatorBan(existing) && cleanDto.canSendMsgs === true) {
-        // Only an operator ban is durable; legacy banned/forbidden were one account's view.
-        cleanDto.canSendMsgs = false;
       }
 
       if (cleanDto.private === true || cleanDto.forbidden === true || cleanDto.broadcast === true) {
         cleanDto.canSendMsgs = false;
       }
 
-
-      const updatedChannel = await this.activeChannelModel
+      // Owner 2026-11-20: update an EXISTING row only, never upsert (rows are created by
+      // create/createMultiple). One atomic pipeline write: the operator-ban guard is evaluated inside
+      // the write against the stored row, not from an earlier read. Unless this call is the explicit
+      // unban (banned === false), an operator-banned row keeps banned/bannedAt and canSendMsgs stays
+      // false; every other field lands. Only an operator ban is durable; legacy banned/forbidden were
+      // one account's view.
+      const fields: Record<string, unknown> = { ...cleanDto, updatedAt: new Date() };
+      const unban = cleanDto.banned === false;
+      const set: Record<string, unknown> = {};
+      for (const [field, value] of Object.entries(fields)) {
+        set[field] = !unban && BAN_GUARDED_FIELDS.has(field) ? keepOnOperatorBan(field, value) : { $literal: value };
+      }
+      const updated = await this.activeChannelModel
         .findOneAndUpdate(
-          { channelId: this.channelKey(channelId) },
-          {
-            $set: { ...cleanDto, updatedAt: new Date() },
-          },
-          { returnDocument: 'after', upsert: true, lean: true }
+          { channelId: key },
+          [{ $set: set }],
+          { returnDocument: 'after', lean: true, updatePipeline: true },
         )
         .exec();
 
-      return updatedChannel;
+      if (!updated) {
+        this.logger.warn(`channel-update kind=no_row collection=activeChannels channel=${key.slice(-4)}`);
+        return null;
+      }
+      if (!unban && isOperatorBan(updated) && guardedChangeRefused(cleanDto, updated)) {
+        this.logger.warn(`channel-update kind=skip reason=banned collection=activeChannels channel=${key.slice(-4)}`);
+      }
+      return updated;
     } catch (error) {
       throw this.handleError(error, 'Failed to update channel');
     }
@@ -330,9 +353,13 @@ export class ActiveChannelsService {
     }
   }
 
-  async remove(channelId: string): Promise<void> {
+  /** Deletes the one row with this exact channelId; true when a row was deleted. */
+  async remove(channelId: string): Promise<boolean> {
     try {
-      if (!channelId) {
+      // Validate the normalized key, not the raw input: '  ' or '-100' normalize to '' and would
+      // otherwise target a row whose channelId is empty.
+      const key = this.channelKey(channelId);
+      if (!key) {
         throw new BadRequestException('Channel ID is required');
       }
 
@@ -344,7 +371,8 @@ export class ActiveChannelsService {
         );
       }
 
-      await this.activeChannelModel.findOneAndDelete({ channelId: this.channelKey(channelId) }).exec();
+      const deleted = await this.activeChannelModel.findOneAndDelete({ channelId: key }).exec();
+      return Boolean(deleted);
     } catch (error) {
       throw this.handleError(error, 'Failed to remove channel');
     }

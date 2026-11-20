@@ -300,7 +300,7 @@ describe('ActiveChannelsService (real Mongo)', () => {
       await expect(service.findOne('')).rejects.toBeInstanceOf(BadRequestException);
     });
 
-    test('update strips _id and upserts', async () => {
+    test('update strips _id and updates the existing row', async () => {
       await seed({ channelId: 'up-1' });
       const r = await service.update('up-1', { participantsCount: 50, _id: 'x' } as any);
       expect(r.participantsCount).toBe(50);

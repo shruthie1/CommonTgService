@@ -1,19 +1,38 @@
-import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { CreateChannelDto } from './dto/create-channel.dto';
 import { UpdateChannelDto } from './dto/update-channel.dto';
+import { SearchChannelDto } from './dto/search-channel.dto';
 import { Channel, ChannelDocument } from './schemas/channel.schema';
 import { PipelineStage } from 'mongoose';
 import { ChannelCategory } from '../bots';
 import { getBotsServiceInstance } from '../../utils';
-import { buildDurableChannelUpsertPipeline, isOperatorBan } from '../../utils/telegram-utils/durable-channel-upsert';
+import {
+  BAN_GUARDED_FIELDS,
+  buildDurableChannelUpsertPipeline,
+  castUpdateFields,
+  guardedChangeRefused,
+  isOperatorBan,
+  keepOnOperatorBan,
+} from '../../utils/telegram-utils/durable-channel-upsert';
 import { normalizeTelegramChannelId } from '../../utils/telegram-utils/channel-live-facts';
 import { ChannelIntelligenceReadService } from '../active-channels/channel-intelligence-read.service';
 import { channelNameAllowedFilter, computeChannelNameDenied, NAME_DENIED_PIPELINE_STAGE } from './channel-name-deny';
 
+/**
+ * Pipeline twin of `$setOnInsert: {createdAt}`: an upsert pipeline runs before Mongo adds `_id`, so
+ * a missing `_id` means this write inserts the row. Existing rows keep their createdAt (or its
+ * absence). Mongoose timestamps add only updatedAt to pipeline updates.
+ */
+export const CREATED_AT_ON_INSERT_STAGE = {
+  $set: { createdAt: { $cond: [{ $eq: [{ $type: '$_id' }, 'missing'] }, '$$NOW', '$createdAt'] } },
+};
+
 @Injectable()
 export class ChannelsService {
+  private readonly logger = new Logger(ChannelsService.name);
+
   /**
    * Fields a caller may write through `update()`. Mirrors ActiveChannelsService.writableFields.
    *
@@ -105,7 +124,7 @@ export class ChannelsService {
         updateOne: {
           filter: { channelId: this.channelKey(dto.channelId) },
           // Last stage recomputes nameDenied from the merged title/username (see channel-name-deny).
-          update: [...buildDurableChannelUpsertPipeline(setFields, defaults, dto), NAME_DENIED_PIPELINE_STAGE],
+          update: [...buildDurableChannelUpsertPipeline(setFields, defaults, dto), NAME_DENIED_PIPELINE_STAGE, CREATED_AT_ON_INSERT_STAGE],
           upsert: true,
         },
       };
@@ -139,34 +158,61 @@ export class ChannelsService {
     return rows.map((row) => row.channelId).filter((channelId): channelId is string => Boolean(channelId));
   }
 
-  async update(channelId: string, updateChannelDto: UpdateChannelDto): Promise<Channel> {
-    const existing = await this.ChannelModel.findOne({ channelId: this.channelKey(channelId) }).lean().exec();
+  /**
+   * Updates an EXISTING row only (owner 2026-11-20): never upserts, so a write for an unknown
+   * channel cannot create a title-less stub. Rows are created only by create/createMultiple.
+   *
+   * One atomic pipeline write. The operator-ban guard (banned + bannedAt) is evaluated inside the
+   * write against the stored row, never from an earlier read: on an operator-banned row, banned
+   * and bannedAt keep their stored values and canSendMsgs stays false; every other field lands.
+   * (A filter-only guard needs a second write for the other fields, and an unban between the two
+   * writes loses the update; Codex review 2026-11-20.) nameDenied is recomputed in the same write
+   * from the merged title/username. Values are cast by the schema first: a pipeline skips Mongoose
+   * casting.
+   *
+   * Logs: `channel-update kind=no_row`, `channel-update kind=skip reason=banned`.
+   */
+  async update(channelId: string, updateChannelDto: UpdateChannelDto): Promise<Channel | null> {
+    const key = this.channelKey(channelId);
+    // Validate the normalized key: '  ' or '-100' normalize to '' and would target a blank-id row.
+    if (!key) throw new BadRequestException('Channel ID is required');
     // Bound the write to known fields — never let a caller set _id/channelId or unknown keys.
-    const update: Record<string, unknown> = Object.fromEntries(
-      Object.entries(updateChannelDto as Record<string, unknown>)
-        .filter(([key]) => this.writableFields.has(key)),
-    );
-    // Only an operator ban (banned + bannedAt) is durable; legacy banned/forbidden were one account's view.
-    if (isOperatorBan(existing) && update.canSendMsgs === true) {
-      update.canSendMsgs = false;
-    }
-    if (isOperatorBan(existing) && update.banned === false) delete update.banned;
+    const update = castUpdateFields(this.ChannelModel, Object.fromEntries(
+      Object.entries((updateChannelDto ?? {}) as Record<string, unknown>)
+        .filter(([field, value]) => value !== undefined && this.writableFields.has(field)),
+    ));
     if (update.private === true || update.forbidden === true || update.banned === true) {
       update.canSendMsgs = false;
     }
-    // `!== undefined`, not `in`: mongoose drops undefined from $set, so an undefined title/username leaves the stored
-    // value in place and the verdict must be computed from the stored one.
-    if (update.title !== undefined || update.username !== undefined) {
-      const title = update.title !== undefined ? update.title : existing?.title;
-      const username = update.username !== undefined ? update.username : existing?.username;
-      update.nameDenied = computeChannelNameDenied(title, username);
+
+    if (!Object.keys(update).length) {
+      const row = await this.ChannelModel.findOne({ channelId: key }).exec();
+      if (!row) this.logger.warn(`channel-update kind=no_row channel=${key.slice(-4)}`);
+      return row ?? null;
     }
-    const updatedChannel = await this.ChannelModel.findOneAndUpdate(
-      { channelId: this.channelKey(channelId) },
-      { $set: update },
-      { returnDocument: 'after', upsert: true },
+
+    const set: Record<string, unknown> = {};
+    for (const [field, value] of Object.entries(update)) {
+      set[field] = BAN_GUARDED_FIELDS.has(field) ? keepOnOperatorBan(field, value) : { $literal: value };
+    }
+    const stages: PipelineStage.Set[] = [{ $set: set }];
+    if (update.title !== undefined || update.username !== undefined) {
+      stages.push(NAME_DENIED_PIPELINE_STAGE as PipelineStage.Set);
+    }
+    const updated = await this.ChannelModel.findOneAndUpdate(
+      { channelId: key },
+      stages,
+      { returnDocument: 'after', updatePipeline: true },
     ).exec();
-    return updatedChannel;
+
+    if (!updated) {
+      this.logger.warn(`channel-update kind=no_row channel=${key.slice(-4)}`);
+      return null;
+    }
+    if (isOperatorBan(updated) && guardedChangeRefused(update, updated)) {
+      this.logger.warn(`channel-update kind=skip reason=banned channel=${key.slice(-4)}`);
+    }
+    return updated;
   }
 
   /**
@@ -181,7 +227,13 @@ export class ChannelsService {
     ).exec();
   }
 
-  async remove(channelId: string): Promise<void> {
+  /** Deletes the one row with this exact channelId; true when a row was deleted. A blank id deletes nothing. */
+  async remove(channelId: string): Promise<boolean> {
+    const key = this.channelKey(channelId);
+    if (!key) {
+      this.logger.warn('channel-dead kind=skip reason=no_channel_id');
+      return false;
+    }
     const botsService = getBotsServiceInstance();
     if (botsService) {
       botsService.sendMessageByCategory(
@@ -189,78 +241,31 @@ export class ChannelsService {
         { title: 'Removing Channel', fields: [{ label: 'Channel', value: channelId }] },
       );
     }
-    const result = await this.ChannelModel.findOneAndDelete({ channelId: this.channelKey(channelId) }).exec();
+    const deleted = await this.ChannelModel.findOneAndDelete({ channelId: key }).exec();
+    return Boolean(deleted);
   }
 
-  async search(filter: any): Promise<Channel[]> {
-    console.log(filter)
-    return this.ChannelModel.find(filter).exec();
-  }
-
-  async getChannels(limit = 50, skip = 0, keywords = [], notIds = []) {
-
-    const pattern = new RegExp(keywords.join('|'), 'i');
-    const notPattern = new RegExp('online|board|class|PROFIT|wholesale|retail|topper|exam|motivat|medico|shop|follower|insta|traini|cms|cma|subject|currency|color|amity|game|gamin|like|earn|popcorn|TANISHUV|bitcoin|crypto|mall|work|folio|health|civil|win|casino|shop|promot|english|invest|fix|money|book|anim|angime|support|cinema|bet|predic|study|youtube|sub|open|trad|cric|quot|exch|movie|search|film|offer|ott|deal|quiz|academ|insti|talkies|screen|series|webser', "i")
-    const query = {
-      $and: [
-        { username: { $ne: null } },
-        {
-          $or: [
-            { title: { $regex: pattern } },
-            { username: { $regex: pattern } }
-          ]
-        },
-        {
-          username: {
-            $not: {
-              $regex: "^(" + notIds.map(id => "(?i)" + id?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))?.join("|") + ")$"
-            }
-          }
-        },
-        {
-          title: { $not: { $regex: notPattern } }
-        },
-        {
-          username: { $not: { $regex: notPattern } }
-        },
-        {
-          canSendMsgs: true,
-          broadcast: { $ne: true },
-          banned: { $ne: true },
-          forbidden: { $ne: true },
-          private: { $ne: true }
-        }
-      ]
+  /**
+   * GET /channels/search. min/maxParticipantsCount are DTO-only names (no such field), so they are
+   * mapped to a participantsCount range instead of being passed through as a filter that matches
+   * nothing.
+   */
+  async search(filter: SearchChannelDto): Promise<Channel[]> {
+    const { minParticipantsCount, maxParticipantsCount, ...rest } = (filter ?? {}) as SearchChannelDto & Record<string, unknown>;
+    const query: Record<string, unknown> = { ...rest };
+    // Query-string values arrive as strings; blank or non-numeric bounds are ignored.
+    const bound = (value: unknown): number | undefined => {
+      if (value === undefined || value === null || String(value).trim() === '') return undefined;
+      const n = Number(value);
+      return Number.isFinite(n) ? n : undefined;
     };
-
-    const sort: { participantsCount: "desc" } = { participantsCount: "desc" };
-    try {
-      const result: Channel[] = await this.ChannelModel.find(query).sort(sort).skip(skip).limit(limit).exec();
-      return result;
-    } catch (error) {
-      console.error('Error:', error);
-      return [];
-    }
-  }
-
-  async executeQuery(query: any, sort?: any, limit?: number): Promise<Channel[]> {
-    try {
-      if (!query) {
-        throw new BadRequestException('Query is invalid.');
-      }
-      const queryExec = this.ChannelModel.find(query);
-      if (sort) {
-        queryExec.sort(sort);
-      }
-
-      if (limit) {
-        queryExec.limit(limit);
-      }
-
-      return await queryExec.exec();
-    } catch (error) {
-      throw new InternalServerErrorException(error.message);
-    }
+    const range: Record<string, number> = {};
+    const min = bound(minParticipantsCount);
+    const max = bound(maxParticipantsCount);
+    if (min !== undefined) range.$gte = min;
+    if (max !== undefined) range.$lte = max;
+    if (Object.keys(range).length) query.participantsCount = range;
+    return this.ChannelModel.find(query).exec();
   }
 
   async getActiveChannels(limit = 50, skip = 0, notIds = []) {

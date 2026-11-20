@@ -99,8 +99,10 @@ describe('CMS channelId normalization', () => {
             // update() used to raw-$set the whole DTO, so a caller could rewrite the document's own
             // identity (channelId) out from under the filter on an upsert, or accumulate stray keys.
             const findOneAndUpdate = jest.fn(() => ({ exec: async () => ({}) }));
-            const findOne = jest.fn(() => ({ lean: () => ({ exec: async () => null }) }));
-            const service = new ChannelsService({ findOne, findOneAndUpdate } as any, {} as any);
+            const findOne = jest.fn(() => ({ exec: async () => null }));
+            // Stand-in for Model.castObject: identity over the already-bounded keys.
+            const castObject = jest.fn((obj: Record<string, unknown>) => ({ ...obj }));
+            const service = new ChannelsService({ findOne, findOneAndUpdate, castObject } as any, {} as any);
 
             await service.update('-100222', {
                 title: 'ok',
@@ -110,13 +112,16 @@ describe('CMS channelId normalization', () => {
                 bogusField: 'nope',
             } as any);
 
+            expect(castObject).toHaveBeenCalledWith({ title: 'ok', canSendMsgs: true });
             const [filter, update] = (findOneAndUpdate.mock.calls as any)[0];
             expect(filter).toEqual({ channelId: '222' });
-            // nameDenied is derived (not caller-supplied): recomputed whenever title/username is written.
-            expect(update.$set).toEqual({ title: 'ok', canSendMsgs: true, nameDenied: false });
-            expect(update.$set).not.toHaveProperty('_id');
-            expect(update.$set).not.toHaveProperty('channelId');
-            expect(update.$set).not.toHaveProperty('bogusField');
+            // Pipeline: bounded $set (canSendMsgs guarded against an operator ban inside the write),
+            // then nameDenied recomputed from the merged title/username.
+            expect(Object.keys(update[0].$set).sort()).toEqual(['canSendMsgs', 'title']);
+            expect(update[0].$set.title).toEqual({ $literal: 'ok' });
+            expect(update[0].$set.canSendMsgs.$cond[2]).toEqual({ $literal: true });
+            expect(update[1].$set).toHaveProperty('nameDenied');
+            expect(update).toHaveLength(2);
         });
     });
 });

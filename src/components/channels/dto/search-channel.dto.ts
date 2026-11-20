@@ -29,11 +29,14 @@ export class SearchChannelDto {
     value === undefined ? undefined : (value === 'true' || value === true))
   canSendMsgs?: boolean | string;
 
+  // `number | string` (design type Object) for the same reason as canSendMsgs: implicit conversion
+  // turns a blank `?maxParticipantsCount=` into 0 (a `$lte: 0` filter). The service parses the bound
+  // and ignores blank or non-numeric values.
   @ApiPropertyOptional({
-    description: 'Minimum number of participants in the channel' })
-  minParticipantsCount?: number;
+    description: 'Minimum number of participants in the channel', type: Number })
+  minParticipantsCount?: number | string;
 
   @ApiPropertyOptional({
-    description: 'Maximum number of participants in the channel' })
-  maxParticipantsCount?: number;
+    description: 'Maximum number of participants in the channel', type: Number })
+  maxParticipantsCount?: number | string;
 }

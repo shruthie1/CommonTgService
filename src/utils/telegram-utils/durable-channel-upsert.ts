@@ -24,6 +24,43 @@ export function isOperatorBan(doc: { banned?: unknown; bannedAt?: unknown } | nu
 }
 
 /**
+ * Casts update values by the model's schema (a pipeline update skips Mongoose casting). Keys the
+ * schema does not know are dropped, as strict mode drops them from a plain $set. Model.castObject
+ * skips null values, so explicit nulls (bannedAt: null on an unban) are kept as null.
+ */
+export function castUpdateFields(
+  model: { castObject: (obj: Record<string, unknown>) => unknown },
+  raw: Record<string, unknown>,
+): Record<string, unknown> {
+  const cast = { ...(model.castObject(raw) as Record<string, unknown>) };
+  for (const [field, value] of Object.entries(raw)) if (value === null) cast[field] = null;
+  return cast;
+}
+
+/** Fields a plain update() may not change on an operator-banned row. */
+export const BAN_GUARDED_FIELDS = new Set(['banned', 'bannedAt', 'canSendMsgs']);
+
+/**
+ * Pipeline expression for one guarded field in update(): evaluated against the stored row inside
+ * the write, so it is atomic. On an operator-banned row banned/bannedAt keep their stored value and
+ * canSendMsgs stays false; otherwise the incoming value lands.
+ */
+export function keepOnOperatorBan(field: string, value: unknown): AggregationExpression {
+  const kept = field === 'canSendMsgs' ? false : `$${field}`;
+  return { $cond: [OPERATOR_BAN, kept, literal(value)] };
+}
+
+/** True when update() asked to change a guarded field and the operator ban kept it. */
+export function guardedChangeRefused(
+  requested: Record<string, unknown>,
+  after: { banned?: unknown; bannedAt?: unknown; canSendMsgs?: unknown },
+): boolean {
+  return (requested.canSendMsgs === true && after.canSendMsgs !== true)
+    || ('banned' in requested && requested.banned !== after.banned)
+    || ('bannedAt' in requested && requested.bannedAt !== after.bannedAt);
+}
+
+/**
  * Builds a Mongo update pipeline for a Telegram live-state refresh.
  *
  * Flag rules (shared with tg-platform activeChannel.ts; root cause of the false shared flags):

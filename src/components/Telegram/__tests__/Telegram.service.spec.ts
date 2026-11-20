@@ -576,13 +576,48 @@ describe('TelegramService — channel join / removeChannels', () => {
             expect(services.activeChannelsService.remove).toHaveBeenCalledWith('id2');
         });
 
-        test('resolves channelId via search when only username is known', async () => {
+        test('never resolves an id from the username: no channelId means no delete (owner 2026-11-20)', async () => {
             const { svc, services } = makeService();
-            services.channelsService.search.mockResolvedValueOnce([{ channelId: 'resolved-id' }]);
+            services.channelsService.search.mockResolvedValue([{ channelId: 'first-username-match' }]);
+            const info = jest.spyOn((svc as any).logger, 'info');
             await svc.removeChannels({ errorMessage: 'USERNAME_INVALID' }, '', 'someuser', 'm');
-            expect(services.channelsService.search).toHaveBeenCalledWith({ username: 'someuser' });
-            expect(services.channelsService.remove).toHaveBeenCalledWith('resolved-id');
-            expect(services.activeChannelsService.remove).toHaveBeenCalledWith('resolved-id');
+            await svc.removeChannels({ errorMessage: 'USERNAME_NOT_OCCUPIED' }, undefined as any, 'someuser', 'm');
+            expect(services.channelsService.search).not.toHaveBeenCalled();
+            expect(services.channelsService.remove).not.toHaveBeenCalled();
+            expect(services.activeChannelsService.remove).not.toHaveBeenCalled();
+            expect(info).toHaveBeenCalledWith('m', 'channel-dead kind=skip reason=no_channel_id');
+            expect(info).toHaveBeenCalledTimes(2);
+        });
+
+        test('deletes exactly the reported channelId and logs its last 4 digits', async () => {
+            const { svc, services } = makeService();
+            services.channelsService.remove.mockResolvedValueOnce(true);
+            services.activeChannelsService.remove.mockResolvedValueOnce(false);
+            const info = jest.spyOn((svc as any).logger, 'info');
+            await svc.removeChannels({ errorMessage: 'USERNAME_INVALID' }, '1234567890', 'dupname', 'm');
+            expect(services.channelsService.search).not.toHaveBeenCalled();
+            expect(services.channelsService.remove).toHaveBeenCalledTimes(1);
+            expect(services.channelsService.remove).toHaveBeenCalledWith('1234567890');
+            expect(services.activeChannelsService.remove).toHaveBeenCalledWith('1234567890');
+            expect(info).toHaveBeenCalledWith('m', 'channel-dead kind=deleted channel=7890 channels=1 activeChannels=0');
+        });
+
+        test.each(['', '   ', '-', '-100', undefined])('tryJoiningChannel CHANNEL_PRIVATE with blank key %p rethrows the original error and updates nothing', async (channelId) => {
+            const err: any = new Error('private'); err.errorMessage = 'CHANNEL_PRIVATE';
+            const { svc, services } = makeService({ joinChannel: jest.fn().mockRejectedValue(err) });
+            services.channelsService.update.mockRejectedValue(new Error('Channel ID is required'));
+            await expect(svc.tryJoiningChannel('m', { username: 'chan', channelId } as any)).rejects.toBe(err);
+            expect(services.channelsService.update).not.toHaveBeenCalled();
+            expect(services.activeChannelsService.update).not.toHaveBeenCalled();
+        });
+
+        test('CHANNEL_PRIVATE without a channelId skips the update (no throw, so the join error is rethrown)', async () => {
+            const { svc, services } = makeService();
+            const info = jest.spyOn((svc as any).logger, 'info');
+            await expect(svc.removeChannels({ errorMessage: 'CHANNEL_PRIVATE' }, '', 'u', 'm')).resolves.toBeUndefined();
+            expect(services.channelsService.update).not.toHaveBeenCalled();
+            expect(services.activeChannelsService.update).not.toHaveBeenCalled();
+            expect(info).toHaveBeenCalledWith('m', 'channel-update kind=skip reason=no_channel_id');
         });
 
         test('does NOT delete for CHANNEL_PRIVATE (marks private instead)', async () => {
@@ -599,6 +634,28 @@ describe('TelegramService — channel join / removeChannels', () => {
             await svc.removeChannels(new Error('A wait of 300 seconds is required'), 'id1', 'u', 'm');
             expect(services.channelsService.remove).not.toHaveBeenCalled();
             expect(services.activeChannelsService.remove).not.toHaveBeenCalled();
+        });
+
+        test('no row in either collection: logs skip reason=no_row, not deleted', async () => {
+            const { svc, services } = makeService();
+            services.channelsService.remove.mockResolvedValueOnce(false);
+            services.activeChannelsService.remove.mockResolvedValueOnce(false);
+            const info = jest.spyOn((svc as any).logger, 'info');
+            await svc.removeChannels({ errorMessage: 'USERNAME_INVALID' }, '1110001', 'u', 'm');
+            expect(info).toHaveBeenCalledWith('m', 'channel-dead kind=skip reason=no_row channel=0001');
+            expect(info.mock.calls.some((c: any[]) => String(c[1]).includes('kind=deleted'))).toBe(false);
+        });
+
+        test('a failure in channels still removes from activeChannels and logs both outcomes', async () => {
+            const { svc, services } = makeService();
+            services.channelsService.remove.mockRejectedValueOnce(new Error('db down'));
+            services.activeChannelsService.remove.mockResolvedValueOnce(true);
+            const info = jest.spyOn((svc as any).logger, 'info');
+            const warn = jest.spyOn((svc as any).logger, 'warn');
+            await svc.removeChannels({ errorMessage: 'USERNAME_INVALID' }, '2220002', 'u', 'm');
+            expect(services.activeChannelsService.remove).toHaveBeenCalledWith('2220002');
+            expect(warn).toHaveBeenCalledWith('m', 'channel-dead kind=error collection=channels channel=0002: db down');
+            expect(info).toHaveBeenCalledWith('m', 'channel-dead kind=deleted channel=0002 channels=error activeChannels=1');
         });
 
         test('swallows deletion errors (does not throw)', async () => {
