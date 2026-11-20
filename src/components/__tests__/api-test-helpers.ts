@@ -131,7 +131,6 @@ export function makePromoteClientData(overrides: Partial<PromoteClient> = {}): a
         tgId: `tg-prom-${counter}`,
         mobile: `155510${String(counter).padStart(5, '0')}`,
         session: `session-prom-${counter}`,
-        lastActive: '2026-04-01',
         availableDate: '2026-04-01',
         channels: 150,
         clientId: 'test-client-1',

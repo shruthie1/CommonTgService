@@ -26,3 +26,18 @@ describe('PromoteClientSchema: lastScraped', () => {
         expect(set.toObject()).toMatchObject({ lastScraped: at });
     });
 });
+
+/** Owner 2026-11-20: promoteClients.lastActive is retired. Optional, no default; nothing writes it. */
+describe('PromoteClientSchema: lastActive retired', () => {
+    const Model = mongoose.models.PromoteClientSchemaSpec
+        || mongoose.model('PromoteClientSchemaSpec', PromoteClientSchema, 'promoteClientsSchemaSpec');
+
+    it('is optional with no default: a doc without it validates and stays without it', async () => {
+        const la = PromoteClientSchema.path('lastActive') as any;
+        expect(la.isRequired).toBeFalsy();
+        expect(la.defaultValue).toBeUndefined();
+        const bare = new Model({ tgId: '1', mobile: '919000000001', availableDate: '2026-10-28', channels: 1, clientId: 'c1' });
+        await expect(bare.validate()).resolves.toBeUndefined();
+        expect(bare.toObject()).not.toHaveProperty('lastActive');
+    });
+});

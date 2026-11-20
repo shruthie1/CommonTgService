@@ -24,9 +24,9 @@ export class PromoteClient {
   @Prop({ required: true, unique: true, set: canonicalizeMobile })
   mobile: string;
 
-  @ApiProperty({ description: 'Provider-specific last-active indicator recorded for the source user.'})
-  @Prop({ required: true })
-  lastActive: string;
+  @ApiPropertyOptional({ description: 'Retired 2026-11-20: no CMS or tg code writes or reads it. Optional so old rows and old callers still validate.'})
+  @Prop({ required: false })
+  lastActive?: string;
 
   @ApiProperty({ description: 'Date when this client becomes available for assignment (UTC YYYY-MM-DD).'})
   @Prop({

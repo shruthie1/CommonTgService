@@ -3410,9 +3410,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 twoFASetAt: 1,
                 privacyUpdatedAt: 1,
                 channels: 1,
-                spamStatus: 1,
-                limitedUntil: 1,
-                spamCheckedAt: 1,
+                // Spam fields live on bufferClients only; promoteClients never carries them (promote spam is in accountHealth).
+                ...(this.clientType === 'buffer' ? { spamStatus: 1, limitedUntil: 1, spamCheckedAt: 1 } : {}),
             },
         ).exec();
 

@@ -529,6 +529,44 @@ describe('Buffer Client API', () => {
             expect(remaining).toHaveLength(1);
             expect(remaining[0].mobile).toBe('15551000003');
         });
+
+        it('logs one greppable line per decision: deleted, no_row, error (owner 2026-11-20)', async () => {
+            const logger = (service as any).logger;
+            const log = jest.spyOn(logger, 'log');
+            const err = jest.spyOn(logger, 'error');
+            const lines = () => [...log.mock.calls, ...err.mock.calls].map((c) => String(c[0])).filter((l) => l.startsWith('pool-client-delete '));
+
+            await service.create(makeBufferClientData({ mobile: '15551004321' }));
+            await service.remove('15551004321', 'bad\nsession');
+            expect(lines()).toEqual(['pool-client-delete kind=deleted pool=buffer mobile=****4321 reason=bad session']);
+
+            log.mockClear(); err.mockClear();
+            await expect(service.remove('15559998765')).rejects.toThrow();
+            expect(lines()).toEqual(['pool-client-delete kind=no_row pool=buffer mobile=****8765 reason=manual removal']);
+
+            log.mockClear(); err.mockClear();
+            await service.create(makeBufferClientData({ mobile: '15551001111' }));
+            const del = jest.spyOn((service as any).bufferClientModel, 'deleteOne').mockImplementationOnce(() => ({ exec: async () => { throw new Error('mongo down'); } }) as any);
+            await expect(service.remove('15551001111', 'x')).rejects.toThrow();
+            expect(lines()).toEqual(['pool-client-delete kind=error pool=buffer mobile=****1111 reason=x']);
+            expect(await BufferClientModel.countDocuments({ mobile: '15551001111' })).toBe(1);
+            del.mockRestore();
+
+            // Malformed mobile: rejected (HTTP 400 as before) and logged as error with no digits leaked.
+            log.mockClear(); err.mockClear();
+            await expect(service.remove('not-a\nmobile', 'x')).rejects.toMatchObject({ status: 400 });
+            expect(lines()).toEqual(['pool-client-delete kind=error pool=buffer mobile=none reason=x']);
+
+            // Row found but gone at deleteOne (raced): still 200 as before, logged no_row, never "removed successfully".
+            log.mockClear(); err.mockClear();
+            await service.create(makeBufferClientData({ mobile: '15551002222' }));
+            const zero = jest.spyOn((service as any).bufferClientModel, 'deleteOne').mockImplementationOnce(() => ({ exec: async () => ({ deletedCount: 0 }) }) as any);
+            await expect(service.remove('15551002222', 'race')).resolves.toBeUndefined();
+            expect(lines()).toEqual(['pool-client-delete kind=no_row pool=buffer mobile=****2222 reason=race']);
+            expect(log.mock.calls.map((c) => String(c[0])).some((l) => l.includes('removed successfully'))).toBe(false);
+            zero.mockRestore();
+            log.mockRestore(); err.mockRestore();
+        });
     });
 
     // ─── EXECUTE QUERY ──────────────────────────────────────────────────────

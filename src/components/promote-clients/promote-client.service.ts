@@ -69,6 +69,16 @@ import {
     type FleetBudget,
 } from '../buffer-clients/buffer-supply';
 import { maskMobile } from '../monitor/monitor-util';
+import { poolClientDeleteLine } from '../shared/pool-client-delete-log';
+
+/**
+ * promoteClients.lastActive is retired (owner 2026-11-20): old callers may still send it (the DTO accepts it),
+ * but create() and update() never persist it, so an existing value is left as it is.
+ */
+function withoutRetiredFields<T extends object>(input: T): T {
+    const { lastActive: _retired, ...rest } = (input ?? {}) as T & { lastActive?: unknown };
+    return rest as T;
+}
 
 /** Same lead time as buffer's default (BUFFER_SUPPLY_LEAD_TIME_DAYS default 30). */
 const PROMOTE_ENROLMENT_LEAD_TIME_DAYS = 30;
@@ -241,7 +251,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 );
             }
             const promoteClientData = {
-                ...promoteClient,
+                ...withoutRetiredFields(promoteClient),
                 mobile: canonicalMobile,
                 ...(session ? { session } : {}),
                 status,
@@ -299,7 +309,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
 
     async update(mobile: string, updateClientDto: BaseClientUpdate): Promise<PromoteClientDocument> {
         const canonicalMobile = this.canonicalMobile(mobile);
-        const updateData: BaseClientUpdate & { mobile?: string } = { ...updateClientDto };
+        const updateData: BaseClientUpdate & { mobile?: string } = withoutRetiredFields(updateClientDto);
         // `channels` is a count: never persist a negative or fractional one (a -13 reached prod once).
         if (typeof updateData.channels === 'number') {
             updateData.channels = Number.isFinite(updateData.channels) ? Math.max(0, Math.floor(updateData.channels)) : 0;
@@ -347,12 +357,21 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
 
     async remove(mobile: string, message?: string): Promise<void> {
         // Same as buffer remove(): a malformed mobile is a 400, and the notice names the stored mobile.
-        const canonicalMobile = this.canonicalMobile(mobile);
+        const reason = message || 'manual removal';
+        let canonicalMobile: string;
+        try {
+            canonicalMobile = this.canonicalMobile(mobile);
+        } catch (error) {
+            this.logger.error(poolClientDeleteLine('promote', 'error', mobile, reason));
+            throw error;
+        }
         try {
             const deleteResult = await this.promoteClientModel.deleteOne({ mobile: canonicalMobile }).exec();
             if (deleteResult.deletedCount === 0) {
+                this.logger.log(poolClientDeleteLine('promote', 'no_row', canonicalMobile, reason));
                 throw new NotFoundException(`PromoteClient with mobile ${mobile} not found`);
             }
+            this.logger.log(poolClientDeleteLine('promote', 'deleted', canonicalMobile, reason));
             await sendBotNotice('notif', {
                 severity: 'warning',
                 title: 'Deleting promote',
@@ -364,6 +383,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             });
         } catch (error) {
             if (error instanceof NotFoundException) throw error;
+            this.logger.error(poolClientDeleteLine('promote', 'error', canonicalMobile, reason));
             const errorDetails = parseError(error);
             throw new HttpException(errorDetails.message, errorDetails.status);
         }
@@ -615,7 +635,6 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             sendAccountNotice: (input) => this.sendAccountNotice(input),
             handleError: (error, context, mobile) => this.handleError(error, context, mobile),
             safeUnregisterClient: (mobile) => this.safeUnregisterClient(mobile),
-            docExtras: () => ({ lastActive: new Date().toISOString() }),
         };
     }
 

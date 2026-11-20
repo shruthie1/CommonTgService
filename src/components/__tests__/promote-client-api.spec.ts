@@ -81,7 +81,7 @@ describe('Promote Client API', () => {
             expect(result.channels).toBe(data.channels);
             expect(result.clientId).toBe(data.clientId);
             expect(result.availableDate).toBe(data.availableDate);
-            expect(result.lastActive).toBe(data.lastActive);
+            expect(result.lastActive).toBeUndefined(); // retired 2026-11-20: not required, not written
 
             // Schema defaults applied
             expect(result.status).toBe('active');
@@ -609,6 +609,27 @@ describe('Promote Client API', () => {
         });
     });
 
+    // ─── RETIRED lastActive (owner 2026-11-20) ──────────────────────────────
+
+    describe('lastActive is retired', () => {
+        it('create() accepts an old caller\'s lastActive but never stores it', async () => {
+            await service.create(makePromoteClientData({ mobile: '15551007001', lastActive: '2026-04-01' } as any));
+            const raw = await PromoteClientModel.collection.findOne({ mobile: '15551007001' });
+            expect(raw).not.toBeNull();
+            expect(raw).not.toHaveProperty('lastActive');
+        });
+
+        it('update() never writes lastActive; an existing value is left as it is', async () => {
+            await service.create(makePromoteClientData({ mobile: '15551007002' }));
+            await PromoteClientModel.collection.updateOne({ mobile: '15551007002' }, { $set: { lastActive: 'today' } });
+            await service.update('15551007002', { lastActive: '2099-01-01', channels: 7 } as any);
+            const raw = await PromoteClientModel.collection.findOne({ mobile: '15551007002' });
+            expect(raw).toMatchObject({ lastActive: 'today', channels: 7 });
+            await service.createOrUpdate('15551007002', { lastActive: '2099-02-02', channels: 8 } as any);
+            expect(await PromoteClientModel.collection.findOne({ mobile: '15551007002' })).toMatchObject({ lastActive: 'today', channels: 8 });
+        });
+    });
+
     // ─── DELETE ──────────────────────────────────────────────────────────────
 
     describe('remove()', () => {
@@ -638,6 +659,35 @@ describe('Promote Client API', () => {
             const remaining = await PromoteClientModel.find({}).lean();
             expect(remaining).toHaveLength(1);
             expect(remaining[0].mobile).toBe('15551000003');
+        });
+
+        it('logs one greppable line per decision: deleted, no_row, error (owner 2026-11-20)', async () => {
+            const logger = (service as any).logger;
+            const log = jest.spyOn(logger, 'log');
+            const err = jest.spyOn(logger, 'error');
+            const lines = () => [...log.mock.calls, ...err.mock.calls].map((c) => String(c[0])).filter((l) => l.startsWith('pool-client-delete '));
+
+            await service.create(makePromoteClientData({ mobile: '15551004321' }));
+            await service.remove('15551004321', 'bad\nsession');
+            expect(lines()).toEqual(['pool-client-delete kind=deleted pool=promote mobile=****4321 reason=bad session']);
+
+            log.mockClear(); err.mockClear();
+            await expect(service.remove('15559998765')).rejects.toThrow();
+            expect(lines()).toEqual(['pool-client-delete kind=no_row pool=promote mobile=****8765 reason=manual removal']);
+
+            log.mockClear(); err.mockClear();
+            await service.create(makePromoteClientData({ mobile: '15551001111' }));
+            const del = jest.spyOn((service as any).promoteClientModel, 'deleteOne').mockImplementationOnce(() => ({ exec: async () => { throw new Error('mongo down'); } }) as any);
+            await expect(service.remove('15551001111', 'x')).rejects.toThrow();
+            expect(lines()).toEqual(['pool-client-delete kind=error pool=promote mobile=****1111 reason=x']);
+            expect(await PromoteClientModel.countDocuments({ mobile: '15551001111' })).toBe(1);
+            del.mockRestore();
+
+            // Malformed mobile: rejected (HTTP 400 as before) and logged as error with no digits leaked.
+            log.mockClear(); err.mockClear();
+            await expect(service.remove('not-a\nmobile', 'x')).rejects.toMatchObject({ status: 400 });
+            expect(lines()).toEqual(['pool-client-delete kind=error pool=promote mobile=none reason=x']);
+            log.mockRestore(); err.mockRestore();
         });
     });
 

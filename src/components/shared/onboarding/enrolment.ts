@@ -42,8 +42,6 @@ export interface EnrolmentPort {
     sendAccountNotice(input: RichNotificationInput): Promise<boolean>;
     handleError(error: unknown, context: string, mobile?: string): ReturnType<typeof parseError>;
     safeUnregisterClient(mobile: string): Promise<void>;
-    /** Pool-only fields added to the enrolment write (promote: lastActive). */
-    docExtras(): Record<string, unknown>;
 }
 
 export async function enrolPoolClientFromUser(
@@ -90,11 +88,9 @@ export async function enrolPoolClientFromUser(
             return false;
         }
         const targetAvailableDate = availableDate || ClientHelperUtils.getTodayDateString();
-        const extras = port.docExtras();
-
+        // promoteClients.lastActive is retired (owner 2026-11-20): neither pool stamps it.
         const poolDoc = {
             tgId: document.tgId,
-            ...extras,
             session: user.session.trim(), // Use old trusted session
             mobile: document.mobile,
             lastUsed: null,

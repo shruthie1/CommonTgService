@@ -1803,6 +1803,21 @@ describe('availability needs calculation', () => {
         expect(r.windowNeeds.length).toBe(4);
     });
 
+    test('spam fields are projected for buffer only (promoteClients never carries them)', async () => {
+        const bufferModel = makeAvailabilityModel([]);
+        await (new TestBaseService(bufferModel, { minTotalClients: 10 }) as any).calculateAvailabilityBasedNeedsForCurrentState('client-1');
+        expect((bufferModel.find.mock.calls as any[])[0][1]).toEqual(expect.objectContaining({ spamStatus: 1, limitedUntil: 1, spamCheckedAt: 1, channels: 1 }));
+
+        class PromoteTestService extends TestBaseService { get clientType(): any { return 'promote'; } }
+        const promoteModel = makeAvailabilityModel([]);
+        await (new PromoteTestService(promoteModel, { minTotalClients: 10 }) as any).calculateAvailabilityBasedNeedsForCurrentState('client-1');
+        const projection = (promoteModel.find.mock.calls as any[])[0][1];
+        expect(projection.channels).toBe(1);
+        expect(projection).not.toHaveProperty('spamStatus');
+        expect(projection).not.toHaveProperty('limitedUntil');
+        expect(projection).not.toHaveProperty('spamCheckedAt');
+    });
+
     test('classifies warming-pipeline accounts separately from ready', async () => {
         const today = new Date(); today.setHours(0, 0, 0, 0);
         const docs = [

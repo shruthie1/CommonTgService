@@ -86,7 +86,7 @@ export const CURRENT = {
         leaveChannelInterval: 120000,       // Q3 2026-10-27 (was 60000)
         maxNewClientsPerTrigger: 10,
         legacyHealthyCap: 30,
-        autoEnrolDocExtras: ['lastActive'],
+        autoEnrolDocExtras: [] as string[], // promoteClients.lastActive retired 2026-11-20 (was ['lastActive'])
         setAsChecksOtherPool: true,         // M1
         setAsSleepsAfterChannelInfo: true,  // Q3 2026-10-27 (was false)
         setAsRequiresClientId: false,
@@ -232,7 +232,7 @@ describe('pool onboarding parity (buffer vs promote)', () => {
         ? h.buffer.setAsBufferClient(mobile, CLIENT_ID)
         : h.promote.setAsPromoteClient(mobile, CLIENT_ID));
     const poolDoc = (pool: Pool, extra: Record<string, unknown> = {}) => ({
-        tgId: `tg-${extra.mobile}`, session: `sess-${extra.mobile}`, lastActive: 'default', availableDate: '2026-10-01',
+        tgId: `tg-${extra.mobile}`, session: `sess-${extra.mobile}`, availableDate: '2026-10-01',
         channels: 50, clientId: CLIENT_ID, status: 'active', warmupPhase: WarmupPhase.SETTLING, ...extra,
     });
 
@@ -340,7 +340,6 @@ describe('pool onboarding parity (buffer vs promote)', () => {
             expect(typeof doc.warmupJitter).toBe('number');
             const extras = ['lastActive'].filter((k) => k in doc && doc[k] !== undefined);
             expect(extras).toEqual(want.autoEnrolDocExtras);
-            if (pool === 'promote') expect(Number.isNaN(Date.parse(doc.lastActive))).toBe(false);
         });
 
         test('auto-enrol: a foreign 2FA is probed, flagged on users and skipped (D4)', async () => {
@@ -469,12 +468,8 @@ describe('pool onboarding parity (buffer vs promote)', () => {
                 tgId: 'tg-919100000063', session: 'sess-919100000063', availableDate: expect.any(String), channels: 3,
                 clientId: CLIENT_ID, status: 'active', message: 'Enrolled for warmup', lastUsed: null, warmupPhase: WarmupPhase.ENROLLED,
             });
-            // Q10 (owner 2026-10-27): promote writes a real ISO date like its auto-enrol, never 'default'.
-            if (B) expect(doc.lastActive).toBeUndefined();
-            else {
-                expect(doc.lastActive).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-                expect(Math.abs(Date.parse(doc.lastActive) - Date.now())).toBeLessThan(60_000);
-            }
+            // promoteClients.lastActive retired (owner 2026-11-20): neither pool writes it.
+            expect(doc.lastActive).toBeUndefined();
             expect(pacing).toEqual(['7500/1250/5000/10000', '3.5/2/0/7']); // pacing sleep (both pools since Q3), then warmup jitter
 
             // Permanent Telegram error: source user retired with the pool's reason, HTTP error rethrown.

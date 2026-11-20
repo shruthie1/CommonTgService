@@ -23,10 +23,11 @@ export class CreatePromoteClientDto {
   @IsString()
   readonly availableDate: string;
 
-  @ApiProperty({
-    description: 'lastActive identifier' })
+  @ApiPropertyOptional({
+    description: 'Retired 2026-11-20: no code writes or reads promoteClients.lastActive. Accepted for old callers only.' })
+  @IsOptional()
   @IsString()
-  readonly lastActive: string;
+  readonly lastActive?: string;
 
   @ApiProperty({
     description: 'Channel Count',

@@ -85,6 +85,7 @@ import {
     readBufferSupplyConfig,
 } from './buffer-supply';
 import { maskMobile } from '../monitor/monitor-util';
+import { poolClientDeleteLine } from '../shared/pool-client-delete-log';
 
 type ClientCount = { _id: string; count: number };
 type EnrollmentDecision = {
@@ -694,10 +695,13 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     }
 
     async remove(mobile: string, message?: string): Promise<void> {
+        const reason = message || 'manual removal';
+        let deleted = false;
         try {
             const canonicalMobile = this.canonicalMobile(mobile);
             const bufferClient = await this.findOne(canonicalMobile, false);
             if (!bufferClient) {
+                this.logger.log(poolClientDeleteLine('buffer', 'no_row', canonicalMobile, reason));
                 throw new NotFoundException(`BufferClient with mobile ${mobile} not found`);
             }
             this.logger.log(`Removing BufferClient with mobile: ${maskMobile(canonicalMobile)}`);
@@ -709,13 +713,18 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                     { label: 'Reason', value: message || 'manual removal', code: false },
                 ],
             });
-            await this.bufferClientModel.deleteOne({ mobile: canonicalMobile }).exec();
+            const deleteResult = await this.bufferClientModel.deleteOne({ mobile: canonicalMobile }).exec();
+            // Found above but gone by now (raced with another delete): nothing removed here.
+            deleted = !!deleteResult?.deletedCount;
+            this.logger.log(poolClientDeleteLine('buffer', deleted ? 'deleted' : 'no_row', canonicalMobile, reason));
         } catch (error) {
+            if (!(error instanceof NotFoundException)) this.logger.error(poolClientDeleteLine('buffer', 'error', mobile, reason));
             const errorDetails = parseError(error, `failed to delete BufferClient: ${mobile}`);
             this.logger.error(`Error removing BufferClient with mobile ${maskMobile(mobile)}: ${errorDetails.message}`);
             throw new HttpException(errorDetails.message, errorDetails.status);
         }
-        this.logger.log(`BufferClient with mobile ${maskMobile(mobile)} removed successfully`);
+        // A row that vanished between findOne and deleteOne still returns 200 (unchanged HTTP behaviour), but is not logged as removed.
+        if (deleted) this.logger.log(`BufferClient with mobile ${maskMobile(mobile)} removed successfully`);
     }
 
     async search(filter: SearchBufferClientDto): Promise<BufferClientDocument[]> {
@@ -1367,7 +1376,6 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             sendAccountNotice: (input) => this.sendAccountNotice(input),
             handleError: (error, context, mobile) => this.handleError(error, context, mobile),
             safeUnregisterClient: (mobile) => this.safeUnregisterClient(mobile),
-            docExtras: () => ({}),
         };
     }
 

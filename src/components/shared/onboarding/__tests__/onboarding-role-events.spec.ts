@@ -51,7 +51,6 @@ function enrolPort(profile: typeof BUFFER_PROFILE, model: any): EnrolmentPort {
         sendAccountNotice: jest.fn(async () => true),
         handleError: jest.fn((e: unknown) => ({ message: String(e), status: 500, error: e })),
         safeUnregisterClient: jest.fn(async () => undefined),
-        docExtras: () => ({}),
     } as unknown as EnrolmentPort;
 }
 

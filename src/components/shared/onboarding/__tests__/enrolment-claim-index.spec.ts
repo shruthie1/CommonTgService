@@ -27,7 +27,6 @@ describe('auto-enrol: claim index readiness before the Telegram connect (post-re
             sendAccountNotice: jest.fn(),
             handleError: jest.fn((e: unknown) => ({ message: String(e), status: 500, error: e })),
             safeUnregisterClient: jest.fn(async () => undefined),
-            docExtras: () => ({}),
         } as unknown as EnrolmentPort;
 
         const result = await enrolPoolClientFromUser(port, { mobile: '919000000120', tgId: 'tg-1' }, 'c1');
