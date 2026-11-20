@@ -120,6 +120,54 @@ describe('FakePaymentService: mark details, history and Not fake', () => {
         });
     });
 
+    // userData audit A2 (2026-11-20): the bulkWrite runs in default strict mode now that fakePaymentHistory /
+    // fakePaymentProofIds are declared. Legacy-shaped rows (missing insert defaults, NaN paidCount, a pre-history mark,
+    // a history entry with a string date, unknown legacy keys) must still mark, unmark and unmute.
+    describe('legacy-shaped rows in default strict mode', () => {
+        const legacy = (profile: string, over: Record<string, unknown> = {}) => ({ chatId: CHAT, profile, payAmount: 150, highestPayAmount: 150, canReply: 1, paidCount: NaN, client: 'old', ...over });
+
+        it('mark then unmark: proof ids and history written, prior history kept, unknown keys untouched', async () => {
+            await userData.collection.insertMany([
+                legacy('ramya'),
+                legacy('kavya', { fakePaymentHistory: [{ action: 'unmute', by: 'x', reason: 'y', at: '2026-11-01T00:00:00Z', proofIds: [] }] }),
+            ]);
+            await proofs.collection.insertOne(proof(7));
+            await service.mark(CHAT, { by: 'sai', reason: 'edited', proofIds: [`ramya1-${CHAT}-7`] });
+            let r = await raw('ramya');
+            expect(r).toMatchObject({ fakePaymentBy: 'sai', fakePaymentProofIds: [`ramya1-${CHAT}-7`], payAmount: 0, canReply: 0, client: 'old' });
+            expect(r.fakePaymentHistory).toEqual([expect.objectContaining({ action: 'mark', by: 'sai', proofIds: [`ramya1-${CHAT}-7`] })]);
+            expect(r.fakePaymentHistory[0].at).toBeInstanceOf(Date);
+            expect(Number.isNaN(r.paidCount)).toBe(true); // never touched
+            const k = await raw('kavya');
+            expect(k.fakePaymentHistory.map((h: any) => h.action)).toEqual(['unmute', 'mark']);
+            expect(k.fakePaymentHistory[0].at).toBe('2026-11-01T00:00:00Z'); // stored as written
+
+            await service.unmark(CHAT, { by: 'lead', reason: 'ok' });
+            r = await raw('ramya');
+            for (const f of ['fakePaymentAt', 'fakePaymentBy', 'fakePaymentReason', 'fakePaymentPrev', 'fakePaymentProofIds']) expect(r).not.toHaveProperty(f);
+            expect(r.fakePaymentHistory.map((h: any) => h.action)).toEqual(['mark', 'unmark']);
+            expect([r.payAmount, r.canReply, r.client]).toEqual([150, 1, 'old']);
+        });
+
+        it('unmark of a pre-history mark on a row missing insert defaults', async () => {
+            const at = new Date('2026-10-30T10:00:00Z');
+            await userData.collection.insertOne({ chatId: CHAT, profile: 'ramya', payAmount: 0, canReply: 0, fakePaymentAt: at, fakePaymentBy: 'old', fakePaymentReason: 'r', fakePaymentPrev: { payAmount: 50, canReply: 1 } });
+            await service.unmark(CHAT, { by: 'lead', reason: 'ok' });
+            const r = await raw('ramya');
+            expect(r.fakePaymentHistory.map((h: any) => [h.action, h.by])).toEqual([['mark', 'old'], ['unmark', 'lead']]);
+            expect([r.payAmount, r.canReply]).toEqual([50, 1]);
+        });
+
+        it('unmute (not fake) on a legacy row appends the history entry', async () => {
+            await userData.collection.insertOne(legacy('ramya', { canReply: 0, limitTime: 99 }));
+            const res = await service.notFake(CHAT, { by: 'lead', reason: 'real' });
+            expect(res).toMatchObject({ source: 'unknown', rowsUnmuted: 1 });
+            const r = await raw('ramya');
+            expect([r.canReply, r.limitTime]).toEqual([1, 0]);
+            expect(r.fakePaymentHistory).toEqual([expect.objectContaining({ action: 'unmute', by: 'lead', source: 'unknown' })]);
+        });
+    });
+
     describe('notFake on a payment-check fraud block / unknown mute', () => {
         it('fraud block: canReply 1 + limitTime 0 on muted rows, open fraud asks closed (resolved, closedAt, closedBy), history appended, cheatCount untouched', async () => {
             await userData.create([

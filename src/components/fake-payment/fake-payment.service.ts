@@ -27,8 +27,8 @@ import { FakePaymentHistoryEntry } from '../payment-proofs/payment-proofs.views'
  * userData.cheatCount (the complaint score) is never read or written here.
  *
  * Audit (redesign 2026-11-07): the mark also stores fakePaymentProofIds (the proofs the operator judged) and every
- * mark / unmark / unmute appends to fakePaymentHistory, which the unmark keeps. These two fields are not in the
- * UserData schema (owned elsewhere), so the bulkWrite runs with strict:false; nothing else reads them.
+ * mark / unmark / unmute appends to fakePaymentHistory, which the unmark keeps. Both are declared in the UserData
+ * schema (2026-11-20) and stripped from the generic userData routes (user-data.owned-keys.ts): only this service writes them.
  * "Not fake" (notFake) undoes an operator mark (unmark) or a payment-check fraud block / unknown mute (canReply 1,
  * limitTime 0 on the muted rows, open fraud asks closed in paymentProofs).
  *
@@ -93,7 +93,7 @@ export class FakePaymentService {
     private async writeRows(chatId: string, ops: unknown[]): Promise<void> {
         if (!ops.length) return;
         try {
-            await this.userDataModel.bulkWrite(ops as any, { ordered: true, strict: false } as any);
+            await this.userDataModel.bulkWrite(ops as any, { ordered: true });
         } finally {
             await this.paymentProofs?.chatChanged(chatId);
         }

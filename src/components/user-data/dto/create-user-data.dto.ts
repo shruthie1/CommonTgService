@@ -83,4 +83,43 @@ export class CreateUserDataDto {
 
     @ApiPropertyOptional({ description: 'payAmount / canReply before the mark; restored and unset by the unmark (set by /fake-payment only)' })
     fakePaymentPrev?: { payAmount?: number; canReply?: number };
+
+    // Schema fields tg-aut writes (userData audit A10, 2026-11-20). Optional; absent on legacy rows. The workflow-owned
+    // keys (user-data.owned-keys.ts: showsPaidTo, demoCompletions, showCompletions, fakePaymentHistory,
+    // fakePaymentProofIds) are left out on purpose: the generic routes strip them.
+    @ApiPropertyOptional({ description: 'Client id (e.g. shruthi2) that owns the row; absent on rows created before 2026-08-15' })
+    clientId?: string;
+
+    @ApiPropertyOptional({ description: 'Lifetime payment total or peak (tg-aut creditPayment)' })
+    lifetimePaid?: number;
+
+    @ApiPropertyOptional({ description: 'Count of accepted credits (tg-aut creditPayment)' })
+    lifetimeCredits?: number;
+
+    @ApiPropertyOptional({ description: 'Idempotency keys of accepted payments', type: [String] })
+    creditKeys?: string[];
+
+    @ApiPropertyOptional({ description: 'Epoch ms of the first accepted payment' })
+    firstPaidAt?: number;
+
+    @ApiPropertyOptional({ description: 'Epoch ms of the most recent accepted payment' })
+    lastPaidAt?: number;
+
+    @ApiPropertyOptional({ description: 'True inbound-message count' })
+    msgCount?: number;
+
+    @ApiPropertyOptional({ description: '"Treat as established" marker set by tg-aut' })
+    windowCount?: number;
+
+    @ApiPropertyOptional({ description: 'Grace granted' })
+    graceFlag?: boolean;
+
+    @ApiPropertyOptional({ description: 'videos.length when the current service cycle started' })
+    cycleVideoBase?: number;
+
+    @ApiPropertyOptional({ description: 'Paid level of the current service cycle' })
+    cyclePaid?: number;
+
+    @ApiPropertyOptional({ description: 'In-house call resume state per video id: { positionSec, durationSec, updatedAt, completed, attempts?, endedAt?, endReason? }', type: Object })
+    callProgress?: Record<string, { positionSec: number; durationSec: number | null; updatedAt: number; completed: boolean; attempts?: number; endedAt?: number; endReason?: string }>;
 }

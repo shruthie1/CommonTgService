@@ -5,13 +5,14 @@ import {
     NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, QueryFilter, UpdateQuery } from 'mongoose';
+import { Model, QueryFilter } from 'mongoose';
 import { UserData, UserDataDocument } from './schemas/user-data.schema';
 import { CreateUserDataDto } from './dto/create-user-data.dto';
 import { UpdateUserDataDto } from './dto/update-user-data.dto';
 import { parseError } from '../../utils/parseError';
 import { getBotsServiceInstance, Logger } from '../../utils';
 import { ChannelCategory } from '../bots';
+import { stripWorkflowOwned } from './user-data.owned-keys';
 
 @Injectable()
 export class UserDataService {
@@ -37,9 +38,21 @@ export class UserDataService {
         return currentCount;
     }
 
+    /**
+     * Drop workflow-owned keys (user-data.owned-keys.ts) from a generic-route body; one greppable line when any were sent.
+     * Every generic write (create, update, updateAll, and POST /updateUserData through update) passes here.
+     */
+    private withoutOwnedKeys<T extends object>(body: T, chatId: unknown): T {
+        const { kept, stripped } = stripWorkflowOwned({ ...(body ?? {}) } as Record<string, unknown>);
+        if (stripped.length) {
+            this.logger.warn(`user-data-update kind=stripped_owned keys=${stripped.join(',')} chat=****${String(chatId ?? '').slice(-4)}`);
+        }
+        return kept as T;
+    }
+
     async create(createUserDataDto: CreateUserDataDto): Promise<UserDataDocument> {
         try {
-            return await this.userDataModel.create(createUserDataDto);
+            return await this.userDataModel.create(this.withoutOwnedKeys(createUserDataDto, createUserDataDto?.chatId));
         } catch (error) {
             throw new InternalServerErrorException(parseError(error));
         }
@@ -130,7 +143,7 @@ export class UserDataService {
     }
 
     async update(profile: string, chatId: string, updateUserDataDto: UpdateUserDataDto): Promise<UserDataDocument> {
-        const sanitizedDto = { ...updateUserDataDto } as Record<string, unknown>;
+        const sanitizedDto = this.withoutOwnedKeys({ ...updateUserDataDto } as Record<string, unknown>, chatId);
         delete (sanitizedDto as any)._id;
         delete (sanitizedDto as any).profile;
         delete (sanitizedDto as any).chatId;
@@ -148,7 +161,7 @@ export class UserDataService {
     }
 
     async updateAll(chatId: string, updateUserDataDto: UpdateUserDataDto) {
-        const sanitizedDto = { ...updateUserDataDto } as Record<string, unknown>;
+        const sanitizedDto = this.withoutOwnedKeys({ ...updateUserDataDto } as Record<string, unknown>, chatId);
         delete (sanitizedDto as any)._id;
 
         return this.userDataModel
@@ -207,79 +220,5 @@ export class UserDataService {
         } catch (error) {
             throw new InternalServerErrorException(parseError(error));
         }
-    }
-
-    async resetPaidUsers() {
-        try {
-            return await this.userDataModel.updateMany(
-                { payAmount: { $gt: 10 }, totalCount: { $gt: 30 } },
-                {
-                    $set: {
-                        totalCount: 10,
-                        limitTime: Date.now(),
-                        paidReply: true,
-                    },
-                },
-            ).exec();
-        } catch (error) {
-            throw new InternalServerErrorException(parseError(error));
-        }
-    }
-
-    async incrementTotalCount(profile: string, chatId: string, amount: number = 1): Promise<UserDataDocument> {
-        const updatedUser = await this.userDataModel
-            .findOneAndUpdate({ profile, chatId }, { $inc: { totalCount: amount } }, { returnDocument: 'after' })
-            .lean()
-            .exec();
-
-        if (!updatedUser) {
-            throw new NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
-        }
-        return updatedUser;
-    }
-
-    async incrementPayAmount(profile: string, chatId: string, amount: number): Promise<UserDataDocument> {
-        const updatedUser = await this.userDataModel
-            .findOneAndUpdate({ profile, chatId }, { $inc: { payAmount: amount } }, { returnDocument: 'after' })
-            .lean()
-            .exec();
-
-        if (!updatedUser) {
-            throw new NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
-        }
-        return updatedUser;
-    }
-
-    async findByPaymentRange(minAmount: number, maxAmount: number): Promise<UserDataDocument[]> {
-        return this.userDataModel.find({ payAmount: { $gte: minAmount, $lte: maxAmount } }).lean().exec();
-    }
-
-    async bulkUpdateUsers(filter: any, update: UpdateQuery<UserDataDocument>) {
-        try {
-            return await this.userDataModel.updateMany(filter, update, { upsert: false }).exec();
-        } catch (error) {
-            throw new InternalServerErrorException(parseError(error));
-        }
-    }
-
-    async findActiveUsers(threshold: number = 30): Promise<UserDataDocument[]> {
-        return this.userDataModel.find({ totalCount: { $gt: threshold } }).sort({ totalCount: -1 }).lean().exec();
-    }
-
-    async resetUserCounts(profile: string, chatId: string): Promise<UserDataDocument> {
-        return this.userDataModel
-            .findOneAndUpdate(
-                { profile, chatId },
-                {
-                    $set: {
-                        totalCount: 0,
-                        limitTime: new Date(),
-                        paidReply: false,
-                    },
-                },
-                { returnDocument: 'after' },
-            )
-            .lean()
-            .exec();
     }
 }

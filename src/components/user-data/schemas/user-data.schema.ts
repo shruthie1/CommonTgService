@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import * as mongoose from 'mongoose';
 import { Document } from 'mongoose';
+import type { FakePaymentHistoryEntry } from '../../payment-proofs/payment-proofs.views';
 
 export type UserDataDocument = UserData & Document;
 
@@ -163,7 +164,21 @@ export class UserData {
      * default undefined so legacy rows are not stamped with {}.
      */
     @Prop({ type: mongoose.Schema.Types.Mixed, required: false, default: undefined })
-    callProgress?: Record<string, { positionSec: number; durationSec: number | null; updatedAt: number; completed: boolean }>;
+    callProgress?: Record<string, { positionSec: number; durationSec: number | null; updatedAt: number; completed: boolean; attempts?: number; endedAt?: number; endReason?: string }>;
+
+    // ---- workflow-owned keys (userData audit A1/A2, 2026-11-20): declared so CMS model writes keep them, but the
+    // generic userData routes strip them (user-data.owned-keys.ts). Optional, no defaults: absent = 0 / [].
+    /** fullShow level that repeat payments paid shows up to (tg-aut payments/ladder.ts; CMS payment uncredit). */
+    @Prop({ type: Number, required: false })
+    showsPaidTo?: number;
+
+    /** Recorded demo completions (tg-aut calls/service-completion.ts, guarded counter). */
+    @Prop({ type: Number, required: false })
+    demoCompletions?: number;
+
+    /** Recorded second/full show completions (tg-aut calls/service-completion.ts, guarded counter). */
+    @Prop({ type: Number, required: false })
+    showCompletions?: number;
 
     // ---- operator fake-payment mark (owner 2026-11-02; tg-platform docs/design/2026-11-02-fake-payment-flag.md) ----
     // Written ONLY by FakePaymentService (POST /fake-payment/:chatId/mark | unmark) on EVERY persona row of the chatId.
@@ -188,6 +203,13 @@ export class UserData {
     @Prop({ type: mongoose.Schema.Types.Mixed, required: false, default: undefined })
     fakePaymentPrev?: { payAmount?: number; canReply?: number };
 
+    /** Proofs the operator judged at the mark (FakePaymentService only; unset by the unmark). */
+    @Prop({ type: [String], required: false, default: undefined })
+    fakePaymentProofIds?: string[];
+
+    /** Every mark / unmark / unmute, appended by FakePaymentService and kept by the unmark. Mixed: entries are stored as written. */
+    @Prop({ type: [mongoose.Schema.Types.Mixed], required: false, default: undefined })
+    fakePaymentHistory?: FakePaymentHistoryEntry[];
 }
 
 export const UserDataSchema = SchemaFactory.createForClass(UserData);
