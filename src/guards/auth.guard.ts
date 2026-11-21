@@ -41,6 +41,15 @@ const ORIGIN_ONLY_PATHS: RegExp[] = [
 ];
 
 /**
+ * Origin-only paths the frontends only READ. A forged Origin may GET them, never write them: PATCH /upi-ids persists
+ * payee ids since the upi-ids schema went strict:false (schema audit, Codex upi-ids r1), so an origin-only PATCH
+ * could redirect payments. Writes need an API key or an allowlisted IP.
+ */
+const ORIGIN_READ_ONLY_PATHS: RegExp[] = [
+    /^\/upi-ids(?:$|[/?])/i,
+];
+
+/**
  * Ignored paths are evaluated in priority order:
  * 1. Exact paths first (fast)
  * 2. Regex patterns for broader matches
@@ -127,7 +136,11 @@ export class AuthGuard implements CanActivate {
         } else if (ALLOWED_IPS.includes(clientIp)) {
             passedReason = 'IP allowed';
         } else if (origin && this.isOriginAllowed(origin) && this.isOriginOnlyPath(path, url, originalUrl)) {
-            passedReason = 'Origin allowed';
+            if (isSafeMethod || !this.isOriginReadOnlyPath(path, url, originalUrl)) {
+                passedReason = 'Origin allowed';
+            } else {
+                this.logger.warn(`[auth] kind=origin_write_denied method=${method} path=${path}: an Origin alone cannot write this path`);
+            }
         }
 
         // ✅ Step 3: Final decision
@@ -238,6 +251,10 @@ export class AuthGuard implements CanActivate {
         // Every representation must be a browser-facing path, so a crafted url/originalUrl mismatch
         // cannot smuggle an admin route through.
         return candidates.length > 0 && candidates.every((u) => ORIGIN_ONLY_PATHS.some((re) => re.test(u)));
+    }
+
+    private isOriginReadOnlyPath(...urls: string[]): boolean {
+        return urls.filter(Boolean).some((u) => ORIGIN_READ_ONLY_PATHS.some((re) => re.test(u)));
     }
 
     private isOriginAllowed(origin: string): boolean {

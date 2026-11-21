@@ -371,6 +371,34 @@ describe('AuthGuard', () => {
                     expect(guard.canActivate(makeContext(req))).toBe(true);
                 });
             }
+            it('an Origin alone cannot PATCH /upi-ids (kind=origin_write_denied); GET still opens by Origin', () => {
+                const guard = new AuthGuard();
+                const warn = jest.spyOn((guard as any).logger, 'warn');
+                for (const method of ['PATCH', 'POST', 'PUT', 'DELETE']) {
+                    const req = baseReq({ method, path: '/upi-ids', url: '/upi-ids', originalUrl: '/upi-ids', headers: { origin: 'https://paidgirls.site' } });
+                    expect(() => guard.canActivate(makeContext(req))).toThrow(UnauthorizedException);
+                }
+                const lines = warn.mock.calls.map((c) => String(c[0])).filter((m) => m.includes('kind=origin_write_denied'));
+                expect(lines).toEqual(['PATCH', 'POST', 'PUT', 'DELETE'].map(
+                    (m) => `[auth] kind=origin_write_denied method=${m} path=/upi-ids: an Origin alone cannot write this path`,
+                ));
+                for (const method of ['GET', 'HEAD', 'OPTIONS']) {
+                    const req = baseReq({ method, path: '/upi-ids', url: '/upi-ids', originalUrl: '/upi-ids', headers: { origin: 'https://paidgirls.site' } });
+                    expect(guard.canActivate(makeContext(req))).toBe(true);
+                }
+            });
+            it('PATCH /upi-ids with an API key or an allowlisted IP still passes', () => {
+                const guard = new AuthGuard();
+                const byKey = baseReq({ method: 'PATCH', path: '/upi-ids', url: '/upi-ids', originalUrl: '/upi-ids', headers: { 'x-api-key': 'santoor', origin: 'https://paidgirls.site' } });
+                expect(guard.canActivate(makeContext(byKey))).toBe(true);
+                const byIp = baseReq({ method: 'PATCH', path: '/upi-ids', url: '/upi-ids', originalUrl: '/upi-ids', headers: { 'cf-connecting-ip': '31.97.59.2' } });
+                expect(guard.canActivate(makeContext(byIp))).toBe(true);
+            });
+            it('other origin-only paths keep their write access by Origin (POST /tgsignup)', () => {
+                const guard = new AuthGuard();
+                const req = baseReq({ method: 'POST', path: '/tgsignup/send-code', url: '/tgsignup/send-code', originalUrl: '/tgsignup/send-code', headers: { origin: 'https://paidgirls.site' } });
+                expect(guard.canActivate(makeContext(req))).toBe(true);
+            });
             it('a valid API key still opens /clients', () => {
                 const guard = new AuthGuard();
                 const req = baseReq({ path: '/clients', url: '/clients', originalUrl: '/clients', headers: { 'x-api-key': 'santoor' } });

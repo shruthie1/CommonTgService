@@ -4,12 +4,26 @@ import { Model } from 'mongoose';
 import { UpiId } from './upi-ids.schema';
 import { Logger } from '../../utils';
 
+/** Error text with anything id-shaped (contains "@") replaced, so a log line never carries a payee id. */
+function maskIds(error: unknown): string {
+    const text = error instanceof Error ? error.message : String(error);
+    return text.replace(/\S*@\S*/g, '<id>');
+}
+
 @Injectable()
 export class UpiIdService implements OnModuleDestroy, OnModuleInit {
     private readonly logger = new Logger(UpiIdService.name);
     private checkInterval: NodeJS.Timeout | null = null;
     private upiIds: any = null;
     private isInitialized = false;
+    /**
+     * Bumped by every PATCH. A DB read that started before a PATCH must not publish its older document over the
+     * PATCHed cache (PATCH persists since batch 7, so the old payee would come back through GET until the next refresh).
+     */
+    private cacheGeneration = 0;
+    /** PATCH serialisation: every update() chains on this tail (see update()). */
+    private updateTail: Promise<void> = Promise.resolve();
+    private updatesInFlight = 0;
     private readonly REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
     private readonly MAX_RETRIES = 3;
     private readonly RETRY_DELAY = 1000; // 1 second
@@ -66,17 +80,28 @@ export class UpiIdService implements OnModuleDestroy, OnModuleInit {
         }, this.REFRESH_INTERVAL);
     }
 
+    /** False (and one kind= line) when a PATCH landed while this read ran: its document is older than the cache. */
+    private readIsCurrent(generation: number, path: string): boolean {
+        if (generation === this.cacheGeneration) return true;
+        this.logger.warn(`[upi-ids] kind=stale_read_skipped path=${path}: a PATCH landed during the read, cache kept`);
+        return false;
+    }
+
     async refreshUPIs(): Promise<void> {
-        try {            
+        try {
+            const generation = this.cacheGeneration;
             const result = await this.executeWithRetry(async () => {
                 return await this.upiIdModel.findOne({}).lean().exec();
             });
 
+            if (result && !this.readIsCurrent(generation, 'refresh')) {
+                return;
+            }
             if (result) {
                 this.upiIds = { ...result }; // Create a copy to avoid mutation
                 // this.logger.debug('UPIs refreshed successfully');
             } else {
-                this.logger.warn('No UPI data found in database');
+                this.logger.warn('[upi-ids] kind=no_doc path=refresh: no upi-ids document, cache kept');
             }
         } catch (error) {
             this.logger.error('Failed to refresh UPIs', error.stack);
@@ -97,12 +122,18 @@ export class UpiIdService implements OnModuleDestroy, OnModuleInit {
 
             // Fallback to database query
             this.logger.debug('Cache miss, fetching from database...');
+            const generation = this.cacheGeneration;
             const result = await this.executeWithRetry(async () => {
                 return await this.upiIdModel.findOne({}).lean().exec();
             });
 
+            // A PATCH landed during the read: its cached doc is newer than this read (null included), so return it.
+            if (!this.readIsCurrent(generation, 'read_through') && this.upiIds) {
+                return { ...this.upiIds };
+            }
+
             if (!result) {
-                this.logger.warn('No UPI data found');
+                this.logger.warn('[upi-ids] kind=no_doc path=read_through: no upi-ids document');
                 return null;
             }
 
@@ -116,30 +147,52 @@ export class UpiIdService implements OnModuleDestroy, OnModuleInit {
         }
     }
 
+    /**
+     * PATCHes run one at a time. Two overlapping PATCHes could otherwise publish their Mongo post-images to the cache
+     * in response order, not apply order, and put the older payee back until the next refresh (Codex batch 7 r3).
+     * One at a time, each PATCH applies and publishes before the next one starts, so the cache ends on the last one.
+     */
     async update(updateClientDto: any): Promise<any> {
         if (!updateClientDto || typeof updateClientDto !== 'object') {
             throw new Error('Invalid update data provided');
         }
+        if (this.updatesInFlight > 0) {
+            this.logger.log(`[upi-ids] kind=update_queued ahead=${this.updatesInFlight}: waits for the earlier PATCH`);
+        }
+        this.updatesInFlight += 1;
+        const run = this.updateTail.then(() => this.applyUpdate(updateClientDto));
+        // The next PATCH waits for this one whether it succeeds or fails.
+        this.updateTail = run.then(
+            () => undefined,
+            () => undefined,
+        );
+        try {
+            return await run;
+        } finally {
+            this.updatesInFlight -= 1;
+        }
+    }
 
+    private async applyUpdate(updateClientDto: any): Promise<any> {
         try {
             // Create a clean copy without _id
             const updateData = { ...updateClientDto };
             delete updateData._id;
 
             this.logger.debug('Updating UPI data...');
-            
+
             const updatedUser = await this.executeWithRetry(async () => {
                 return await this.upiIdModel.findOneAndUpdate(
                     {},
-                    { 
-                        $set: { 
+                    {
+                        $set: {
                             ...updateData,
                             updatedAt: new Date() // Add timestamp
-                        } 
+                        }
                     },
-                    { 
-                        returnDocument: 'after', 
-                        upsert: true, 
+                    {
+                        returnDocument: 'after',
+                        upsert: true,
                         lean: true,
                         runValidators: true // Ensure schema validation
                     }
@@ -151,13 +204,15 @@ export class UpiIdService implements OnModuleDestroy, OnModuleInit {
             }
 
             // Update cache
+            this.cacheGeneration += 1;
             this.upiIds = { ...updatedUser };
-            this.logger.log('UPI data updated successfully');
-            
+            // Key names are counted, never printed with values: no payee id in a log line.
+            this.logger.log(`[upi-ids] kind=updated keys=${Object.keys(updateData).length}`);
+
             return { ...updatedUser };
 
         } catch (error) {
-            this.logger.error('Error updating UPI data', error.stack);
+            this.logger.error(`[upi-ids] kind=update_failed reason=${maskIds(error)}: cache kept`);
             throw error;
         }
     }
@@ -170,7 +225,7 @@ export class UpiIdService implements OnModuleDestroy, OnModuleInit {
             try {
                 return await operation();
             } catch (error) {
-                this.logger.warn(`Operation failed on attempt ${attempt}/${retries}`, error.message);
+                this.logger.warn(`Operation failed on attempt ${attempt}/${retries}`, maskIds(error));
                 
                 if (attempt === retries) {
                     throw error;

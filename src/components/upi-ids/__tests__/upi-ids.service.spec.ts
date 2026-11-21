@@ -124,18 +124,74 @@ describe('UpiIdService', () => {
       await expect(service.update('string' as any)).rejects.toThrow('Invalid update data');
     });
 
-    it('upserts, strips _id, caches and returns the doc', async () => {
-      // NOTE: the UpiId schema is a root-level Mixed type with strict (default) on,
-      // so arbitrary keys passed through $set are not persisted by mongoose; only
-      // _id survives the upsert. We assert on real behaviour: the input _id is
-      // stripped (so upsert generates a fresh _id) and the returned doc is cached.
+    it('upserts, strips _id, persists the payee keys, caches and returns the doc', async () => {
+      // strict false (batch 7): the flat payee keys reach Mongo. Before, strict mode cast the $set to {} and only _id survived.
       const result = await service.update({ _id: 'should-be-removed', gpay: 'new@upi' });
       expect(result).toBeTruthy();
       expect(result._id).toBeDefined();
       expect(result._id).not.toBe('should-be-removed');
+      expect(result.gpay).toBe('new@upi');
       expect((service as any).upiIds).toEqual(result);
-      // a doc now exists in the collection (upsert created it)
       expect(await model.countDocuments({})).toBe(1);
+      // a fresh read (not the cache) returns the new value
+      const fresh: any = await model.findOne({}).lean().exec();
+      expect(fresh.gpay).toBe('new@upi');
+    });
+
+    it('a second PATCH rotates one key and keeps the others; GET keeps every payee key', async () => {
+      await service.update({ gpay: 'old@upi', ppay: 'pp@upi' });
+      await service.update({ gpay: 'rotated@upi' });
+      const fresh: any = await model.findOne({}).lean().exec();
+      expect(fresh.gpay).toBe('rotated@upi');
+      expect(fresh.ppay).toBe('pp@upi');
+      (service as any).isInitialized = true;
+      await service.refreshUPIs();
+      const got = await service.findOne();
+      expect(got.gpay).toBe('rotated@upi');
+      expect(got.ppay).toBe('pp@upi');
+    });
+
+    it('a refresh or read-through that started before a PATCH never publishes its older doc (kind=stale_read_skipped)', async () => {
+      await service.update({ gpay: 'old@upi' });
+      (service as any).isInitialized = true;
+      const warn = jest.spyOn((service as any).logger, 'warn');
+      const real = (service as any).executeWithRetry.bind(service);
+      // The DB read returns the pre-PATCH doc, and a PATCH lands while it is in flight.
+      const racing = async () => {
+        const before = await real(async () => model.findOne({}).lean().exec());
+        await service.update({ gpay: 'new@upi' });
+        return before;
+      };
+      jest.spyOn(service as any, 'executeWithRetry').mockImplementationOnce(racing);
+      await service.refreshUPIs();
+      expect((service as any).upiIds.gpay).toBe('new@upi');
+
+      (service as any).upiIds = null;
+      jest.spyOn(service as any, 'executeWithRetry').mockImplementationOnce(async () => {
+        const before = await real(async () => model.findOne({}).lean().exec());
+        await service.update({ gpay: 'newer@upi' });
+        return before;
+      });
+      const got = await service.findOne();
+      expect(got.gpay).toBe('newer@upi'); // the caller gets the PATCHed doc, not the older read
+      expect((service as any).upiIds.gpay).toBe('newer@upi'); // the cache keeps the PATCH
+      const lines = warn.mock.calls.map((c) => String(c[0])).filter((m) => m.includes('kind=stale_read_skipped'));
+      expect(lines).toEqual([
+        '[upi-ids] kind=stale_read_skipped path=refresh: a PATCH landed during the read, cache kept',
+        '[upi-ids] kind=stale_read_skipped path=read_through: a PATCH landed during the read, cache kept',
+      ]);
+      for (const l of lines) expect(l).not.toContain('@');
+    });
+
+    it('read-through that found no doc while a PATCH created one returns the PATCHed doc', async () => {
+      (service as any).isInitialized = true;
+      (service as any).upiIds = null;
+      jest.spyOn(service as any, 'executeWithRetry').mockImplementationOnce(async () => {
+        await service.update({ gpay: 'first@upi' });
+        return null; // the read ran before the PATCH upserted the doc
+      });
+      const got = await service.findOne();
+      expect(got.gpay).toBe('first@upi');
     });
 
     it('throws NotFound when findOneAndUpdate resolves null', async () => {
@@ -150,6 +206,73 @@ describe('UpiIdService', () => {
         throw new Error('update boom');
       });
       await expect(service.update({ gpay: 'x@upi' })).rejects.toThrow('update boom');
+    });
+
+    it('two overlapping PATCHes: the earlier one finishing last cannot put its payee back (kind=update_queued, kind=updated)', async () => {
+      (service as any).isInitialized = true;
+      const log = jest.spyOn((service as any).logger, 'log');
+      const real = model.findOneAndUpdate.bind(model);
+      const order: string[] = [];
+      let releaseA: () => void = () => undefined;
+      const gateA = new Promise<void>((r) => (releaseA = r));
+      jest.spyOn(model, 'findOneAndUpdate').mockImplementation(((filter: any, update: any, opts: any) => {
+        const gpay = update.$set.gpay;
+        order.push(`start ${gpay}`);
+        return {
+          exec: async () => {
+            // A's write is slow: before serialisation B's response arrived first and A then overwrote the cache.
+            if (gpay === 'a@upi') await gateA;
+            const doc = await real(filter, update, opts).exec();
+            order.push(`done ${gpay}`);
+            return doc;
+          },
+        };
+      }) as any);
+      const a = service.update({ gpay: 'a@upi' });
+      const b = service.update({ gpay: 'b@upi' });
+      await new Promise((r) => setTimeout(r, 20));
+      expect(order).toEqual(['start a@upi']); // B has not started while A is in flight
+      releaseA();
+      const [ra, rb] = await Promise.all([a, b]);
+      expect(order).toEqual(['start a@upi', 'done a@upi', 'start b@upi', 'done b@upi']);
+      expect(ra.gpay).toBe('a@upi');
+      expect(rb.gpay).toBe('b@upi');
+      expect((service as any).upiIds.gpay).toBe('b@upi');
+      expect((await service.findOne()).gpay).toBe('b@upi'); // the following GET
+      const fresh: any = await model.findOne({}).lean().exec();
+      expect(fresh.gpay).toBe('b@upi');
+      const lines = log.mock.calls.map((c) => String(c[0])).filter((m) => m.includes('kind='));
+      expect(lines).toEqual([
+        '[upi-ids] kind=update_queued ahead=1: waits for the earlier PATCH',
+        '[upi-ids] kind=updated keys=1',
+        '[upi-ids] kind=updated keys=1',
+      ]);
+      for (const l of lines) expect(l).not.toContain('@upi');
+    });
+
+    it('a failed PATCH does not block the next one; kind=update_failed masks ids', async () => {
+      const err = jest.spyOn((service as any).logger, 'error');
+      jest
+        .spyOn(service as any, 'executeWithRetry')
+        .mockImplementationOnce(() => Promise.reject(new Error('E11000 dup key gpay: "x@ybl"')));
+      await expect(service.update({ gpay: 'x@ybl' })).rejects.toThrow('E11000');
+      const next = await service.update({ gpay: 'y@upi' });
+      expect(next.gpay).toBe('y@upi');
+      expect((service as any).upiIds.gpay).toBe('y@upi');
+      const lines = err.mock.calls.map((c) => String(c[0])).filter((m) => m.includes('kind=update_failed'));
+      expect(lines).toEqual(['[upi-ids] kind=update_failed reason=E11000 dup key gpay: <id>: cache kept']);
+    });
+
+    it('no document: refresh and read-through log kind=no_doc', async () => {
+      const warn = jest.spyOn((service as any).logger, 'warn');
+      await service.refreshUPIs();
+      (service as any).isInitialized = true;
+      expect(await service.findOne()).toBeNull();
+      const lines = warn.mock.calls.map((c) => String(c[0])).filter((m) => m.includes('kind=no_doc'));
+      expect(lines).toEqual([
+        '[upi-ids] kind=no_doc path=refresh: no upi-ids document, cache kept',
+        '[upi-ids] kind=no_doc path=read_through: no upi-ids document',
+      ]);
     });
   });
 
