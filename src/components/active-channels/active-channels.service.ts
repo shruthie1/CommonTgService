@@ -1,5 +1,5 @@
 import { PromoteMsgsService } from '../promote-msgs/promote-msgs.service';
-import { BadRequestException, Inject, Injectable, InternalServerErrorException, Logger, NotFoundException, forwardRef } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, InternalServerErrorException, Logger, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, PipelineStage } from 'mongoose';
 import { CreateActiveChannelDto } from './dto/create-active-channel.dto';
@@ -8,6 +8,7 @@ import { ActiveChannel, ActiveChannelDocument } from './schemas/active-channel.s
 import { parseError } from '../../utils/parseError';
 import { sendBotNotice } from '../../utils/bot-notice';
 import { getBotsServiceInstance } from '../../utils';
+import { defaultMessages } from '../../utils/common';
 import { ChannelCategory } from '../bots';
 import {
   BAN_GUARDED_FIELDS,
@@ -58,6 +59,7 @@ export class ActiveChannelsService {
 
   constructor(
     @InjectModel(ActiveChannel.name) private activeChannelModel: Model<ActiveChannelDocument>,
+    // Unused since 2026-11-21 (inserts use insertTemplateIds); kept so the DI signature and its callers stay as they are.
     @Inject(forwardRef(() => PromoteMsgsService))
     private promoteMsgsService: PromoteMsgsService,
     private readonly channelIntelligenceReadService: ChannelIntelligenceReadService,
@@ -99,11 +101,10 @@ export class ActiveChannelsService {
         throw new BadRequestException('Channel ID is required');
       }
 
-      const availableMsgs = await this.getAvailableMessages();
       const createdChannel = new this.activeChannelModel({
         ...createActiveChannelDto,
         channelId: this.channelKey(createActiveChannelDto.channelId),
-        availableMsgs,
+        availableMsgs: this.insertTemplateIds(),
         createdAt: new Date(),
       });
 
@@ -151,7 +152,8 @@ export class ActiveChannelsService {
           canSendMsgs: false,
           participantsCount: 0,
           reactRestricted: false,
-          availableMsgs: [],
+          // Insert-only ($ifNull): an existing [] stays "templates exhausted".
+          availableMsgs: this.insertTemplateIds(),
           banned: dto.banned === true,
           bannedAt: dto.banned === true ? (dto.bannedAt ?? Date.now()) : null,
           // NOTE: `megagroup` is deliberately NOT defaulted here. It used to default to `true`,
@@ -793,7 +795,7 @@ export class ActiveChannelsService {
   async resetAvailableMsgs(): Promise<void> {
     try {
       await sendBotNotice('notif', { title: 'Maintenance', summary: 'Reset available messages' });
-      const availableMsgs = await this.getAvailableMessages();
+      const availableMsgs = this.insertTemplateIds();
 
       await this.activeChannelModel.updateMany(
         {
@@ -829,16 +831,13 @@ export class ActiveChannelsService {
     }
   }
 
-  private async getAvailableMessages(): Promise<string[]> {
-    try {
-      const data = await this.promoteMsgsService.findOne();
-      return Object.keys(data || {});
-    } catch (error) {
-      if (error instanceof NotFoundException || error?.status === 404) {
-        return [];
-      }
-      throw this.handleError(error, 'Failed to fetch available messages');
-    }
+  /**
+   * The one template-id list every activeChannels insert uses (owner 2026-11-21): `defaultMessages` ("1".."21"),
+   * the same ids tg-platform inserts (tg-db ACTIVE_CHANNEL_MESSAGE_IDS). It used to come from the promoteMsgs keys,
+   * and createMultiple inserted [], so a CMS-created row started "exhausted". A fresh copy per call.
+   */
+  private insertTemplateIds(): string[] {
+    return [...defaultMessages];
   }
 
   private handleError(error: any, message: string): Error {

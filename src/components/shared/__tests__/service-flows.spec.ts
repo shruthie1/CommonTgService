@@ -40,6 +40,8 @@ class TestBaseService extends BaseClientService<BaseClientDocument> {
         const usersService = {
             search: jest.fn(async ({ mobile }: { mobile: string }) => [{ tgId: `tg-${mobile}`, mobile, session: `backup-${mobile}` }]),
             update: jest.fn(async () => 1),
+            replaceSessionOfRow: jest.fn(async () => true),
+            liveRowHoldsSession: jest.fn(async () => true),
         };
         const botsService = {
             sendMessageByCategory: jest.fn(async () => undefined),
@@ -287,6 +289,7 @@ describe('Service flow reliability', () => {
         );
         expect(createDistinctSpy).not.toHaveBeenCalled();
         expect(service.usersServiceMock.update).not.toHaveBeenCalled();
+        expect(service.usersServiceMock.replaceSessionOfRow).not.toHaveBeenCalled();
         expect((service as any).verifySessionLive).toHaveBeenCalledTimes(1);
         expect((service as any).verifySessionLive).toHaveBeenCalledWith('919990090001', 'live-backup-session');
         expect((service as any).verifySessionAuthorizations).toHaveBeenCalledWith('919990090001', 'active-session', expect.anything());
@@ -312,7 +315,8 @@ describe('Service flow reliability', () => {
 
         expect(rotated).toBe(true);
         expect(service.updateMock).toHaveBeenCalledWith('919990090005', { session: 'user-active-session' });
-        expect(service.usersServiceMock.update).toHaveBeenCalledWith('tg-recover', { session: 'fresh-backup-after-recovery' });
+        expect(service.usersServiceMock.replaceSessionOfRow).toHaveBeenCalledWith('919990090005', 'user-active-session', 'fresh-backup-after-recovery', 'tg-recover');
+        expect(service.usersServiceMock.liveRowHoldsSession).toHaveBeenCalledWith('919990090005', 'fresh-backup-after-recovery');
         expect(service.updateMock).toHaveBeenCalledWith(
             '919990090005',
             expect.objectContaining({ warmupPhase: WarmupPhase.SESSION_ROTATED }),
@@ -337,7 +341,7 @@ describe('Service flow reliability', () => {
 
         expect(rotated).toBe(true);
         expect(createDistinctSpy).toHaveBeenCalledWith('919990090002', ['active-session', 'dead-backup-session']);
-        expect(service.usersServiceMock.update).toHaveBeenCalledWith('tg-rotate-2', { session: 'fresh-backup-session' });
+        expect(service.usersServiceMock.replaceSessionOfRow).toHaveBeenCalledWith('919990090002', 'dead-backup-session', 'fresh-backup-session', 'tg-rotate-2');
         expect(service.updateMock).toHaveBeenCalledWith(
             '919990090002',
             expect.objectContaining({ warmupPhase: WarmupPhase.SESSION_ROTATED }),
@@ -361,7 +365,30 @@ describe('Service flow reliability', () => {
 
         expect(rotated).toBe(true);
         expect(createDistinctSpy).toHaveBeenCalledWith('919990090004', ['active-session', 'active-session']);
-        expect(service.usersServiceMock.update).toHaveBeenCalledWith('tg-rotate-dup', { session: 'fresh-duplicate-replacement' });
+        expect(service.usersServiceMock.replaceSessionOfRow).toHaveBeenCalledWith('919990090004', 'active-session', 'fresh-duplicate-replacement', 'tg-rotate-dup');
+    });
+
+    test('rotateSession: the named users row changed before the backup write: false, no phase update, client cleaned up', async () => {
+        const service = new TestBaseService();
+        const destroy = jest.fn(async () => undefined);
+        jest.spyOn(service as any, 'getStoredActiveSession').mockResolvedValue('active-session');
+        jest.spyOn(service as any, 'createVerifiedSessionClient').mockResolvedValue({ destroy });
+        jest.spyOn(service as any, 'verifySessionLive').mockResolvedValue(false);
+        const authSpy = jest.spyOn(service as any, 'verifySessionAuthorizations').mockResolvedValue(undefined);
+        const unregister = jest.spyOn(service as any, 'safeUnregisterClient').mockResolvedValue(undefined);
+        jest.spyOn(service as any, 'createDistinctSessionString').mockResolvedValue('fresh-backup-lost');
+        service.usersServiceMock.search.mockResolvedValueOnce([{ tgId: 'tg-lost', mobile: '919990090006', session: 'dead-backup' }]);
+        service.usersServiceMock.replaceSessionOfRow.mockResolvedValueOnce(false);
+
+        const rotated = await service.rotateSession('919990090006');
+
+        expect(rotated).toBe(false);
+        expect(service.usersServiceMock.replaceSessionOfRow).toHaveBeenCalledWith('919990090006', 'dead-backup', 'fresh-backup-lost', 'tg-lost');
+        expect(service.updateMock).not.toHaveBeenCalledWith('919990090006', expect.objectContaining({ warmupPhase: WarmupPhase.SESSION_ROTATED }));
+        expect(authSpy).not.toHaveBeenCalled();
+        expect(service.usersServiceMock.liveRowHoldsSession).not.toHaveBeenCalled();
+        expect(destroy).toHaveBeenCalled();
+        expect(unregister).toHaveBeenCalledWith('919990090006');
     });
 
     test('rotateSession fails when the active session belongs to a different mobile', async () => {

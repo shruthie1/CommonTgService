@@ -16,6 +16,8 @@ import { BadRequestException, InternalServerErrorException, NotFoundException } 
 import { ActiveChannelsService } from '../active-channels.service';
 import { ActiveChannel, ActiveChannelSchema, ActiveChannelDocument } from '../schemas/active-channel.schema';
 
+const TEMPLATE_IDS = Array.from({ length: 21 }, (_, i) => String(i + 1));
+
 function execQuery<T>(result: T) {
   return {
     exec: jest.fn(async () => result),
@@ -273,10 +275,11 @@ describe('ActiveChannelsService (real Mongo)', () => {
   });
 
   describe('create', () => {
-    test('creates with available messages', async () => {
+    test('creates with the shared 21 template ids, not the promoteMsgs keys (owner 2026-11-21)', async () => {
       const c = await service.create({ channelId: 'c1', title: 'T' } as any);
       expect(c.channelId).toBe('c1');
-      expect((c as any).availableMsgs).toEqual(['promo1', 'promo2']);
+      expect([...(c as any).availableMsgs]).toEqual(TEMPLATE_IDS);
+      expect(promoteStub.findOne).not.toHaveBeenCalled();
     });
 
     test('throws BadRequest when channelId missing', async () => {
@@ -688,22 +691,39 @@ describe('ActiveChannelsService (real Mongo)', () => {
     });
   });
 
-  describe('getAvailableMessages NotFound handling', () => {
-    test('returns [] when promoteMsgsService throws NotFound', async () => {
+  describe('insert template ids (one list for every insert path, owner 2026-11-21)', () => {
+    test('create ignores promoteMsgs entirely: a missing or failing promoteMsgs doc still inserts all 21', async () => {
       promoteStub.findOne.mockRejectedValue(new NotFoundException('none'));
       const c = await service.create({ channelId: 'nf-1', title: 'T' } as any);
-      expect((c as any).availableMsgs).toEqual([]);
-    });
-
-    test('returns [] when error has 404 status', async () => {
-      promoteStub.findOne.mockRejectedValue({ status: 404 });
-      const c = await service.create({ channelId: 'nf-2', title: 'T' } as any);
-      expect((c as any).availableMsgs).toEqual([]);
-    });
-
-    test('rethrows non-404 errors (wrapped)', async () => {
+      expect([...(c as any).availableMsgs]).toEqual(TEMPLATE_IDS);
       promoteStub.findOne.mockRejectedValue(new Error('db down'));
-      await expect(service.create({ channelId: 'nf-3', title: 'T' } as any)).rejects.toBeInstanceOf(InternalServerErrorException);
+      const c2 = await service.create({ channelId: 'nf-3', title: 'T' } as any);
+      expect([...(c2 as any).availableMsgs]).toEqual(TEMPLATE_IDS);
+    });
+
+    test('createMultiple: a new row gets all 21; an existing [] stays exhausted; a missing list is filled; a partial list is kept', async () => {
+      await seedRaw({ channelId: 'tpl-empty', availableMsgs: [] });
+      await seedRaw({ channelId: 'tpl-partial', availableMsgs: ['3', '4'] });
+      const missing = await seedRaw({ channelId: 'tpl-missing' });
+      await model.collection.updateOne({ _id: missing.insertedId }, { $unset: { availableMsgs: '' } });
+      await service.createMultiple([
+        { channelId: 'tpl-new', title: 'N' } as any,
+        { channelId: 'tpl-empty', title: 'E' } as any,
+        { channelId: 'tpl-partial', title: 'P' } as any,
+        { channelId: 'tpl-missing', title: 'M' } as any,
+      ]);
+      const get = async (id: string) => (await model.collection.findOne({ channelId: id })).availableMsgs;
+      expect(await get('tpl-new')).toEqual(TEMPLATE_IDS);
+      expect(await get('tpl-empty')).toEqual([]);
+      expect(await get('tpl-partial')).toEqual(['3', '4']);
+      expect(await get('tpl-missing')).toEqual(TEMPLATE_IDS);
+    });
+
+    test('each insert gets its own copy: consuming one row does not change the next insert', async () => {
+      const a = await service.create({ channelId: 'cp-1', title: 'T' } as any);
+      (a as any).availableMsgs.pop();
+      const b = await service.create({ channelId: 'cp-2', title: 'T' } as any);
+      expect([...(b as any).availableMsgs]).toEqual(TEMPLATE_IDS);
     });
   });
 

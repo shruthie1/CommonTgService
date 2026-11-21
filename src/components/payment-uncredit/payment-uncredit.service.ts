@@ -34,6 +34,12 @@ const MAX_NOTE = 300;
 export const PG_ROW_GRACE_MS = 60 * 60_000;
 /** A pending journal younger than this belongs to a request still running. */
 export const PENDING_STALE_MS = 2 * 60_000;
+/**
+ * Proof rows expire after 7 days (paymentProofs createdAt TTL). Uncredit and Recredit keep their undo journal on the
+ * row, so a row the TTL can remove mid-request is refused instead (owner 2026-11-21: keep the 7-day TTL, refuse rows
+ * older than 6 days).
+ */
+export const PROOF_MAX_AGE_MS = 6 * 24 * 60 * 60_000;
 
 interface PgVoid { status: 'voided' | 'already' | 'no_row' | 'ambiguous' | 'fake_marked'; payment_id: string | null; amount: number | null; day: string | null; payers_taken: boolean; payers_mobile: string | null }
 interface PgUnvoid { status: 'unvoided' | 'not_voided' | 'fake_marked'; payment_id: string | null; amount: number | null; day: string | null; payers_given: boolean }
@@ -53,7 +59,7 @@ export interface UncreditJournal {
 }
 
 type ProofRow = {
-    _id: unknown; proofId?: string; chatId: string; profile: string; clientId: string; telegramMsgId: number;
+    _id: unknown; proofId?: string; chatId: string; profile: string; clientId: string; telegramMsgId: number; createdAt?: Date;
     amount?: number; creditAmount?: number; servedAt?: Date; verdict?: { outcome?: string }; review?: unknown;
     uncredited?: UncreditJournal;
 };
@@ -128,6 +134,28 @@ export class PaymentUncreditService {
         return rows[0];
     }
 
+    /**
+     * Refuses a proof row the 7-day TTL may remove before the request ends (409 proof_too_old). One greppable line per
+     * branch, proof id masked to the chat's last 4.
+     */
+    private refuseIfTooOld(proof: ProofRow, action: 'uncredit' | 'recredit', nowMs: number): void {
+        const masked = `${proof.clientId}-****${String(proof.chatId).slice(-4)}-${proof.telegramMsgId}`;
+        const created = proof.createdAt ? new Date(proof.createdAt).getTime() : NaN;
+        if (!Number.isFinite(created)) {
+            // The TTL never removes a row without a valid createdAt date, so nothing can vanish mid-request.
+            this.logger.warn(`payment-uncredit kind=age_unknown action=${action} proof=${masked}: no createdAt, allowed`);
+            return;
+        }
+        const ageMs = nowMs - created;
+        if (ageMs > PROOF_MAX_AGE_MS) {
+            this.logger.warn(`payment-uncredit kind=refused reason=proof_too_old action=${action} proof=${masked} age_h=${Math.floor(ageMs / 3_600_000)}`);
+            throw new ConflictException({
+                code: 'proof_too_old',
+                message: `this payment proof is older than 6 days and expires at 7 days: ${action === 'uncredit' ? 'Uncredit' : 'Recredit'} refused; fix it by hand`,
+            });
+        }
+    }
+
     private async setJournal(id: unknown, set: Record<string, unknown>): Promise<void> {
         await this.proofs.updateOne({ _id: id as any }, { $set: set });
     }
@@ -149,6 +177,7 @@ export class PaymentUncreditService {
         const force = body.force === true;
 
         const proof = await this.proofOrThrow(rawProofId);
+        this.refuseIfTooOld(proof, 'uncredit', nowMs);
         const proofId = proofIdOf(proof);
         const A = creditOf(proof);
         if (!isCredited(proof) || !A || !proof.servedAt) throw new BadRequestException('this proof was not credited');
@@ -280,6 +309,7 @@ export class PaymentUncreditService {
     async recredit(rawProofId: string, body: { by?: unknown } = {}, nowMs = Date.now()) {
         const by = clean(body.by, MAX_BY) || DEFAULT_BY;
         const proof = await this.proofOrThrow(rawProofId);
+        this.refuseIfTooOld(proof, 'recredit', nowMs);
         const proofId = proofIdOf(proof);
         const journal = proof.uncredited;
         if (!journal) return { proofId, changed: false };

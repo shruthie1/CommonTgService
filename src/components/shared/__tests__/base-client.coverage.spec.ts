@@ -120,6 +120,8 @@ class TestBaseService extends BaseClientService<BaseClientDocument> {
             findByMobileAnyStatus: jest.fn(async (mobile: string) => [{ tgId: `tg-${mobile}`, mobile, session: `backup-${mobile}` }]),
             backfillFromPool: jest.fn(async () => null),
             update: jest.fn(async () => 1),
+            replaceSessionOfRow: jest.fn(async () => true),
+            liveRowHoldsSession: jest.fn(async () => true),
             expireAccount: jest.fn(async () => undefined),
         };
         const botsService = { sendMessageByCategory: jest.fn(async () => undefined) };
@@ -1199,7 +1201,17 @@ describe('session helpers', () => {
         service.telegramServiceMock.createNewSession.mockResolvedValueOnce('fresh-backup');
         const user = await service.pub.getOrEnsureDistinctUsersBackupSession('m1', 'active');
         expect(user?.session).toBe('fresh-backup');
-        expect(service.usersServiceMock.update).toHaveBeenCalledWith('tg-1', { session: 'fresh-backup' });
+        // Writes the row it read (named by its current session), never "the first doc of the tgId".
+        expect(service.usersServiceMock.replaceSessionOfRow).toHaveBeenCalledWith('m1', 'active', 'fresh-backup', 'tg-1');
+        expect(service.usersServiceMock.update).not.toHaveBeenCalled();
+    });
+
+    test('getOrEnsureDistinctUsersBackupSession returns null when the named row changed before the write', async () => {
+        const service = new TestBaseService();
+        service.usersServiceMock.findByMobileAnyStatus.mockResolvedValueOnce([{ tgId: 'tg-1', session: 'active' }]);
+        service.telegramServiceMock.createNewSession.mockResolvedValueOnce('fresh-backup');
+        service.usersServiceMock.replaceSessionOfRow.mockResolvedValueOnce(false);
+        expect(await service.pub.getOrEnsureDistinctUsersBackupSession('m1', 'active')).toBeNull();
     });
 
     test('getOrEnsureDistinctUsersBackupSession returns null when no distinct backup can be created', async () => {
@@ -1382,7 +1394,17 @@ describe('rotation building blocks', () => {
         service.telegramServiceMock.createNewSession.mockResolvedValueOnce('fresh');
         const r = await service.pub.resolveRotationBackupSession('m1', 'active', { tgId: 't', session: 'dead-backup' } as any);
         expect(r.backupSession).toBe('fresh');
-        expect(service.usersServiceMock.update).toHaveBeenCalledWith('t', { session: 'fresh' });
+        expect(service.usersServiceMock.replaceSessionOfRow).toHaveBeenCalledWith('m1', 'dead-backup', 'fresh', 't');
+        expect(service.usersServiceMock.update).not.toHaveBeenCalled();
+    });
+
+    test('resolveRotationBackupSession returns null backup when the named row changed (no write)', async () => {
+        const service = new TestBaseService();
+        jest.spyOn(service as any, 'verifySessionLive').mockResolvedValue(false);
+        service.telegramServiceMock.createNewSession.mockResolvedValueOnce('fresh');
+        service.usersServiceMock.replaceSessionOfRow.mockResolvedValueOnce(false);
+        const r = await service.pub.resolveRotationBackupSession('m1', 'active', { tgId: 't', session: 'dead-backup' } as any);
+        expect(r).toEqual({ backupSession: null, reusedExisting: false });
     });
 
     test('resolveRotationBackupSession returns null backup when creation fails', async () => {
@@ -1394,9 +1416,10 @@ describe('rotation building blocks', () => {
 
     test('verifyRotationPersistence true when both sessions persisted distinctly', async () => {
         const service = new TestBaseService();
-        service.usersServiceMock.search.mockResolvedValueOnce([{ session: 'backup' }]);
         jest.spyOn(service as any, 'getStoredActiveSession').mockResolvedValue('active');
         expect(await service.pub.verifyRotationPersistence('m1', 'active', 'backup')).toBe(true);
+        expect(service.usersServiceMock.liveRowHoldsSession).toHaveBeenCalledWith('m1', 'backup');
+        expect(service.usersServiceMock.search).not.toHaveBeenCalled();
     });
 
     test('verifyRotationPersistence false when active changed', async () => {
@@ -1406,11 +1429,19 @@ describe('rotation building blocks', () => {
         expect(await service.pub.verifyRotationPersistence('m1', 'active', 'backup')).toBe(false);
     });
 
-    test('verifyRotationPersistence false when backup wrong', async () => {
+    test('verifyRotationPersistence false (verify_mismatch logged) when no live row holds the backup', async () => {
         const service = new TestBaseService();
-        service.usersServiceMock.search.mockResolvedValueOnce([{ session: 'other' }]);
+        service.usersServiceMock.liveRowHoldsSession.mockResolvedValueOnce(false);
         jest.spyOn(service as any, 'getStoredActiveSession').mockResolvedValue('active');
+        const err = jest.spyOn((service as any).logger, 'error');
         expect(await service.pub.verifyRotationPersistence('m1', 'active', 'backup')).toBe(false);
+        expect(err.mock.calls.map((c) => String(c[0])).some((l) => l.startsWith('users-session kind=verify_mismatch'))).toBe(true);
+    });
+
+    test('verifyRotationPersistence false when the backup equals the active session', async () => {
+        const service = new TestBaseService();
+        jest.spyOn(service as any, 'getStoredActiveSession').mockResolvedValue('active');
+        expect(await service.pub.verifyRotationPersistence('m1', 'active', 'active')).toBe(false);
     });
 });
 

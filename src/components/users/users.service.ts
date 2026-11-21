@@ -747,14 +747,73 @@ export class UsersService {
       updateData.mobile = this.canonicalMobile(updateData.mobile);
     }
     const updated = await this.userModel
-      // A tgId can have several docs (one per login session); always write the lowest _id,
-      // the same doc search() returns first, so reads and writes never depend on index order.
+      // A tgId can have several docs (one per login session); this writes the lowest _id so the target never depends
+      // on index order. Rotation and backup repair do not use this for sessions: they name their row
+      // (replaceSessionOfRow). PATCH /user/:tgId still writes here (pre-existing).
       .findOneAndUpdate({ tgId }, { $set: updateData }, { returnDocument: 'after', sort: { _id: 1 } })
       .exec();
     if (!updated) {
       throw new NotFoundException(`User with tgId ${tgId} not found`);
     }
     return updated;
+  }
+
+  /**
+   * Replaces the session of ONE named row: the row of this mobile that holds `priorSession` (session is unique, so
+   * this names exactly one doc and doubles as a compare-and-set). A tgId or mobile has several docs (one per login
+   * session); writing "the first doc of the tgId" could hit a sibling session row while rotation read and verified
+   * another (schema audit 2026-11-21). Returns false, with one greppable line, when no row matched.
+   */
+  async replaceSessionOfRow(
+    mobile: string,
+    priorSession: string | null | undefined,
+    session: string,
+    tgId?: string | null,
+  ): Promise<boolean> {
+    const canonicalMobile = this.canonicalMobile(mobile);
+    const masked = maskMobile(canonicalMobile);
+    if (!priorSession) {
+      // A row with no session (none in prod 2026-11-21) is named by its account (mobile + tgId) and its blank session.
+      // A whitespace-only session is a stored value: it is matched exactly by the branch below.
+      if (!tgId) {
+        this.logger.warn(`users-session kind=skipped reason=no_prior_session mobile=${masked}: no row named, nothing written`);
+        return false;
+      }
+      const blank = await this.userModel
+        .updateOne(
+          { mobile: canonicalMobile, tgId, $or: [{ session: { $exists: false } }, { session: null }, { session: '' }] },
+          { $set: { session } },
+        )
+        .exec();
+      if (blank.matchedCount === 0) {
+        this.logger.warn(`users-session kind=skipped reason=row_changed_blank mobile=${masked}: no blank-session row of this account any more, nothing written`);
+        return false;
+      }
+      this.logger.log(`users-session kind=written_blank_row mobile=${masked}`);
+      return true;
+    }
+    const result = await this.userModel
+      .updateOne({ mobile: canonicalMobile, session: priorSession }, { $set: { session } })
+      .exec();
+    if (result.matchedCount === 0) {
+      this.logger.warn(`users-session kind=skipped reason=row_changed mobile=${masked}: no row of this mobile holds the prior session any more, nothing written`);
+      return false;
+    }
+    this.logger.log(`users-session kind=written mobile=${masked}`);
+    return true;
+  }
+
+  /** True when a live (not expired) row of this mobile holds exactly this session. */
+  async liveRowHoldsSession(mobile: string, session: string): Promise<boolean> {
+    const want = session?.trim();
+    if (!want) return false;
+    const canonicalMobile = this.canonicalMobile(mobile);
+    // Compare trimmed: rotation reuses a stored backup trimmed, and the row may hold it padded. Few rows per mobile.
+    const rows = await this.userModel
+      .find({ mobile: canonicalMobile, expired: { $ne: true } }, { session: 1 })
+      .lean()
+      .exec();
+    return rows.some((r: any) => typeof r.session === 'string' && r.session.trim() === want);
   }
 
   async updateByFilter(
@@ -1102,7 +1161,9 @@ export class UsersService {
             'relationships.bestScore': bestScore,
             'relationships.computedAt': new Date(),
             'relationships.top': top,
-            calls: callAgg,
+            // Path writes: maintenance owns calls.chats / calls.chatCallCounts (getCallLogStats) and ranking reads
+            // them; replacing the whole `calls` object dropped them (schema audit 2026-11-21).
+            ...Object.fromEntries(Object.entries(callAgg).map(([k, v]) => [`calls.${k}`, v])),
           },
         },
       ).exec();

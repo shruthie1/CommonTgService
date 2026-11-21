@@ -17,7 +17,7 @@ export class PaymentUncreditController {
     @ApiOperation({
         summary: 'Void ONE credited payment: Postgres payment_void (out of revenue; payer taken back only if it was the day\'s last), ' +
             'stats2 day marker, the profile\'s userData credit/tier, review stamp fake. Idempotent (changed:false). ' +
-            '409 fake_marked | call_in_progress (retry with force) | pg_row_pending | ambiguous_match | already_voided | uncredit_in_progress; 502 {failedAt, compensated}',
+            '409 fake_marked | call_in_progress (retry with force) | pg_row_pending | ambiguous_match | already_voided | uncredit_in_progress | proof_too_old (row older than 6 days, TTL 7); 502 {failedAt, compensated}',
     })
     @ApiParam({ name: 'proofId', description: '<clientId>-<chatId>-<telegramMsgId>' })
     @ApiBody({
@@ -37,7 +37,7 @@ export class PaymentUncreditController {
 
     @Post(':proofId/recredit')
     @HttpCode(200)
-    @ApiOperation({ summary: 'Undo an Uncredit: userData, stats2, Postgres payment_unvoid, review stamp back. Idempotent (changed:false)' })
+    @ApiOperation({ summary: 'Undo an Uncredit: userData, stats2, Postgres payment_unvoid, review stamp back. Idempotent (changed:false). 409 proof_too_old (row older than 6 days, TTL 7)' })
     @ApiParam({ name: 'proofId' })
     @ApiBody({ schema: { type: 'object', properties: { by: { type: 'string', description: "default 'tg-chats'" } } } })
     recredit(@Param('proofId') proofId: string, @Body() body: { by?: string }) {

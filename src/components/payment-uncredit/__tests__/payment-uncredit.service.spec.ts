@@ -397,4 +397,34 @@ describe('PaymentUncreditService', () => {
         await expect(service.uncredit(PROOF_ID, { reason: 'fake' }, NOW)).rejects.toMatchObject({ response: { code: 'uncredit_in_progress' } });
         await expect(service.recredit(PROOF_ID, {}, NOW)).rejects.toMatchObject({ response: { code: 'uncredit_in_progress' } });
     });
+    it('proof row older than 6 days (7-day TTL, owner 2026-11-21): Uncredit and Recredit refuse 409 proof_too_old, log it, write nothing', async () => {
+        const warn = jest.spyOn((service as any).logger, 'warn');
+        const old = NOW + 6 * 24 * 3_600_000 + 1;
+        const before = await proof();
+        await expect(service.uncredit(PROOF_ID, { reason: 'fake' }, old)).rejects.toMatchObject({ status: 409, response: { code: 'proof_too_old' } });
+        await proofs.collection.updateOne({ telegramMsgId: MSG }, { $set: { uncredited: { state: 'done', at: new Date(NOW), by: 'x', reason: 'fake', note: '', amount: 350, undo: {} } } });
+        await expect(service.recredit(PROOF_ID, {}, old)).rejects.toMatchObject({ status: 409, response: { code: 'proof_too_old' } });
+        const lines = warn.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith('payment-uncredit kind=refused'));
+        expect(lines).toEqual([
+            `payment-uncredit kind=refused reason=proof_too_old action=uncredit proof=${CLIENT}-****${CHAT.slice(-4)}-${MSG} age_h=145`,
+            `payment-uncredit kind=refused reason=proof_too_old action=recredit proof=${CLIENT}-****${CHAT.slice(-4)}-${MSG} age_h=145`,
+        ]);
+        expect(lines.join('\n')).not.toContain(CHAT);
+        expect(pg.calls).toEqual([]);
+        expect((await user()).payAmount).toBe(150);
+        expect((await proof()).review).toEqual(before.review);
+        expect(sent).toEqual([]);
+    });
+
+    it('proof row just inside 6 days is still uncredited; a row without createdAt is allowed and logged age_unknown', async () => {
+        const inside = SERVED.getTime() - 60 + 6 * 24 * 3_600_000 - 1000;
+        const res = await service.uncredit(PROOF_ID, { reason: 'fake' }, inside);
+        expect(res.changed).toBe(true);
+        const warn = jest.spyOn((service as any).logger, 'warn');
+        await proofs.collection.updateOne({ telegramMsgId: 170001 }, { $unset: { createdAt: '' } });
+        const res2 = await service.uncredit(`${CLIENT}-${CHAT}-170001`, { reason: 'fake' }, inside);
+        expect(res2.changed).toBe(true);
+        expect(warn.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith('payment-uncredit kind=age_unknown')))
+            .toEqual([`payment-uncredit kind=age_unknown action=uncredit proof=${CLIENT}-****${CHAT.slice(-4)}-170001: no createdAt, allowed`]);
+    });
 });

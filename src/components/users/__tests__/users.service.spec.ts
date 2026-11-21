@@ -472,6 +472,81 @@ describe('UsersService (real Mongo)', () => {
         });
     });
 
+    describe('replaceSessionOfRow / liveRowHoldsSession (session writes name their row, audit 2026-11-21)', () => {
+        test('two docs of one tgId: writes the row holding the prior session (the newest live one), never the lowest _id', async () => {
+            const mobile = '919999000040';
+            const old = await seedUser({ mobile, tgId: 'tg-rot', session: 'sess-old', expired: true });
+            const live = await seedUser({ mobile, tgId: 'tg-rot', session: 'sess-live' });
+            const [first] = await service.search({ mobile } as any);
+            expect(first.session).toBe('sess-live');
+            const log = jest.spyOn((service as any).logger, 'log');
+            expect(await service.replaceSessionOfRow(mobile, first.session, 'sess-new')).toBe(true);
+            expect((await model.findById(live._id).lean()).session).toBe('sess-new');
+            expect((await model.findById(old._id).lean()).session).toBe('sess-old');
+            expect(await service.liveRowHoldsSession(mobile, 'sess-new')).toBe(true);
+            expect(log.mock.calls.map((c) => String(c[0]))).toContain('users-session kind=written mobile=••••0040');
+            // The old tgId write hit the lowest _id (the expired row): that is the bug this replaces.
+            const viaTgId = await service.update('tg-rot', { firstName: 'x' } as any);
+            expect(String((viaTgId as any)._id)).toBe(String(old._id));
+        });
+
+        test('prior session gone (another rotation won): nothing written, row_changed logged', async () => {
+            const mobile = '919999000041';
+            const row = await seedUser({ mobile, session: 'sess-now' });
+            const warn = jest.spyOn((service as any).logger, 'warn');
+            expect(await service.replaceSessionOfRow(mobile, 'sess-stale', 'sess-new')).toBe(false);
+            expect((await model.findById(row._id).lean()).session).toBe('sess-now');
+            expect(warn.mock.calls.map((c) => String(c[0])))
+                .toContain('users-session kind=skipped reason=row_changed mobile=••••0041: no row of this mobile holds the prior session any more, nothing written');
+        });
+
+        test('a prior session of another mobile is never written; an empty prior names no row', async () => {
+            await seedUser({ mobile: '919999000042', session: 'sess-other' });
+            const warn = jest.spyOn((service as any).logger, 'warn');
+            expect(await service.replaceSessionOfRow('919999000043', 'sess-other', 'sess-new')).toBe(false);
+            expect(await service.replaceSessionOfRow('919999000043', '', 'sess-new')).toBe(false);
+            expect((await model.findOne({ mobile: '919999000042' }).lean()).session).toBe('sess-other');
+            expect(warn.mock.calls.map((c) => String(c[0])).some((l) => l.startsWith('users-session kind=skipped reason=no_prior_session mobile=••••0043'))).toBe(true);
+        });
+
+        test('a row with no session is named by its account (mobile + tgId) and repaired; a filled one is never touched by that branch', async () => {
+            const mobile = '919999000046';
+            const blank = await seedUser({ mobile, tgId: 'tg-blank' });
+            await model.collection.updateOne({ _id: blank._id }, { $set: { session: '' } });
+            const log = jest.spyOn((service as any).logger, 'log');
+            expect(await service.replaceSessionOfRow(mobile, '', 'sess-fixed', 'tg-blank')).toBe(true);
+            expect((await model.findById(blank._id).lean()).session).toBe('sess-fixed');
+            expect(log.mock.calls.map((c) => String(c[0]))).toContain('users-session kind=written_blank_row mobile=••••0046');
+            const warn = jest.spyOn((service as any).logger, 'warn');
+            expect(await service.replaceSessionOfRow(mobile, '', 'sess-again', 'tg-blank')).toBe(false);
+            expect((await model.findById(blank._id).lean()).session).toBe('sess-fixed');
+            expect(warn.mock.calls.map((c) => String(c[0])).some((l) => l.startsWith('users-session kind=skipped reason=row_changed_blank mobile=••••0046'))).toBe(true);
+        });
+
+        test('a whitespace-only stored session is matched exactly (not treated as blank)', async () => {
+            const mobile = '919999000047';
+            const row = await seedUser({ mobile, tgId: 'tg-ws' });
+            await model.collection.updateOne({ _id: row._id }, { $set: { session: '   ' } });
+            expect(await service.replaceSessionOfRow(mobile, '   ', 'sess-ws-fixed', 'tg-ws')).toBe(true);
+            expect((await model.findById(row._id).lean()).session).toBe('sess-ws-fixed');
+        });
+
+        test('liveRowHoldsSession ignores expired rows and other mobiles', async () => {
+            await seedUser({ mobile: '919999000044', session: 'sess-exp', expired: true });
+            await seedUser({ mobile: '919999000045', session: 'sess-x' });
+            expect(await service.liveRowHoldsSession('919999000044', 'sess-exp')).toBe(false);
+            expect(await service.liveRowHoldsSession('919999000044', 'sess-x')).toBe(false);
+            expect(await service.liveRowHoldsSession('919999000045', 'sess-x')).toBe(true);
+        });
+
+        test('liveRowHoldsSession finds a live backup stored with surrounding whitespace (rotation reuses it trimmed)', async () => {
+            await seedUser({ mobile: '919999000048', session: '  sess-pad \n' });
+            expect(await service.liveRowHoldsSession('919999000048', 'sess-pad')).toBe(true);
+            expect(await service.liveRowHoldsSession('919999000048', 'sess-pa')).toBe(false);
+            expect(await service.liveRowHoldsSession('919999000048', '   ')).toBe(false);
+        });
+    });
+
     describe('updateByFilter', () => {
         test('matched returns modifiedCount', async () => {
             await seedUser({ gender: 'female', starred: false });
@@ -846,6 +921,25 @@ describe('UsersService (real Mongo)', () => {
             };
             return fake;
         }
+
+        test('scoring writes calls totals by path: maintenance-owned calls.chats and calls.chatCallCounts survive (audit 2026-11-21)', async () => {
+            const mobile = '919999000089';
+            const chats = [{ chatId: '111', totalCalls: 3 }];
+            await seedUser({ mobile, calls: { totalCalls: 9, incoming: 9, outgoing: 0, video: 0, audio: 9, chats, chatCallCounts: { '111': 3 } } });
+            jest.spyOn(connectionManager, 'hasClient').mockReturnValue(false);
+            jest.spyOn(connectionManager, 'getClient').mockResolvedValue(buildFakeClient() as any);
+            jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue(undefined as any);
+
+            await service.computeRelationshipScore(mobile);
+
+            const doc = await model.findOne({ mobile }).lean();
+            expect(doc.relationships.computedAt).toBeTruthy();
+            expect(doc.calls.chats).toEqual(chats);
+            expect(doc.calls.chatCallCounts).toEqual({ '111': 3 });
+            expect(doc.calls.totalCalls).not.toBe(9);
+            expect(doc.calls.totalCalls).toBe(doc.calls.incoming + doc.calls.outgoing);
+            expect(Object.keys(doc.calls).sort()).toEqual(['audio', 'chatCallCounts', 'chats', 'incoming', 'outgoing', 'totalCalls', 'video']);
+        });
 
         test('happy path persists scores + cleans up unregistered client', async () => {
             const mobile = '919999000090';

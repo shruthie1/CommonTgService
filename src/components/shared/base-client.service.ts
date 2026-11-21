@@ -3286,7 +3286,10 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             return null;
         }
 
-        await this.usersService.update(user.tgId, { session: distinctBackup });
+        // Name the row this method read (by its current session), never "the first doc of the tgId".
+        if (!(await this.usersService.replaceSessionOfRow(mobile, user.session, distinctBackup, user.tgId))) {
+            return null;
+        }
         return {
             ...user,
             session: distinctBackup,
@@ -3826,7 +3829,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             return { backupSession: null, reusedExisting: false };
         }
 
-        await this.usersService.update(user.tgId, { session: backupSession });
+        // Write the row rotation read (search()[0], named by its current session); verifyRotationPersistence then
+        // checks a live row of this mobile holds the new backup.
+        if (!(await this.usersService.replaceSessionOfRow(mobile, user.session, backupSession, user.tgId))) {
+            return { backupSession: null, reusedExisting: false };
+        }
         return { backupSession, reusedExisting: false };
     }
 
@@ -3835,16 +3842,18 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         activeSession: string,
         expectedBackupSession: string,
     ): Promise<boolean> {
-        const persistedBackupUsers = await this.usersService.search({ mobile });
-        const persistedBackup = persistedBackupUsers[0]?.session?.trim() || null;
         const persistedActive = await this.getStoredActiveSession(mobile);
 
         if (persistedActive?.trim() !== activeSession) {
             this.logger.error(`Active session changed unexpectedly during rotation for ${maskMobile(mobile)}`);
             return false;
         }
-        if (!persistedBackup || persistedBackup === activeSession || persistedBackup !== expectedBackupSession) {
-            this.logger.error(`Backup session persistence verification failed for ${maskMobile(mobile)}`);
+        // Verify the row that was written (the one holding the backup), not whichever doc search() lists first.
+        const backupHeld = !!expectedBackupSession
+            && expectedBackupSession !== activeSession
+            && await this.usersService.liveRowHoldsSession(mobile, expectedBackupSession);
+        if (!backupHeld) {
+            this.logger.error(`users-session kind=verify_mismatch mobile=${maskMobile(mobile)}: Backup session persistence verification failed (no live row of this mobile holds the new backup)`);
             return false;
         }
 
