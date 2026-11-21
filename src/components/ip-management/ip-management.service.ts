@@ -122,9 +122,16 @@ export class IpManagementService {
     async deleteProxyIp(ipAddress: string, port: number): Promise<void> {
         this.logger.debug(`Deleting proxy IP: ${ipAddress}:${port}`);
 
-        const result = await this.proxyIpModel.deleteOne({ ipAddress, port });
+        // An assigned row is refused (the controller doc promises it). The guard is in the filter, so an assignment
+        // that lands between a check and the delete cannot be lost.
+        const result = await this.proxyIpModel.deleteOne({ ipAddress, port, isAssigned: { $ne: true } });
         if (result.deletedCount === 0) {
-            throw new NotFoundException(`Proxy IP ${ipAddress}:${port} not found`);
+            const row = await this.proxyIpModel.findOne({ ipAddress, port }, { isAssigned: 1, assignedToClient: 1 }).lean();
+            if (!row) {
+                throw new NotFoundException(`Proxy IP ${ipAddress}:${port} not found`);
+            }
+            this.logger.warn(`[proxy-ips] kind=delete_refused_assigned ip=${ipAddress}:${port} client=${(row as any).assignedToClient ?? 'unknown'}`);
+            throw new BadRequestException(`Cannot delete assigned IP ${ipAddress}:${port}`);
         }
 
         this.logger.log(`Deleted proxy IP: ${ipAddress}:${port}`);
@@ -303,7 +310,8 @@ export class IpManagementService {
     /**
      * Upserts proxies from an external source (e.g., Webshare).
      * Matches on ipAddress+port. Updates existing, inserts new.
-     * Optionally removes stale proxies from the same source that are no longer in the incoming list.
+     * Optionally retires stale proxies of the same source that are no longer in the incoming list: they are marked
+     * inactive, never deleted, and an assigned row is never touched. `removed` counts the rows marked inactive.
      */
     async syncFromExternal(
         source: string,
@@ -316,6 +324,7 @@ export class IpManagementService {
         let updated = 0;
         let removed = 0;
         const errors: string[] = [];
+        let upsertFailed = false;
         const incomingKeys = new Set<string>();
 
         // Use bulkWrite for performance — single DB round-trip for upserts
@@ -359,30 +368,37 @@ export class IpManagementService {
                     created = error.result.upsertedCount || 0;
                     updated = error.result.modifiedCount || 0;
                 }
+                upsertFailed = true;
                 errors.push(`Bulk upsert errors: ${error.message}`);
                 this.logger.warn(`Bulk upsert had errors: ${error.message}`);
             }
         }
 
-        // Remove stale proxies from this source that weren't in the incoming list.
-        // Compute the stale set in code (a small list) and delete via $in, instead
-        // of a $nor with one clause per incoming proxy — which builds an unbounded
-        // query (thousands of clauses) that can blow the BSON document limit.
-        if (removeStale) {
-            const incomingKeys = new Set(proxies.map(p => `${p.ipAddress}:${p.port}`));
+        // Retire stale proxies of this source that weren't in the incoming list. Compute the stale set in code (a
+        // small list) and update via $in, instead of a $nor with one clause per incoming proxy (unbounded query).
+        // Skipped after a failed upsert (the snapshot is not trusted) and for an empty snapshot.
+        if (removeStale && upsertFailed) {
+            this.logger.warn(`[proxy-ips] kind=prune_skipped reason=upsert_failed source=${source}`);
+        } else if (removeStale && proxies.length === 0) {
+            this.logger.warn(`[proxy-ips] kind=prune_skipped reason=empty_snapshot source=${source}`);
+        } else if (removeStale) {
             const existing = await this.proxyIpModel
-                .find({ source }, { ipAddress: 1, port: 1 })
+                .find({ source, status: { $ne: 'inactive' } }, { ipAddress: 1, port: 1, isAssigned: 1 })
                 .lean()
                 .exec();
-            const staleIds = existing
-                .filter(p => !incomingKeys.has(`${p.ipAddress}:${p.port}`))
-                .map(p => p._id);
+            const stale = existing.filter(p => !incomingKeys.has(`${p.ipAddress}:${p.port}`));
+            const keptAssigned = stale.filter(p => p.isAssigned === true).length;
+            const staleIds = stale.filter(p => p.isAssigned !== true).map(p => p._id);
+            if (keptAssigned > 0) {
+                this.logger.warn(`[proxy-ips] kind=prune_kept_assigned count=${keptAssigned} source=${source}`);
+            }
             if (staleIds.length > 0) {
-                const result = await this.proxyIpModel.deleteMany({ _id: { $in: staleIds } });
-                removed = result.deletedCount;
-                if (removed > 0) {
-                    this.logger.debug(`Removed ${removed} stale ${source} proxies`);
-                }
+                const result = await this.proxyIpModel.updateMany(
+                    { _id: { $in: staleIds }, isAssigned: { $ne: true } },
+                    { $set: { status: 'inactive' } },
+                );
+                removed = result.modifiedCount;
+                this.logger.log(`[proxy-ips] kind=prune_marked_inactive count=${removed} source=${source}`);
             }
         }
 

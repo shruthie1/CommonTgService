@@ -60,7 +60,7 @@ import {
 import { ClientHelperUtils } from '../shared/client-helper.utils';
 import { withEnrollmentLock } from '../shared/enrollment-lock';
 import { accountHealthCollectionOf, recordAccountHealthSoon } from '../shared/account-health';
-import { describeClaimHolder, withPoolClaim } from '../shared/onboarding/pool-claim';
+import { describeClaimHolder, POOL_CLAIM_BODY_MAX_TIME_MS, POOL_CLAIM_INSERT_OPTIONS, withPoolClaim } from '../shared/onboarding/pool-claim';
 import { BUFFER_PROFILE, ONBOARDING_PACING, isHealthyForLegacyCap } from '../shared/onboarding/pool-profile';
 import { enrolPoolClientFromUser, type EnrolmentPort } from '../shared/onboarding/enrolment';
 import { setAsPoolClient, type SetAsPort } from '../shared/onboarding/set-as';
@@ -568,7 +568,10 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 enrolledAt: new Date(),
                 sessionRotatedAt: null,
             };
-            return this.bufferClientModel.create({ ...createData });
+            // insertMany, not create: Mongoose passes maxTimeMS only through insertMany (create drops it). Same casting,
+            // defaults and validation; this schema has no save hooks.
+            const [created] = await this.bufferClientModel.insertMany([{ ...createData }], POOL_CLAIM_INSERT_OPTIONS);
+            return created;
         }));
         // accountHealth S2 (additive): a create that carries a verdict (PUT createOrUpdate's create branch) mirrors it.
         this.mirrorVerdictToAccountHealth(result, 'cms:buffer-create');
@@ -613,9 +616,12 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         return bufferClient;
     }
 
-    async existsByMobile(mobile: string): Promise<boolean> {
+    /** `maxTimeMS` caps the read when it runs inside a pool claim (POOL_CLAIM_BODY_MAX_TIME_MS). */
+    async existsByMobile(mobile: string, maxTimeMS?: number): Promise<boolean> {
         const canonicalMobile = this.canonicalMobile(mobile);
-        return !!(await this.bufferClientModel.findOne({ mobile: canonicalMobile }, { _id: 1 }).lean().exec());
+        const query = this.bufferClientModel.findOne({ mobile: canonicalMobile }, { _id: 1 });
+        if (maxTimeMS) query.maxTimeMS(maxTimeMS);
+        return !!(await query.lean().exec());
     }
 
     private static readonly SPAM_FIELDS = ['spamStatus', 'limitedUntil', 'spamCheckedAt', 'spamCheckSource'] as const;
@@ -1348,8 +1354,8 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
      */
     private async isMobileEnrolledAnywhere(mobile: string): Promise<string | null> {
         const [bufferExists, promoteExists, clientExists] = await Promise.all([
-            this.existsByMobile(mobile),
-            this.promoteClientService.existsByMobile(mobile),
+            this.existsByMobile(mobile, POOL_CLAIM_BODY_MAX_TIME_MS),
+            this.promoteClientService.existsByMobile(mobile, POOL_CLAIM_BODY_MAX_TIME_MS),
             this.clientService.findAll().then((clients) => clients.some((c) => this.mobilesMatch(c.mobile, mobile))),
         ]);
         if (bufferExists) return 'bufferClients';

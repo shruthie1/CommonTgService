@@ -8,6 +8,7 @@ jest.mock('../../../Telegram/utils/connection-manager', () => ({
 jest.mock('../../../../utils/telegram-utils/channelinfo', () => ({ channelInfo: jest.fn(async () => ({ ids: ['a', 'b'] })) }));
 
 import { connectionManager } from '../../../Telegram/utils/connection-manager';
+import { POOL_CLAIM_BODY_MAX_TIME_MS } from '../pool-claim';
 import { enrolPoolClientFromUser, type EnrolmentPort } from '../enrolment';
 import { setAsPoolClient, type SetAsPort } from '../set-as';
 import { BUFFER_PROFILE, PROMOTE_PROFILE } from '../pool-profile';
@@ -84,9 +85,12 @@ beforeEach(() => {
 describe('accountRoleEvents: auto-enrolment', () => {
     it.each([[BUFFER_PROFILE, 'buffer'], [PROMOTE_PROFILE, 'promote']] as const)('%#: enrolled with pool + clientId, by cms:auto-enrol', async (profile, pool) => {
         const insertOne = jest.fn().mockResolvedValue({});
-        const ok = await enrolPoolClientFromUser(enrolPort(profile, makeModel(insertOne)), { mobile: '919000000120', tgId: 'tg-1' }, 'shruthi1', '2026-11-07');
+        const model = makeModel(insertOne);
+        const ok = await enrolPoolClientFromUser(enrolPort(profile, model), { mobile: '919000000120', tgId: 'tg-1' }, 'shruthi1', '2026-11-07');
         await flush();
         expect(ok).toBe(true);
+        // batch 7: the claim-body pool write is capped below the lease
+        expect((model.findOneAndUpdate.mock.calls[0] as any[])[2]).toEqual({ returnDocument: 'after', upsert: true, maxTimeMS: POOL_CLAIM_BODY_MAX_TIME_MS });
         expect(insertOne.mock.calls.map((c) => c[0])).toEqual([expect.objectContaining({
             v: 1, event: 'enrolled', mobile: '919000000120', clientId: 'shruthi1', pool, by: 'cms:auto-enrol', details: { availableDate: '2026-11-07' },
             reasonCode: 'enrolment',
@@ -114,8 +118,11 @@ describe('accountRoleEvents: auto-enrolment', () => {
 describe('accountRoleEvents: operator set-as', () => {
     it('enrolled with pool + clientId, by cms:set-as', async () => {
         const insertOne = jest.fn().mockResolvedValue({});
-        await setAsPoolClient(setAsPort(BUFFER_PROFILE, makeModel(insertOne)), '+919000000130', 'shruthi1', '2026-11-08');
+        const model = makeModel(insertOne);
+        await setAsPoolClient(setAsPort(BUFFER_PROFILE, model), '+919000000130', 'shruthi1', '2026-11-08');
         await flush();
+        // batch 7: the claim-body pool write is capped below the lease
+        expect((model.findOneAndUpdate.mock.calls[0] as any[])[2]).toEqual({ returnDocument: 'after', upsert: true, maxTimeMS: POOL_CLAIM_BODY_MAX_TIME_MS });
         expect(insertOne.mock.calls.map((c) => c[0])).toEqual([expect.objectContaining({
             event: 'enrolled', mobile: '919000000130', clientId: 'shruthi1', pool: 'buffer', by: 'cms:set-as', details: { availableDate: '2026-11-08' },
             reasonCode: 'enrolment',

@@ -18,6 +18,7 @@ import { WarmupPhase } from '../warmup-phases';
 import { enrolmentEligibilityFilter, enrolmentIneligibilityReasons } from './candidate-source';
 import { ONBOARDING_PACING, type PoolProfile } from './pool-profile';
 import { accountRoleEventsCollectionOf, recordAccountRoleEventSoon } from '../../clients/account-role-events';
+import { POOL_CLAIM_BODY_MAX_TIME_MS } from './pool-claim';
 
 export interface SetAsPort {
     profile: Readonly<PoolProfile>;
@@ -136,7 +137,7 @@ export async function setAsPoolClient(
                         warmupJitter: ClientHelperUtils.generateWarmupJitter(),
                         enrolledAt: new Date(),
                     },
-                }, { returnDocument: 'after', upsert: true })
+                }, { returnDocument: 'after', upsert: true, maxTimeMS: POOL_CLAIM_BODY_MAX_TIME_MS })
                 .exec();
         }));
         // accountRoleEvents (S1, additive): fire-and-forget; never throws or delays set-as.

@@ -55,7 +55,7 @@ import { Channel } from '../channels/schemas/channel.schema';
 import { ActiveChannel } from '../active-channels';
 import { ClientHelperUtils } from '../shared/client-helper.utils';
 import { withEnrollmentLock } from '../shared/enrollment-lock';
-import { describeClaimHolder, withPoolClaim } from '../shared/onboarding/pool-claim';
+import { describeClaimHolder, POOL_CLAIM_BODY_MAX_TIME_MS, POOL_CLAIM_INSERT_OPTIONS, withPoolClaim } from '../shared/onboarding/pool-claim';
 import { ONBOARDING_PACING, PROMOTE_PROFILE, isHealthyForLegacyCap } from '../shared/onboarding/pool-profile';
 import { enrolPoolClientFromUser, type EnrolmentPort } from '../shared/onboarding/enrolment';
 import { setAsPoolClient, type SetAsPort } from '../shared/onboarding/set-as';
@@ -262,8 +262,10 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 enrolledAt: new Date(),
                 sessionRotatedAt: null,
             };
-            const newUser = new this.promoteClientModel(promoteClientData);
-            return newUser.save();
+            // insertMany, not save: Mongoose passes maxTimeMS only through insertMany (save drops it). Same casting,
+            // defaults and validation; this schema has no save hooks.
+            const [created] = await this.promoteClientModel.insertMany([promoteClientData], POOL_CLAIM_INSERT_OPTIONS);
+            return created;
         }));
         // accountRoleEvents (S1, additive): a pool doc created here (POST /promoteclients, createOrUpdate's create branch)
         // is an enrolment. An old main's pool return goes to bufferClients only, never here. Fire-and-forget; never
@@ -303,9 +305,12 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         return user as PromoteClientDocument | null;
     }
 
-    async existsByMobile(mobile: string): Promise<boolean> {
+    /** `maxTimeMS` caps the read when it runs inside a pool claim (POOL_CLAIM_BODY_MAX_TIME_MS). */
+    async existsByMobile(mobile: string, maxTimeMS?: number): Promise<boolean> {
         const canonicalMobile = this.canonicalMobile(mobile);
-        return !!(await this.promoteClientModel.findOne({ mobile: canonicalMobile }, { _id: 1 }).lean().exec());
+        const query = this.promoteClientModel.findOne({ mobile: canonicalMobile }, { _id: 1 });
+        if (maxTimeMS) query.maxTimeMS(maxTimeMS);
+        return !!(await query.lean().exec());
     }
 
     async update(mobile: string, updateClientDto: BaseClientUpdate, opts?: BaseClientUpdateOptions): Promise<PromoteClientDocument> {
@@ -607,8 +612,8 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
      */
     private async isMobileEnrolledAnywhere(mobile: string): Promise<string | null> {
         const [promoteExists, bufferExists, clientExists] = await Promise.all([
-            this.existsByMobile(mobile),
-            this.bufferClientService.existsByMobile(mobile),
+            this.existsByMobile(mobile, POOL_CLAIM_BODY_MAX_TIME_MS),
+            this.bufferClientService.existsByMobile(mobile, POOL_CLAIM_BODY_MAX_TIME_MS),
             this.clientService.findAll().then((clients) => clients.some((c) => this.mobilesMatch(c.mobile, mobile))),
         ]);
         if (promoteExists) return 'promoteClients';

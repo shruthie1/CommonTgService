@@ -10,11 +10,33 @@
  *
  * DB-only: no Telegram call. Never deletes: release sets the lease time to the epoch.
  */
-import type { Model } from 'mongoose';
+import { Logger } from '@nestjs/common';
+import type { InsertManyOptions, Model } from 'mongoose';
+import { maskMobile } from '../../monitor/monitor-util';
 
 export const POOL_CLAIM_COLLECTION = 'poolEnrolmentClaims';
 /** Longer than any re-check + write (milliseconds), short enough that a crashed holder self-heals. */
 export const POOL_CLAIM_LEASE_MS = 60_000;
+/**
+ * Server-side cap (maxTimeMS) on each DB call of a claim body: the "already in a pool?" re-check and the pool write.
+ * Well under the lease, so a holder stalled in Mongo fails instead of writing after its lease expired and the other
+ * pool claimed the mobile (schema audit batch 7). It caps server time only, not the network round trip.
+ */
+export const POOL_CLAIM_BODY_MAX_TIME_MS = 20_000;
+
+/**
+ * insertMany options for a claim-body pool insert. Mongoose 9 forwards maxTimeMS to the insert command (checked with
+ * command monitoring, spec pool-claim.spec.ts) but its InsertManyOptions type does not declare it, hence the cast.
+ */
+export const POOL_CLAIM_INSERT_OPTIONS = { maxTimeMS: POOL_CLAIM_BODY_MAX_TIME_MS } as InsertManyOptions;
+
+const logger = new Logger('PoolClaim');
+
+/** MaxTimeMSExpired (code 50, or the codeName / message some topologies surface). */
+function isMaxTimeExpired(error: unknown): boolean {
+    const e = error as { code?: number; codeName?: string; message?: string } | null;
+    return e?.code === 50 || e?.codeName === 'MaxTimeMSExpired' || (typeof e?.message === 'string' && e.message.includes('MaxTimeMSExpired'));
+}
 
 const indexReady = new WeakMap<object, Promise<void>>();
 
@@ -105,6 +127,11 @@ export async function withPoolClaim<T>(
     }
     try {
         return { claimed: true, value: await fn() };
+    } catch (error) {
+        if (isMaxTimeExpired(error)) {
+            logger.warn(`[pool-claim] kind=body_timeout pool=${pool} mobile=${maskMobile(mobile)} maxTimeMS=${POOL_CLAIM_BODY_MAX_TIME_MS}: claim body failed`);
+        }
+        throw error;
     } finally {
         // A failed release only delays the other pool by one lease (POOL_CLAIM_LEASE_MS); the
         // enrolment result itself must not be turned into a failure by it.

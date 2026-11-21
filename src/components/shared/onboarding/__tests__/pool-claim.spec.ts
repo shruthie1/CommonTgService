@@ -1,6 +1,7 @@
 import mongoose, { Connection, Model, Schema } from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
-import { describeClaimHolder, ensurePoolClaimIndex, POOL_CLAIM_COLLECTION, POOL_CLAIM_LEASE_MS, withPoolClaim } from '../pool-claim';
+import { Logger } from '@nestjs/common';
+import { describeClaimHolder, ensurePoolClaimIndex, POOL_CLAIM_BODY_MAX_TIME_MS, POOL_CLAIM_COLLECTION, POOL_CLAIM_INSERT_OPTIONS, POOL_CLAIM_LEASE_MS, withPoolClaim } from '../pool-claim';
 
 describe('withPoolClaim (M13 cross-process claim)', () => {
     let mongod: MongoMemoryServer;
@@ -113,6 +114,47 @@ describe('withPoolClaim (M13 cross-process claim)', () => {
             expect(ran).not.toHaveBeenCalled();
             expect(describeClaimHolder(r as any)).toBe('a concurrent bufferClients enrolment');
             expect(describeClaimHolder({ heldBy: 'promoteClients', concurrent: false })).toBe('promoteClients');
+        });
+    });
+
+    describe('batch 7: claim-body DB calls are capped below the lease (maxTimeMS)', () => {
+        test('the cap is well under the lease', () => {
+            expect(POOL_CLAIM_BODY_MAX_TIME_MS).toBeLessThan(POOL_CLAIM_LEASE_MS / 2);
+        });
+
+        test('maxTimeMS reaches the server on the claim-body re-check read and the pool insert (insertMany options)', async () => {
+            const conn = await mongoose.createConnection(mongod.getUri(), { dbName: 'claims', monitorCommands: true }).asPromise();
+            try {
+                const Pool = conn.model('ClaimCapPool', new Schema({ mobile: String }));
+                const seen: Array<[string, unknown]> = [];
+                conn.getClient().on('commandStarted', (e: any) => {
+                    if (['find', 'insert'].includes(e.commandName) && e.command?.[e.commandName] === Pool.collection.collectionName) seen.push([e.commandName, e.command.maxTimeMS]);
+                });
+                await Pool.findOne({ mobile: '919000000120' }, { _id: 1 }).maxTimeMS(POOL_CLAIM_BODY_MAX_TIME_MS).lean().exec();
+                const [created] = await Pool.insertMany([{ mobile: '919000000120' }], POOL_CLAIM_INSERT_OPTIONS);
+                expect(created.mobile).toBe('919000000120');
+                expect(seen).toEqual([['find', POOL_CLAIM_BODY_MAX_TIME_MS], ['insert', POOL_CLAIM_BODY_MAX_TIME_MS]]);
+            } finally {
+                await conn.close();
+            }
+        });
+
+        test('a body call that hits maxTimeMS fails, logs kind=body_timeout, and the claim is released', async () => {
+            const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+            try {
+                const expired = Object.assign(new Error('operation exceeded time limit'), { code: 50, codeName: 'MaxTimeMSExpired' });
+                await expect(withPoolClaim(modelA, '919000000121', 'bufferClients', async () => { throw expired; })).rejects.toBe(expired);
+                expect(warn).toHaveBeenCalledWith(`[pool-claim] kind=body_timeout pool=bufferClients mobile=••••0121 maxTimeMS=${POOL_CLAIM_BODY_MAX_TIME_MS}: claim body failed`);
+                // released: the other pool can claim at once
+                const other = await withPoolClaim(modelB, '919000000121', 'promoteClients', async () => 'promote');
+                expect(other).toEqual({ claimed: true, value: 'promote' });
+                // any other error is rethrown without the line
+                warn.mockClear();
+                await expect(withPoolClaim(modelA, '919000000122', 'bufferClients', async () => { throw new Error('boom'); })).rejects.toThrow('boom');
+                expect(warn).not.toHaveBeenCalled();
+            } finally {
+                warn.mockRestore();
+            }
         });
     });
 });

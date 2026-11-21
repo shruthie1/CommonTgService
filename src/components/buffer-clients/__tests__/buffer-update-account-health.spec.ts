@@ -41,7 +41,8 @@ function makeService(opts: { after?: Record<string, unknown> | null; updateOne?:
   const model: any = {
     db,
     findOneAndUpdate,
-    create: jest.fn(async (doc: Record<string, unknown>) => ({ ...doc, toObject() { return { ...doc }; } })),
+    // batch 7: the claim-body insert is insertMany([doc], { maxTimeMS }).
+    insertMany: jest.fn(async (docs: Record<string, unknown>[]) => docs.map((doc) => ({ ...doc, toObject() { return { ...doc }; } }))),
     findOne: jest.fn(() => ({ exec: jest.fn(async () => null), lean: () => ({ exec: async () => null }) })),
   };
   const service: any = new BufferClientService(

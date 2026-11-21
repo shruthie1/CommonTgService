@@ -32,7 +32,7 @@ export class WebshareProxyController {
     @Post('sync')
     @ApiOperation({
         summary: 'Sync proxies from Webshare',
-        description: 'Fetches all proxies from Webshare API and upserts them into the local IP pool. Optionally removes stale proxies no longer in Webshare.'
+        description: 'Fetches all proxies from Webshare API and upserts them into the local IP pool. Optionally marks stale proxies no longer in Webshare inactive (never deleted, assigned rows untouched).'
     })
     @ApiBody({ type: SyncProxiesDto, required: false })
     @ApiOkResponse({ description: 'Sync completed', type: SyncResultDto })

@@ -211,7 +211,7 @@ describe('WebshareProxyService', () => {
             expect(mockedRedis.del).toHaveBeenCalledWith('webshare:last-sync-error');
         });
 
-        it('updates existing rows and removes stale ones on a second sync', async () => {
+        it('updates existing rows and marks stale ones inactive on a second sync (batch 7: never deleted)', async () => {
             configure();
             // First sync: two proxies.
             axiosClient.get.mockResolvedValueOnce({
@@ -239,10 +239,12 @@ describe('WebshareProxyService', () => {
             expect(second.updated).toBe(1);
             expect(second.removed).toBe(1);
 
-            const rows = await proxyIpModel.find({ source: 'webshare' }).lean();
+            const rows = await proxyIpModel.find({ source: 'webshare', status: 'active' }).lean();
             expect(rows).toHaveLength(1);
             expect(rows[0].ipAddress).toBe('10.0.0.1');
             expect(rows[0].countryCode).toBe('GB');
+            const gone: any = await proxyIpModel.findOne({ ipAddress: '10.0.0.2', port: 1002 }).lean();
+            expect(gone.status).toBe('inactive');
         });
 
         it('does NOT prune the pool when the fetch was INCOMPLETE (partial fetch + removeStale)', async () => {

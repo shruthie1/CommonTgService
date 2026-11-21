@@ -181,6 +181,14 @@ describe('IpManagementService (real mongo)', () => {
             await expect(service.deleteProxyIp('9.9.9.9', 300))
                 .rejects.toBeInstanceOf(NotFoundException);
         });
+
+        it('batch 7: refuses an assigned IP (BadRequest), keeps the row, logs kind=delete_refused_assigned', async () => {
+            await service.createProxyIp(baseProxy({ ipAddress: '6.6.6.2', port: 300, isAssigned: true, assignedToClient: 'c1' } as any));
+            const warn = jest.spyOn((service as any).logger, 'warn');
+            await expect(service.deleteProxyIp('6.6.6.2', 300)).rejects.toBeInstanceOf(BadRequestException);
+            expect(await model.countDocuments({ ipAddress: '6.6.6.2' })).toBe(1);
+            expect(warn).toHaveBeenCalledWith('[proxy-ips] kind=delete_refused_assigned ip=6.6.6.2:300 client=c1');
+        });
     });
 
     // ==================== findProxyIpById ====================
@@ -380,19 +388,65 @@ describe('IpManagementService (real mongo)', () => {
             expect(res.updated).toBe(1);
         });
 
-        it('removes stale proxies when removeStale=true', async () => {
+        it('batch 7: marks stale proxies inactive (never deletes) when removeStale=true; kind=prune_marked_inactive', async () => {
             await service.syncFromExternal('webshare', [
                 baseProxy({ ipAddress: '22.0.0.1', port: 1 }),
                 baseProxy({ ipAddress: '22.0.0.2', port: 2 }),
             ], false);
+            const log = jest.spyOn((service as any).logger, 'log');
             // second sync only contains one -> the other becomes stale
             const res = await service.syncFromExternal('webshare', [
                 baseProxy({ ipAddress: '22.0.0.1', port: 1 }),
             ], true);
             expect(res.removed).toBe(1);
-            const remaining = await service.findBySource('webshare');
-            expect(remaining.length).toBe(1);
-            expect(remaining[0].ipAddress).toBe('22.0.0.1');
+            expect(await model.countDocuments({ source: 'webshare' })).toBe(2);
+            const stale: any = await model.findOne({ ipAddress: '22.0.0.2', port: 2 }).lean();
+            expect(stale.status).toBe('inactive');
+            const kept: any = await model.findOne({ ipAddress: '22.0.0.1', port: 1 }).lean();
+            expect(kept.status).toBe('active');
+            expect(log).toHaveBeenCalledWith('[proxy-ips] kind=prune_marked_inactive count=1 source=webshare');
+            // it comes back in a later snapshot: active again
+            await service.syncFromExternal('webshare', [baseProxy({ ipAddress: '22.0.0.1', port: 1 }), baseProxy({ ipAddress: '22.0.0.2', port: 2 })], true);
+            expect(((await model.findOne({ ipAddress: '22.0.0.2', port: 2 }).lean()) as any).status).toBe('active');
+        });
+
+        it('batch 7: never prunes an assigned row; kind=prune_kept_assigned', async () => {
+            await service.syncFromExternal('webshare', [
+                baseProxy({ ipAddress: '22.1.0.1', port: 1 }),
+                baseProxy({ ipAddress: '22.1.0.2', port: 2 }),
+            ], false);
+            await model.updateOne({ ipAddress: '22.1.0.2', port: 2 }, { $set: { isAssigned: true, assignedToClient: 'c1' } });
+            const warn = jest.spyOn((service as any).logger, 'warn');
+            const res = await service.syncFromExternal('webshare', [baseProxy({ ipAddress: '22.1.0.1', port: 1 })], true);
+            expect(res.removed).toBe(0);
+            const row: any = await model.findOne({ ipAddress: '22.1.0.2', port: 2 }).lean();
+            expect(row.status).toBe('active');
+            expect(row.isAssigned).toBe(true);
+            expect(warn).toHaveBeenCalledWith('[proxy-ips] kind=prune_kept_assigned count=1 source=webshare');
+        });
+
+        it('batch 7: skips the prune after a failed upsert; kind=prune_skipped reason=upsert_failed', async () => {
+            await service.syncFromExternal('webshare', [
+                baseProxy({ ipAddress: '22.2.0.1', port: 1 }),
+                baseProxy({ ipAddress: '22.2.0.2', port: 2 }),
+            ], false);
+            const err: any = new Error('partial fail');
+            err.result = { upsertedCount: 0, modifiedCount: 0 };
+            jest.spyOn(model, 'bulkWrite').mockRejectedValueOnce(err);
+            const warn = jest.spyOn((service as any).logger, 'warn');
+            const res = await service.syncFromExternal('webshare', [baseProxy({ ipAddress: '22.2.0.1', port: 1 })], true);
+            expect(res.removed).toBe(0);
+            expect(await model.countDocuments({ source: 'webshare', status: 'active' })).toBe(2);
+            expect(warn).toHaveBeenCalledWith('[proxy-ips] kind=prune_skipped reason=upsert_failed source=webshare');
+        });
+
+        it('batch 7: skips the prune for an empty snapshot; kind=prune_skipped reason=empty_snapshot', async () => {
+            await service.syncFromExternal('webshare', [baseProxy({ ipAddress: '22.3.0.1', port: 1 })], false);
+            const warn = jest.spyOn((service as any).logger, 'warn');
+            const res = await service.syncFromExternal('webshare', [], true);
+            expect(res.removed).toBe(0);
+            expect(await model.countDocuments({ source: 'webshare', status: 'active' })).toBe(1);
+            expect(warn).toHaveBeenCalledWith('[proxy-ips] kind=prune_skipped reason=empty_snapshot source=webshare');
         });
 
         it('skips stale removal when removeStale=false', async () => {

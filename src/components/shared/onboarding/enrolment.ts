@@ -14,7 +14,7 @@ import type { parseError } from '../../../utils/parseError';
 import type { RichNotificationInput } from '../../../utils/rich-message';
 import { ClientHelperUtils } from '../client-helper.utils';
 import { withEnrollmentLock } from '../enrollment-lock';
-import { describeClaimHolder, ensurePoolClaimIndex, withPoolClaim } from './pool-claim';
+import { describeClaimHolder, ensurePoolClaimIndex, POOL_CLAIM_BODY_MAX_TIME_MS, withPoolClaim } from './pool-claim';
 import { WarmupPhase } from '../warmup-phases';
 import type { PoolProfile } from './pool-profile';
 import { accountRoleEventsCollectionOf, recordAccountRoleEventSoon } from '../../clients/account-role-events';
@@ -129,7 +129,7 @@ export async function enrolPoolClientFromUser(
                         enrolledAt: new Date(),
                     },
                 },
-                { returnDocument: 'after', upsert: true },
+                { returnDocument: 'after', upsert: true, maxTimeMS: POOL_CLAIM_BODY_MAX_TIME_MS },
             ).exec();
             return true;
         }

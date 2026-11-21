@@ -6,6 +6,7 @@ jest.mock('../../../utils/fetchWithTimeout', () => ({ fetchWithTimeout: jest.fn(
 jest.mock('../../../utils/logbots', () => ({ notifbot: jest.fn(() => 'https://example.test/mock-bot') }));
 
 import mongoose, { Connection } from 'mongoose';
+import { POOL_CLAIM_BODY_MAX_TIME_MS } from '../onboarding/pool-claim';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { BaseClientDocument, BaseClientService, ClientConfig, WarmupPhase } from '../base-client.service';
 import { Client } from '../../clients';
@@ -212,7 +213,8 @@ describe('accountRoleEvents: pool create (POST /bufferclients, /promoteclients a
       if (fail) throw new Error('E11000 mobile');
       return { ...data };
     };
-    const promoteClientModel: any = jest.fn(function (this: any, data: Record<string, unknown>) { this.save = () => save(data); });
+    // batch 7: the claim-body insert is insertMany([doc], { maxTimeMS }) (Mongoose drops maxTimeMS on create/save).
+    const insertMany = jest.fn(async (docs: Record<string, unknown>[], _opts: unknown) => [await save(docs[0])]);
     return {
       clientType: kind,
       model: { db: { collection: jest.fn(() => roleEvents) } },
@@ -222,8 +224,8 @@ describe('accountRoleEvents: pool create (POST /bufferclients, /promoteclients a
       withPoolClaimOrRefuse: (_m: string, fn: () => Promise<unknown>) => fn(),
       isMobileEnrolledAnywhere: jest.fn(async () => null),
       sendAccountNotice: jest.fn(async () => true),
-      bufferClientModel: { create: jest.fn(save) },
-      promoteClientModel,
+      bufferClientModel: { insertMany },
+      promoteClientModel: { insertMany },
       recordRoleEvent: (BaseClientService.prototype as any).recordRoleEvent,
       // accountHealth hook (a real private method of BufferClientService, covered by buffer-update-account-health.spec.ts).
       mirrorVerdictToAccountHealth: jest.fn(),
@@ -243,6 +245,8 @@ describe('accountRoleEvents: pool create (POST /bufferclients, /promoteclients a
       details: { availableDate: '2026-11-09', status: 'active' },
     })]);
     expect(JSON.stringify(docsOf(insertOne))).not.toContain('"S"');
+    const model = kind === 'buffer' ? self.bufferClientModel : self.promoteClientModel;
+    expect(model.insertMany).toHaveBeenCalledWith([expect.objectContaining({ mobile: '919000000141' })], { maxTimeMS: POOL_CLAIM_BODY_MAX_TIME_MS });
   });
 
   // S1 re-review fix A2: the old main's first return goes through createOrUpdate's create branch; it must write only
@@ -253,7 +257,7 @@ describe('accountRoleEvents: pool create (POST /bufferclients, /promoteclients a
     const self = fakeThis(insertOne, 'buffer');
     await (BufferClientService.prototype.create as any).call(self, { mobile: '919000000143', clientId: 'shruthi1', session: 'S' }, { suppressEnrolledEvent: true });
     await flush();
-    expect(self.bufferClientModel.create).toHaveBeenCalledTimes(1);
+    expect(self.bufferClientModel.insertMany).toHaveBeenCalledTimes(1);
     expect(insertOne).not.toHaveBeenCalled();
   });
 
