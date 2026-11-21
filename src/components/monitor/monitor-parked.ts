@@ -375,8 +375,9 @@ export const PARKED_ROW_PROJECTION = {
 
 export interface ParkedLoadOpts {
   /** parkedChats filter. The range route's {status, repliedAt} has no matching index (indexes: episodeId+status,
-   *  clientId+status+reachedAt+repliedAt, gcAt TTL); the scan is accepted: ~5k docs (14-day gcAt), <= 4 ms (2026-11-15).
-   *  The chat route's {chatId} scans the same ~5k docs and is cached 30 s per chat by the service. */
+   *  clientId+status+reachedAt+repliedAt, gcAt TTL); the scan is accepted: 9,152 docs on 2026-11-21, steady near 10k
+   *  under the 14-day gcAt TTL (timing not re-measured since 2026-11-15, when ~5k docs took <= 4 ms).
+   *  The chat route's {chatId} scans the same docs and is cached 30 s per chat by the service. */
   filter: object;
   /** Money counts credits before this instant. */
   until: number;

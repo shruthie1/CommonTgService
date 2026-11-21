@@ -35,7 +35,7 @@
  * Change both together (field names, counters, GC window, version bump, `open` unset).
  */
 import { AccountRoleEventsCollection, classifyRoleEventReason, recordAccountRoleEventSoon, unparkedReasonCode } from './account-role-events';
-import { parkedMobileForms } from './parked-session-guard';
+import { parkedMobileForms, warnClientIdsNotArray } from './parked-session-guard';
 import { maskMobile } from '../monitor/monitor-util';
 
 /**
@@ -241,7 +241,8 @@ function withDeadline<T>(promise: Promise<T>, ms: number, label: string): Promis
 
 /**
  * Final review M1: is the tg-aut parked path enabled for `clientId`? Enabled = `global.enabled === true` AND the
- * `tg-aut` doc's `enabled === true` AND (no `clientIds` array OR it includes clientId). A missing doc, a read error,
+ * `tg-aut` doc's `enabled === true` AND (no `clientIds` field OR an array that includes clientId). A missing doc, a
+ * `clientIds` that is not an array, a read error,
  * a timeout or no handle = NOT enabled (fail closed): an episode nobody runs would never close and would make the
  * parked-session guard skip heal/rotate/session on the old main until it expires.
  * MIRROR: tg-platform packages/tg-db/src/collections/parked-control.repository.ts `readState`. Change both together.
@@ -262,6 +263,11 @@ export async function tgAutParkedEnabled(
     for (const d of docs) if (d && typeof d === 'object') byId.set((d as { _id?: unknown })._id, d as Record<string, unknown>);
     const app = byId.get('tg-aut');
     if (byId.get('global')?.enabled !== true || app?.enabled !== true) return { enabled: false };
+    // Batch 6: clientIds present but not an array = disabled (fail closed), never "every client".
+    if (app.clientIds !== undefined && !Array.isArray(app.clientIds)) {
+      warnClientIdsNotArray('tg-aut', app.clientIds);
+      return { enabled: false };
+    }
     if (Array.isArray(app.clientIds) && !app.clientIds.includes(clientId)) return { enabled: false };
     return { enabled: true };
   } catch (error) {

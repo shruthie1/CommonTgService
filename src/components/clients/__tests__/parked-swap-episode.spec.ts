@@ -223,6 +223,22 @@ describe('openSwapEpisode (real Mongo)', () => {
     test('tg-aut off: not opened', async () => { await set([{ _id: 'global', enabled: true }, { _id: 'tg-aut', enabled: false }]); await notOpened(); });
     test('enabled is the string "true": not opened (strict === true)', async () => { await set([{ _id: 'global', enabled: 'true' }, { _id: 'tg-aut', enabled: true }]); await notOpened(); });
     test('clientIds excludes the client: not opened', async () => { await set([{ _id: 'global', enabled: true }, { _id: 'tg-aut', enabled: true, clientIds: ['other1'] }]); await notOpened(); });
+    test('batch 6: clientIds present but not an array (string, object, null): not opened, one kind= line each', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        for (const [bad, type] of [['shruthi1', 'string'], [{ shruthi1: true }, 'object'], [null, 'null']] as const) {
+          await set([{ _id: 'global', enabled: true }, { _id: 'tg-aut', enabled: true, clientIds: bad }]);
+          warn.mockClear();
+          await notOpened();
+          expect(warn.mock.calls.map((c) => String(c[0]))).toEqual([`[parked-control] kind=client_ids_not_array app=tg-aut type=${type}: app treated as disabled`]);
+        }
+        // An empty array is a valid allow list naming nobody: disabled, no malformed line.
+        await set([{ _id: 'global', enabled: true }, { _id: 'tg-aut', enabled: true, clientIds: [] }]);
+        warn.mockClear();
+        await notOpened();
+        expect(warn).not.toHaveBeenCalled();
+      } finally { warn.mockRestore(); }
+    });
     test('clientIds includes the client: opened', async () => {
       await set([{ _id: 'global', enabled: true }, { _id: 'tg-aut', enabled: true, clientIds: ['shruthi1'] }]);
       expect(await openSwapEpisode(col(), input(), { logger, control: ctl() })).toBe('inserted');

@@ -278,31 +278,6 @@ describe('SessionAuditService (real in-memory mongo)', () => {
         });
     });
 
-    describe('cleanupOldSessions', () => {
-        it('deletes old inactive sessions', async () => {
-            const old = await service.createAuditRecord(baseCreate({ sessionString: 'old' }));
-            // Bypass mongoose timestamps middleware by writing through the raw collection
-            await connection.collection(model.collection.name).updateOne(
-                { _id: (old as any)._id },
-                { $set: { isActive: false, createdAt: new Date(Date.now() - 200 * 86400000) } },
-                { timestamps: false } as any,
-            );
-            const res = await service.cleanupOldSessions(90);
-            expect(res.deletedCount).toBe(1);
-        });
-
-        it('keeps recent / active sessions', async () => {
-            await service.createAuditRecord(baseCreate());
-            const res = await service.cleanupOldSessions(90);
-            expect(res.deletedCount).toBe(0);
-        });
-
-        it('rethrows on db error', async () => {
-            jest.spyOn(model, 'deleteMany').mockImplementationOnce(() => { throw new Error('del boom'); });
-            await expect(service.cleanupOldSessions()).rejects.toThrow('del boom');
-        });
-    });
-
     describe('findRecentSessions', () => {
         it('returns empty for invalid mobile', async () => {
             expect(await service.findRecentSessions('')).toEqual([]);

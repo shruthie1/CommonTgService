@@ -35,9 +35,18 @@ export interface ParkedGuardCollection {
 export const PARKED_CONTROL_APPS = ['tg-aut', 'promote'] as const;
 
 /**
+ * Batch 6: one greppable line when a parkedControl app doc has a `clientIds` that is present but not an array; the
+ * app then counts as disabled. Same text as tg-platform ParkedControlRepository.readState. console (not the Nest
+ * Logger): these helpers stay dependency-free (tg-platform parked-cms-mirror.test.mjs runs them in a vm).
+ */
+export function warnClientIdsNotArray(app: string, clientIds: unknown): void {
+  console.warn(`[parked-control] kind=client_ids_not_array app=${app} type=${clientIds === null ? 'null' : typeof clientIds}: app treated as disabled`);
+}
+
+/**
  * Review M8: episode-filter clauses for the app/client pairs parkedControl ENABLES. [] = none enabled (no episode
- * counts). Enabled = `global.enabled === true` AND the app doc's `enabled === true` AND (no `clientIds` array OR it
- * includes the episode's clientId). A missing doc = disabled. MIRROR: tg-platform parked-control.repository.ts
+ * counts). Enabled = `global.enabled === true` AND the app doc's `enabled === true` AND (no `clientIds` field OR an
+ * array that includes the episode's clientId). A missing doc, or a `clientIds` that is not an array, = disabled. MIRROR: tg-platform parked-control.repository.ts
  * `readState` and parked-swap-episode.ts `tgAutParkedEnabled`. Change all together.
  */
 export function parkedEnabledEpisodeClauses(docs: Record<string, unknown>): Record<string, unknown>[] {
@@ -50,6 +59,11 @@ export function parkedEnabledEpisodeClauses(docs: Record<string, unknown>): Reco
   for (const app of PARKED_CONTROL_APPS) {
     const d = doc(app);
     if (d?.enabled !== true) continue;
+    // Batch 6: clientIds present but not an array (string, object, null: a mongosh typo) = app DISABLED, never "all".
+    if (d.clientIds !== undefined && !Array.isArray(d.clientIds)) {
+      warnClientIdsNotArray(app, d.clientIds);
+      continue;
+    }
     if (Array.isArray(d.clientIds)) {
       clauses.push({ app, clientId: { $in: d.clientIds.filter((c): c is string => typeof c === 'string') } });
     } else {

@@ -359,27 +359,6 @@ export class SessionAuditService {
         }
     }
 
-    /**
-     * Clean up old session records (older than specified days)
-     */
-    async cleanupOldSessions(days: number = 90): Promise<{ deletedCount: number }> {
-        try {
-            const cutoffDate = new Date();
-            cutoffDate.setDate(cutoffDate.getDate() - days);
-
-            const result = await this.sessionAuditModel.deleteMany({
-                createdAt: { $lt: cutoffDate },
-                isActive: false
-            });
-
-            this.logger.info('system', `Cleaned up ${result.deletedCount} old session records`);
-            return { deletedCount: result.deletedCount };
-        } catch (error) {
-            this.logger.error('system', 'Failed to cleanup old sessions', error);
-            throw error;
-        }
-    }
-
     async findRecentSessions(mobile: string, days: number = 30): Promise<SessionAudit[]> {
         try {
             if (!mobile || typeof mobile !== 'string' || mobile.trim().length === 0) {

@@ -2,7 +2,7 @@
 // that tg-platform's parked responder may hold. Fail closed on every read problem.
 import mongoose, { Connection } from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
-import { checkParkedSession, describeParkedVerdict, openParkedEpisodeMobiles, parkedMobileForms } from '../parked-session-guard';
+import { checkParkedSession, describeParkedVerdict, openParkedEpisodeMobiles, parkedEnabledEpisodeClauses, parkedMobileForms } from '../parked-session-guard';
 
 // parkedControl defaults to an enabled doc for every _id (global and both apps on, no clientIds list): review M8.
 function fakeDb(rows: { parkedAccounts?: any; accountLeases?: any; parkedControl?: any; throwOn?: string; stall?: boolean } = {}) {
@@ -204,5 +204,55 @@ describe('M8: parkedControl read problems keep the guard fail closed', () => {
     const started = Date.now();
     expect(await checkParkedSession(db, '919000080032', { deadlineMs: 50 })).toMatchObject({ busy: true, reason: 'read_error' });
     expect(Date.now() - started).toBeLessThan(2_000);
+  });
+});
+
+describe('batch 6: parkedEnabledEpisodeClauses, clientIds present but not an array', () => {
+  it('string, object or null clientIds disables that app (never "every client") and logs one kind= line', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      for (const [bad, type] of [['c1', 'string'], [{ c1: true }, 'object'], [null, 'null']] as const) {
+        warn.mockClear();
+        const clauses = parkedEnabledEpisodeClauses({
+          global: { enabled: true },
+          'tg-aut': { enabled: true, clientIds: bad },
+          promote: { enabled: true, clientIds: ['c2'] },
+        });
+        expect(clauses).toEqual([{ app: 'promote', clientId: { $in: ['c2'] } }]);
+        expect(warn.mock.calls.map((c) => String(c[0]))).toEqual([`[parked-control] kind=client_ids_not_array app=tg-aut type=${type}: app treated as disabled`]);
+      }
+      warn.mockClear();
+      expect(parkedEnabledEpisodeClauses({ global: { enabled: true }, 'tg-aut': { enabled: true }, promote: { enabled: true, clientIds: [] } }))
+        .toEqual([{ app: 'tg-aut' }, { app: 'promote', clientId: { $in: [] } }]);
+      expect(warn).not.toHaveBeenCalled();
+    } finally { warn.mockRestore(); }
+  });
+
+  it('checkParkedSession: malformed clientIds on the only enabled app = no episode read, free unless a lease', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const db = fakeDb({ parkedControl: { enabled: true, clientIds: 'c1' }, parkedAccounts: { _id: 'ep' } });
+      expect(await checkParkedSession(db, '919000080041')).toEqual({ busy: false });
+      expect(db.calls.some((c) => c.name === 'parkedAccounts')).toBe(false);
+      expect(warn.mock.calls.some((c) => String(c[0]).startsWith('[parked-control] kind=client_ids_not_array'))).toBe(true);
+      // The lease read is independent of parkedControl: still busy.
+      const leased = fakeDb({ parkedControl: { enabled: true, clientIds: 'c1' }, parkedAccounts: { _id: 'ep' }, accountLeases: { _id: '919000080041' } });
+      expect(await checkParkedSession(leased, '919000080041')).toEqual({ busy: true, reason: 'parked_lease' });
+    } finally { warn.mockRestore(); }
+  });
+
+  it('openParkedEpisodeMobiles: a malformed app drops out of the filter, its enabled sibling still counts', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const docs: Record<string, unknown> = { global: { enabled: true }, 'tg-aut': { enabled: true, clientIds: { c1: true } }, promote: { enabled: true, clientIds: ['c2'] } };
+      const control = { findOne: async (f: any) => docs[f._id] ?? null };
+      let seen: any = null;
+      const episodes = { find: (filter: any) => { seen = filter; return { toArray: async () => [{ mobile: '919000080051' }] }; } };
+      const out = await openParkedEpisodeMobiles(episodes as any, { control: control as any });
+      expect(out.controlError).toBeUndefined();
+      expect(seen.$or).toEqual([{ app: 'promote', clientId: { $in: ['c2'] } }]);
+      expect([...out.open]).toEqual(['919000080051']);
+      expect(warn.mock.calls.map((c) => String(c[0]))).toEqual(['[parked-control] kind=client_ids_not_array app=tg-aut type=object: app treated as disabled']);
+    } finally { warn.mockRestore(); }
   });
 });

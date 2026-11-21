@@ -103,6 +103,9 @@ export class SessionAudit {
     @ApiProperty({ description: 'When the last error occurred' })
     @Prop()
     lastErrorAt?: Date;
+
+    // Legacy (schema audit 2026-11-21): old rows also carry `retryAttempts` and `previousSessionString`. No code
+    // writes or reads them now, so they have no @Prop on purpose. The data stays; do not $unset it.
 }
 
 export const SessionAuditSchema = SchemaFactory.createForClass(SessionAudit);
