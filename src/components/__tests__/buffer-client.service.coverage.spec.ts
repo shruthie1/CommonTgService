@@ -481,6 +481,7 @@ describe('BufferClientService coverage', () => {
 
         it('queues joins for an eligible buffer client below target', async () => {
             await service.create(makeBufferClientData({ mobile: '15551500001', channels: 10, status: 'active', clientId: 'test-client-1' }));
+            await BufferClientModel.collection.updateMany({ mobile: { $in: ['15551500001'] } }, { $set: { warmupPhase: WarmupPhase.GROWING } }); // only growing+ joins (2026-11-21)
             jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
             jest.spyOn(channelInfoModule, 'channelInfo').mockResolvedValue({
@@ -495,6 +496,7 @@ describe('BufferClientService coverage', () => {
 
         it('skips channels with a live joinRequests entry for this mobile (pending request not re-sent)', async () => {
             await service.create(makeBufferClientData({ mobile: '15551500091', channels: 10, status: 'active', clientId: 'test-client-1' }));
+            await BufferClientModel.collection.updateMany({ mobile: { $in: ['15551500091'] } }, { $set: { warmupPhase: WarmupPhase.GROWING } }); // only growing+ joins (2026-11-21)
             const JoinRequestModel = connection.model('JoinRequestBufferSkip', JoinRequestSchema, 'joinRequests_buffer_skip');
             await JoinRequestModel.create({ mobile: '15551500091', channelId: 'pending1', pool: 'buffer', requestedAt: new Date() });
             await JoinRequestModel.create({ mobile: '15551500099', channelId: 'otherMobile1', pool: 'buffer', requestedAt: new Date() });
@@ -514,6 +516,7 @@ describe('BufferClientService coverage', () => {
 
         it('orders approval-only (joinRequestRequired) channels after instant-join channels', async () => {
             await service.create(makeBufferClientData({ mobile: '15551500092', channels: 10, status: 'active', clientId: 'test-client-1' }));
+            await BufferClientModel.collection.updateMany({ mobile: { $in: ['15551500092'] } }, { $set: { warmupPhase: WarmupPhase.GROWING } }); // only growing+ joins (2026-11-21)
             jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
             jest.spyOn(channelInfoModule, 'channelInfo').mockResolvedValue({ ids: ['x1'], canSendFalseCount: 0, canSendFalseChats: [] } as any);
@@ -569,6 +572,7 @@ describe('BufferClientService coverage', () => {
             const getClient = jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
             jest.spyOn(channelInfoModule, 'channelInfo')
+                // Recovery tier, most channels first (review 2026-11-22): ...14 (199) before ...16 (50).
                 .mockResolvedValueOnce({ ids: idsBelowFloor, canSendFalseCount: 0, canSendFalseChats: [] } as any)
                 .mockResolvedValueOnce({ ids: idsAtFloor, canSendFalseCount: 0, canSendFalseChats: [] } as any);
             activeChannelsService.getActiveChannels.mockResolvedValue([{ channelId: 'n1', username: 'n1', canSendMsgs: true }]);
@@ -601,13 +605,14 @@ describe('BufferClientService coverage', () => {
             expect((service as any).leaveChannelMap.get('15551500017')).toEqual(['leave-1', 'leave-2']);
         });
 
-        it('queues terminal recovery before higher-channel warming accounts', async () => {
-            await service.create(makeBufferClientData({ mobile: '15551500007', channels: 300, status: 'active', clientId: 'test-client-1' }));
-            await service.create(makeBufferClientData({ mobile: '15551500008', channels: 190, status: 'active', clientId: 'test-client-1' }));
-            await BufferClientModel.collection.updateOne(
-                { mobile: '15551500008' },
-                { $set: { warmupPhase: WarmupPhase.SESSION_ROTATED } },
-            );
+        it('picks the recovery tier first, then never-served growing by fewest channels, never pre-growing phases (2026-11-21/22)', async () => {
+            await service.create(makeBufferClientData({ mobile: '15551500007', channels: 0, status: 'active', clientId: 'test-client-1' }));   // enrolled: never joins
+            await service.create(makeBufferClientData({ mobile: '15551500008', channels: 190, status: 'active', clientId: 'test-client-1' })); // rotated below floor
+            await service.create(makeBufferClientData({ mobile: '15551500009', channels: 0, status: 'active', clientId: 'test-client-1' }));   // growing, 0 channels
+            await service.create(makeBufferClientData({ mobile: '15551500010', channels: 40, status: 'active', clientId: 'test-client-1' }));  // growing, served last round
+            await BufferClientModel.collection.updateOne({ mobile: '15551500008' }, { $set: { warmupPhase: WarmupPhase.SESSION_ROTATED } });
+            await BufferClientModel.collection.updateMany({ mobile: { $in: ['15551500009', '15551500010'] } }, { $set: { warmupPhase: WarmupPhase.GROWING } });
+            (service as any).lastJoinServedAt.set('15551500010', Date.now() - 60_000);
             const getClient = jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
             jest.spyOn(channelInfoModule, 'channelInfo').mockResolvedValue({ ids: [], canSendFalseCount: 0, canSendFalseChats: [] } as any);
@@ -615,7 +620,9 @@ describe('BufferClientService coverage', () => {
 
             await service.refillJoinQueue('test-client-1');
 
-            expect(getClient.mock.calls.map(([mobile]) => mobile)).toEqual(['15551500008', '15551500007']);
+            // Old order (channels DESC, enrolled included) was 008, 010, 007, 009. Now: rotated ...08
+            // (recovery tier), then growing never-served ...09, then ...10 (served last round).
+            expect(getClient.mock.calls.map(([mobile]) => mobile)).toEqual(['15551500008', '15551500009', '15551500010']);
         });
 
         it('skips the live primary client mobile', async () => {
@@ -633,6 +640,7 @@ describe('BufferClientService coverage', () => {
 
         it('deactivates on permanent error while refilling', async () => {
             await service.create(makeBufferClientData({ mobile: '15551500003', channels: 10, status: 'active', clientId: 'test-client-1' }));
+            await BufferClientModel.collection.updateMany({ mobile: { $in: ['15551500003'] } }, { $set: { warmupPhase: WarmupPhase.GROWING } }); // only growing+ joins (2026-11-21)
             jest.spyOn(connectionManager, 'getClient').mockRejectedValue(new Error('AUTH_KEY_UNREGISTERED'));
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
             isPermanentError.mockReturnValue(true);
@@ -712,6 +720,7 @@ describe('BufferClientService coverage', () => {
 
         it('deactivates a buffer client on permanent error during join sweep', async () => {
             await service.create(makeBufferClientData({ mobile: '15551600003', channels: 10, status: 'active', clientId: 'test-client-1' }));
+            await BufferClientModel.collection.updateMany({ mobile: { $in: ['15551600003'] } }, { $set: { warmupPhase: WarmupPhase.GROWING } }); // only growing+ joins (2026-11-21)
             jest.spyOn(service as any, 'createTimeout').mockImplementation(() => 1 as any);
             jest.spyOn(connectionManager, 'getClient').mockRejectedValue(new Error('SESSION_REVOKED'));
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
@@ -736,6 +745,7 @@ describe('BufferClientService coverage', () => {
             // No clientId → joinScopeClientId null + "all" logging (1414/1425).
             // >=220 channels → channelsService.getActiveChannels branch (1448-1450 false side).
             await service.create(makeBufferClientData({ mobile: '15551600010', channels: 240, status: 'active', clientId: 'test-client-1' }));
+            await BufferClientModel.collection.updateMany({ mobile: { $in: ['15551600010'] } }, { $set: { warmupPhase: WarmupPhase.GROWING } }); // only growing+ joins (2026-11-21)
             jest.spyOn(service as any, 'createTimeout').mockImplementation(() => 1 as any);
             jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
@@ -1708,6 +1718,7 @@ describe('BufferClientService coverage', () => {
 
         it('uses channelsService for accounts at/above 220 channels (line 795)', async () => {
             await service.create(makeBufferClientData({ mobile: '15553100010', channels: 240, status: 'active', clientId: 'test-client-1' }));
+            await BufferClientModel.collection.updateMany({ mobile: { $in: ['15553100010'] } }, { $set: { warmupPhase: WarmupPhase.GROWING } }); // only growing+ joins (2026-11-21)
             jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
             jest.spyOn(channelInfoModule, 'channelInfo').mockResolvedValue({
@@ -1831,6 +1842,8 @@ describe('BufferClientService coverage', () => {
             );
             // One doc with channels=0 exercises the `bc.channels || 0` fallback (line 1086).
             await BufferClientModel.updateOne({ mobile: '15553500003' }, { $set: { channels: 0 } });
+            // First IST quarter: 4 runs left, so 27 due -> cap 8 (not time-of-day dependent).
+            jest.spyOn(service as any, 'getWarmupRunsLeftToday').mockReturnValue(4);
             const report = await service.diagnoseWarmupPipeline();
             const sim = report.simulation as any;
             expect(report.totalActive).toBe(30);
@@ -1994,6 +2007,13 @@ describe('BufferClientService coverage', () => {
                 totalNeeded: 0, windowNeeds: [], totalActive: 0, totalNeededForCount: 0,
                 calculationReason: 'ok', priority: 0, replenishmentWindowNeeds: [],
             });
+            // create() stamps a fresh enrolment; restore the intended lifecycle (review 2026-11-22: a
+            // fresh 'wait' is DB-only and bypasses the cap, so the cap must be tested on slot steps).
+            await BufferClientModel.collection.updateMany({ mobile: /^1555500[12]/ }, { $set: { enrolledAt: old, warmupJitter: 0 } });
+            await BufferClientModel.collection.updateOne({ mobile: '15555001000' }, { $set: { warmupPhase: WarmupPhase.SETTLING, lastUpdateAttempt: staleAttempt } });
+            await BufferClientModel.collection.updateMany({ mobile: /^15555002/ }, { $set: { warmupPhase: WarmupPhase.MATURING, channels: 230, lastUpdateAttempt: freshAttempt, privacyUpdatedAt: old, twoFASetAt: old, otherAuthsRemovedAt: old, profilePicsDeletedAt: old, nameBioUpdatedAt: old, usernameUpdatedAt: old, profilePicsUpdatedAt: null } });
+            // 10 due slot steps, 4 runs left -> cap 8 (pinned: the cap depends on the IST time of day).
+            jest.spyOn(service as any, 'getWarmupRunsLeftToday').mockReturnValue(4);
             const processed: string[] = [];
             const plannedActions: string[] = [];
             jest.spyOn(service as any, 'processClient').mockImplementation(async (doc: any, _client: any, warmupAction: any) => {

@@ -46,8 +46,15 @@ describe('classifyBufferForCap', () => {
 });
 
 describe('engineWeeklyCeiling', () => {
-    it('is 5 sensitive/run x 4 runs/day x 7 days / 3 sensitive actions per account, floored', () => {
-        expect(engineWeeklyCeiling(5, 4)).toBe(46);
+    it('is 85% of sensitive/run x 4 runs/day x 7 days, / 3 sensitive actions per account, floored (review 2026-11-22)', () => {
+        expect(engineWeeklyCeiling(13, 4)).toBe(103); // 364 x 0.85 / 3 = 103.1
+        expect(engineWeeklyCeiling(11, 4)).toBe(87);  // 308 x 0.85 / 3 = 87.3 (was 102: no headroom)
+        expect(engineWeeklyCeiling(5, 4)).toBe(39);   // 140 x 0.85 / 3 = 39.7 (was 46)
+    });
+    it('always leaves at least 15% of the weekly sensitive slots free for retries', () => {
+        for (let s = 1; s <= 20; s++) {
+            expect(engineWeeklyCeiling(s, 4) * 3).toBeLessThanOrEqual(s * 4 * 7 * 0.85);
+        }
     });
 });
 

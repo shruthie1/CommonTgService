@@ -124,13 +124,6 @@ export interface WarmupRunProfile {
      * checks). Promote: a few per run (owner Q2, 2026-10-27), never-checked/oldest first.
      */
     healthCheckShare: number;
-    /**
-     * Whether session_rotated accounts in the run count toward the self-healing mutation cap's
-     * backlog (getEffectiveUpdatesCap). Buffer: true, as before the unification (its loop always
-     * held them). Promote: false, as before Q2 brought them into its loop; counting them would raise
-     * promote's cap (post-review P1-1; owner: nothing gets faster).
-     */
-    capCountsSessionRotated: boolean;
 }
 
 export const BUFFER_PROFILE: Readonly<PoolProfile> = Object.freeze({
@@ -162,7 +155,7 @@ export const BUFFER_PROFILE: Readonly<PoolProfile> = Object.freeze({
         resultTemplate: 'Buffer Join queued for: {join}, Leave queued for: {leave}',
         wrapError: null,
     }),
-    warmupRun: Object.freeze({ logGoodIdsCount: true, healthCheckShare: HEALTH_CHECK_CONNECTIONS_PER_RUN, capCountsSessionRotated: true }),
+    warmupRun: Object.freeze({ logGoodIdsCount: true, healthCheckShare: HEALTH_CHECK_CONNECTIONS_PER_RUN }),
     consumerMinAgeDays: 15,
 }) as Readonly<PoolProfile>;
 
@@ -195,7 +188,7 @@ export const PROMOTE_PROFILE: Readonly<PoolProfile> = Object.freeze({
         resultTemplate: 'Initiated Joining channels for {join} | Queued for leave: {leave}',
         wrapError: Object.freeze({ log: 'Unexpected error during joinchannelForPromoteClients:', message: 'Failed to initiate channel joining process' }),
     }),
-    warmupRun: Object.freeze({ logGoodIdsCount: false, healthCheckShare: 4, capCountsSessionRotated: false }),
+    warmupRun: Object.freeze({ logGoodIdsCount: false, healthCheckShare: 4 }),
     consumerMinAgeDays: 15, // Q8 2026-10-27 (was 7)
 }) as Readonly<PoolProfile>;
 

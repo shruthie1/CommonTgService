@@ -9,6 +9,9 @@ import {
     MIN_DAYS_AFTER_NAME_BIO_BEFORE_USERNAME,
     MIN_DAYS_AFTER_USERNAME_BEFORE_GROWING,
     MIN_CHANNELS_FOR_MATURING,
+    getWarmupActionDueAt,
+    isWarmupSlotAction,
+    getGrowingDaysInPhase,
 } from '../warmup-phases';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -292,34 +295,30 @@ describe('getWarmupPhaseAction', () => {
             expect(result.action).toBe('join_channels');
         });
 
-        test('ADVANCE DEADLINE: past the growing deadline, an account advances with WHATEVER channels it has (never stranded)', () => {
-            // Policy: age never strands an account. Past GROWING_ADVANCE_DEADLINE_DAYS the channel
-            // target stops gating — the account advances to maturing regardless of channel count.
+        test('FLOOR GATE (2026-11-21): past the old growing deadline, a below-floor account keeps joining, never advances', () => {
+            // Owner: growing never advances below the pool floor; the account stays in growing (join
+            // priority) and the warmup run logs it as stuck. Old code advanced it to maturing here.
             const doc = makeDoc({
                 warmupPhase: WarmupPhase.GROWING,
                 enrolledAt: daysAgo(50, now),   // ~36 days growing (> GROWING_ADVANCE_DEADLINE_DAYS=30)
-                channels: 60,                   // under the normal/relaxed target — advances anyway
+                channels: 60,
                 warmupJitter: 0,
                 ...fullySettledIdentity,
             });
             const result = getWarmupPhaseAction(doc, now);
-            expect(result.phase).toBe(WarmupPhase.MATURING);
-            expect(result.action).toBe('upload_photo'); // advancing, not join_channels
+            expect(result).toEqual({ phase: WarmupPhase.GROWING, action: 'join_channels', organicIntensity: 'light' });
         });
 
-        test('ADVANCE DEADLINE: even ZERO channels advances past the deadline (age never retires; no dead-end)', () => {
-            // "no mobile is ch=0 in practice" — but the logic must still not strand a 0-channel
-            // account: past the deadline it advances rather than looping join_channels forever.
-            const doc = makeDoc({
-                warmupPhase: WarmupPhase.GROWING,
-                enrolledAt: daysAgo(50, now),
-                channels: 0,
-                warmupJitter: 0,
-                ...fullySettledIdentity,
-            });
-            const result = getWarmupPhaseAction(doc, now);
-            expect(result.phase).toBe(WarmupPhase.MATURING);
-            expect(result.action).toBe('upload_photo'); // advances, never stuck
+        test('FLOOR GATE: zero channels past the deadline stays in growing (stuck is logged, never retired)', () => {
+            const doc = makeDoc({ warmupPhase: WarmupPhase.GROWING, enrolledAt: daysAgo(50, now), channels: 0, warmupJitter: 0, ...fullySettledIdentity });
+            expect(getWarmupPhaseAction(doc, now).action).toBe('join_channels');
+        });
+
+        test('FLOOR GATE uses the pool floor: promote 229 keeps joining, 230 advances; buffer advances at 200', () => {
+            const base = { warmupPhase: WarmupPhase.GROWING, enrolledAt: daysAgo(50, now), warmupJitter: 0, ...fullySettledIdentity };
+            expect(getWarmupPhaseAction(makeDoc({ ...base, channels: 229 }), now, { operationalFloor: 230 }).action).toBe('join_channels');
+            expect(getWarmupPhaseAction(makeDoc({ ...base, channels: 230 }), now, { operationalFloor: 230 }).phase).toBe(WarmupPhase.MATURING);
+            expect(getWarmupPhaseAction(makeDoc({ ...base, channels: 200 }), now).phase).toBe(WarmupPhase.MATURING);
         });
 
         test('BEFORE DEADLINE: growing only 20 days, 60 channels → still joining (target still gates within the window)', () => {
@@ -905,5 +904,48 @@ describe('Normal phases unaffected by catch-up', () => {
         });
         const result = getWarmupPhaseAction(doc, now);
         expect(result.action).toBe('wait');
+    });
+});
+
+describe('warm-up due-time helpers (2026-11-21)', () => {
+    const t0 = Date.UTC(2026, 10, 1);
+    const d = (n: number) => new Date(t0 + n * ONE_DAY_MS);
+
+    it('isWarmupSlotAction: identity/rotation steps are slots; join/organic/wait are not', () => {
+        for (const a of ['set_privacy', 'set_2fa', 'remove_external_login_sessions', 'delete_photos', 'update_name_bio', 'update_username', 'upload_photo', 'rotate_session'] as const) {
+            expect(isWarmupSlotAction(a)).toBe(true);
+        }
+        for (const a of ['join_channels', 'organic_only', 'wait'] as any[]) expect(isWarmupSlotAction(a)).toBe(false);
+        expect(isWarmupSlotAction(undefined)).toBe(false);
+    });
+
+    it('getWarmupActionDueAt mirrors each gate', () => {
+        const doc = {
+            warmupJitter: 1, enrolledAt: d(0), privacyUpdatedAt: d(3), twoFASetAt: d(6),
+            otherAuthsRemovedAt: d(9), profilePicsDeletedAt: d(13), nameBioUpdatedAt: d(16), usernameUpdatedAt: d(30),
+        };
+        expect(getWarmupActionDueAt(doc, 'set_privacy')).toBe(d(WARMUP_PHASE_THRESHOLDS.settling + 1).getTime());
+        expect(getWarmupActionDueAt(doc, 'set_2fa')).toBe(d(3 + MIN_DAYS_BETWEEN_IDENTITY_STEPS).getTime());
+        expect(getWarmupActionDueAt(doc, 'remove_external_login_sessions')).toBe(d(6 + MIN_DAYS_BETWEEN_IDENTITY_STEPS).getTime());
+        expect(getWarmupActionDueAt(doc, 'delete_photos')).toBe(Math.max(
+            d(9 + MIN_DAYS_AFTER_AUTH_CLEANUP_BEFORE_IDENTITY).getTime(), d(WARMUP_PHASE_THRESHOLDS.identity + 1).getTime()));
+        expect(getWarmupActionDueAt(doc, 'update_name_bio')).toBe(d(13 + MIN_DAYS_BETWEEN_IDENTITY_STEPS).getTime());
+        expect(getWarmupActionDueAt(doc, 'update_username')).toBe(d(16 + MIN_DAYS_AFTER_NAME_BIO_BEFORE_USERNAME).getTime());
+        expect(getWarmupActionDueAt(doc, 'upload_photo')).toBe(Math.max(
+            d(WARMUP_PHASE_THRESHOLDS.maturing + 1).getTime(), d(30 + MIN_DAYS_AFTER_USERNAME_BEFORE_GROWING).getTime()));
+    });
+
+    it('getWarmupActionDueAt returns null for non-slot actions and when the prior step is missing', () => {
+        expect(getWarmupActionDueAt({ enrolledAt: d(0) }, 'join_channels')).toBeNull();
+        expect(getWarmupActionDueAt({ enrolledAt: d(0) }, 'rotate_session')).toBeNull();
+        expect(getWarmupActionDueAt({ enrolledAt: d(0) }, 'set_2fa')).toBeNull();
+        expect(getWarmupActionDueAt({}, 'set_privacy')).toBeNull();
+    });
+
+    it('getGrowingDaysInPhase counts from the growing threshold (+jitter), 0 before it or without dates', () => {
+        const g = WARMUP_PHASE_THRESHOLDS.growing;
+        expect(getGrowingDaysInPhase({ enrolledAt: d(0), warmupJitter: 2 }, d(g + 2 + 10).getTime())).toBeCloseTo(10);
+        expect(getGrowingDaysInPhase({ enrolledAt: d(0) }, d(g - 1).getTime())).toBe(0);
+        expect(getGrowingDaysInPhase({}, t0)).toBe(0);
     });
 });

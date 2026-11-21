@@ -104,12 +104,20 @@ export function classifyBufferForCap(doc: CapClassifiableDoc, now: number, opts:
 
 /**
  * Warmup engine ceiling (accounts that can START warmup per week without changing any warmup cap):
- * MAX_SENSITIVE_ACTIONS_PER_CYCLE (5) x WARMUP_RUNS_PER_DAY (4) x 7 days / sensitive actions per
- * account (set_2fa, remove_external_login_sessions, update_username = 3) = 46.67 -> 46. Config can only lower it.
+ * 85% of the weekly sensitive-step capacity (MAX_SENSITIVE_ACTIONS_PER_CYCLE x WARMUP_RUNS_PER_DAY
+ * (4) x 7 days) / sensitive actions per account (set_2fa, remove_external_login_sessions,
+ * update_username = 3). The 15% headroom absorbs failed and retried sensitive steps, so a week of
+ * failures does not pile up a backlog. Config can only lower it.
+ * Demand (2026-11-21): ~10 mains/day consumed and ~27% of enrolled accounts retire before ready,
+ * so ceil(10 x 7 / 0.73) = 96/week must start.
+ * History: 5/run gave 5 x 4 x 7 / 3 = 46/week (too low); 11/run gave 102/week with 306 of 308 steps
+ * used (no headroom, review 2026-11-22). Now 13/run: capacity 364, ceiling floor(364 x 0.85 / 3)
+ * = 103/week (>= 96), using 309 of 364 steps (85%).
  */
 export const SENSITIVE_ACTIONS_PER_ACCOUNT = 3;
+export const ENGINE_SENSITIVE_HEADROOM_PCT = 85;
 export function engineWeeklyCeiling(maxSensitivePerRun: number, runsPerDay: number): number {
-    return Math.floor((maxSensitivePerRun * runsPerDay * 7) / SENSITIVE_ACTIONS_PER_ACCOUNT);
+    return Math.floor((maxSensitivePerRun * runsPerDay * 7 * ENGINE_SENSITIVE_HEADROOM_PCT) / (SENSITIVE_ACTIONS_PER_ACCOUNT * 100));
 }
 
 export const LEGACY_HEALTHY_CAP = 20;

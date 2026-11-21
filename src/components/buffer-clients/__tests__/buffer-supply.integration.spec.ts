@@ -142,16 +142,28 @@ describe('buffer enrolment follows demand (integration)', () => {
         expect(enrolledFor('stocked-client')).toBe(0);
     });
 
-    it('stops at the warmup engine ceiling: no enrolment once 46 accounts started warmup in 7 days', async () => {
+    it('stops at the warmup engine ceiling: no enrolment once 103 accounts started warmup in 7 days', async () => {
         await seedGraduated('harsh-client', 20, { spamStatus: 'harsh', spamCheckedAt: new Date(), limitedUntil: null }, '1555700');
-        // 46 recently-enrolled accounts on an unrelated client (inactive so they do not count as supply).
-        await BufferClientModel.insertMany(Array.from({ length: 46 }, (_, i) => makeBufferClientData({
+        // 103 recently-enrolled accounts on an unrelated client (inactive so they do not count as supply).
+        // Ceiling = 85% of sensitive capacity 13 x 4 runs x 7 = 364, / 3 per account = 103 (review 2026-11-22; was 46).
+        await BufferClientModel.insertMany(Array.from({ length: 103 }, (_, i) => makeBufferClientData({
             mobile: `1555800${String(i).padStart(4, '0')}`, clientId: 'other', status: 'inactive', enrolledAt: new Date(Date.now() - DAY),
         } as any)));
 
         await service.checkBufferClients();
 
         expect(createSpy).not.toHaveBeenCalled();
+    });
+
+    it('sizes the weekly enrolment ceiling from demand with 15% sensitive headroom: 103/week >= 96 needed (was 46, red on old code)', async () => {
+        // ~10 mains/day consumed, ~27% retire before ready -> ceil(10 x 7 / 0.73) = 96 must start each week.
+        const { config } = service.getBufferSupplyConfig();
+        expect(config.fleetWeeklyCeiling).toBe(103);
+        // 103 accounts x 3 sensitive steps = 309 <= 85% of the 13 x 4 x 7 = 364 weekly sensitive slots.
+        const sensitiveCapacity = (service as any).MAX_SENSITIVE_ACTIONS_PER_CYCLE * 4 * 7;
+        expect(sensitiveCapacity).toBe(364);
+        expect(config.fleetWeeklyCeiling * 3).toBeLessThanOrEqual(sensitiveCapacity * 0.85);
+        expect(config.fleetWeeklyCeiling).toBeGreaterThanOrEqual(Math.ceil((10 * 7) / 0.73));
     });
 
     it('sizes the target to the client\'s own swaps: 14 swaps in 14 days -> target 32', async () => {
@@ -167,7 +179,7 @@ describe('buffer enrolment follows demand (integration)', () => {
         const entry = plan.entries.find((e) => e.clientId === 'harsh-client')!;
         expect(entry).toMatchObject({ consumed: 14, target: 32, cap: 37, counted: 20, need: 12, allocated: 10 });
         expect(plan.entries.find((e) => e.clientId === 'stocked-client')).toMatchObject({ target: 10, need: 0, allocated: 0 });
-        expect(plan.fleet).toMatchObject({ budget: 10, weeklyCeiling: 46 });
+        expect(plan.fleet).toMatchObject({ budget: 10, weeklyCeiling: 103 });
     });
 
     it('reports excluded accounts by reason and lists never-checked mobiles for a SpamBot check', async () => {

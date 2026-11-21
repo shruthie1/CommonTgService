@@ -266,6 +266,7 @@ describe('PromoteClientService coverage', () => {
 
         it('queues joins for an eligible promote client', async () => {
             await service.create(makePromoteClientData({ mobile: '15551500001', channels: 10, status: 'active', clientId: 'test-client-1' }));
+            await PromoteClientModel.collection.updateMany({ mobile: { $in: ['15551500001'] } }, { $set: { warmupPhase: WarmupPhase.GROWING } }); // only growing+ joins (2026-11-21)
             jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
             jest.spyOn(channelInfoModule, 'channelInfo').mockResolvedValue({ ids: ['x'], canSendFalseCount: 0, canSendFalseChats: [] } as any);
@@ -276,6 +277,7 @@ describe('PromoteClientService coverage', () => {
 
         it('skips channels with a live joinRequests entry for this mobile (pending request not re-sent)', async () => {
             await service.create(makePromoteClientData({ mobile: '15551500091', channels: 10, status: 'active', clientId: 'test-client-1' }));
+            await PromoteClientModel.collection.updateMany({ mobile: { $in: ['15551500091'] } }, { $set: { warmupPhase: WarmupPhase.GROWING } }); // only growing+ joins (2026-11-21)
             const JoinRequestModel = connection.model('JoinRequestPromoteSkip', JoinRequestSchema, 'joinRequests_promote_skip');
             await JoinRequestModel.create({ mobile: '15551500091', channelId: 'pending1', pool: 'promote', requestedAt: new Date() });
             await JoinRequestModel.create({ mobile: '15551500099', channelId: 'otherMobile1', pool: 'promote', requestedAt: new Date() });
@@ -295,6 +297,7 @@ describe('PromoteClientService coverage', () => {
 
         it('orders approval-only (joinRequestRequired) channels after instant-join channels', async () => {
             await service.create(makePromoteClientData({ mobile: '15551500092', channels: 10, status: 'active', clientId: 'test-client-1' }));
+            await PromoteClientModel.collection.updateMany({ mobile: { $in: ['15551500092'] } }, { $set: { warmupPhase: WarmupPhase.GROWING } }); // only growing+ joins (2026-11-21)
             jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
             jest.spyOn(channelInfoModule, 'channelInfo').mockResolvedValue({ ids: ['x1'], canSendFalseCount: 0, canSendFalseChats: [] } as any);
@@ -344,6 +347,7 @@ describe('PromoteClientService coverage', () => {
             const getClient = jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
             jest.spyOn(channelInfoModule, 'channelInfo')
+                // Recovery tier, most channels first (review 2026-11-22): ...14 (199) before ...16 (50).
                 .mockResolvedValueOnce({ ids: idsBelowFloor, canSendFalseCount: 0, canSendFalseChats: [] } as any)
                 .mockResolvedValueOnce({ ids: idsAtFloor, canSendFalseCount: 0, canSendFalseChats: [] } as any);
             channelsService.getActiveChannels.mockResolvedValue([{ channelId: 'n1', username: 'n1', canSendMsgs: true }]);
@@ -397,6 +401,7 @@ describe('PromoteClientService coverage', () => {
             // the two-tier recovery query — had zero. The below-floor terminal account must be
             // processed FIRST even though the warming account has more channels.
             await service.create(makePromoteClientData({ mobile: '15551500021', channels: 300, status: 'active', clientId: 'test-client-1' }));
+            await PromoteClientModel.collection.updateMany({ mobile: { $in: ['15551500021'] } }, { $set: { warmupPhase: WarmupPhase.GROWING } }); // only growing+ joins (2026-11-21)
             await service.create(makePromoteClientData({ mobile: '15551500022', channels: 220, status: 'active', clientId: 'test-client-1' }));
             await PromoteClientModel.collection.updateOne(
                 { mobile: '15551500022' },
@@ -421,6 +426,7 @@ describe('PromoteClientService coverage', () => {
             // leaving no way to tell a temporary freeze from a permanent one. The client is only
             // queryable while the connection is open, so it must be passed from here.
             await service.create(makePromoteClientData({ mobile: '15551500031', channels: 10, status: 'active', clientId: 'test-client-1' }));
+            await PromoteClientModel.collection.updateMany({ mobile: { $in: ['15551500031'] } }, { $set: { warmupPhase: WarmupPhase.GROWING } }); // only growing+ joins (2026-11-21)
             const tgClient = { client: {} } as any;
             jest.spyOn(connectionManager, 'getClient').mockResolvedValue(tgClient);
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
@@ -443,6 +449,7 @@ describe('PromoteClientService coverage', () => {
 
         it('deactivates on permanent error', async () => {
             await service.create(makePromoteClientData({ mobile: '15551500003', channels: 10, status: 'active', clientId: 'test-client-1' }));
+            await PromoteClientModel.collection.updateMany({ mobile: { $in: ['15551500003'] } }, { $set: { warmupPhase: WarmupPhase.GROWING } }); // only growing+ joins (2026-11-21)
             jest.spyOn(connectionManager, 'getClient').mockRejectedValue(new Error('AUTH_KEY_DUPLICATED'));
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
             isPermanentError.mockReturnValue(true);
@@ -505,6 +512,7 @@ describe('PromoteClientService coverage', () => {
         it('queues join + leave based on channel info', async () => {
             await service.create(makePromoteClientData({ mobile: '15551600001', channels: 10, status: 'active', clientId: 'test-client-1' }));
             await service.create(makePromoteClientData({ mobile: '15551600002', channels: 20, status: 'active', clientId: 'test-client-1' }));
+            await PromoteClientModel.collection.updateMany({ mobile: { $in: ['15551600001', '15551600002'] } }, { $set: { warmupPhase: WarmupPhase.GROWING } }); // only growing+ joins (2026-11-21)
             jest.spyOn(service as any, 'createTimeout').mockImplementation(() => 1 as any);
             jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
@@ -525,6 +533,7 @@ describe('PromoteClientService coverage', () => {
 
         it('deactivates on permanent error during sweep', async () => {
             await service.create(makePromoteClientData({ mobile: '15551600003', channels: 10, status: 'active', clientId: 'test-client-1' }));
+            await PromoteClientModel.collection.updateMany({ mobile: { $in: ['15551600003'] } }, { $set: { warmupPhase: WarmupPhase.GROWING } }); // only growing+ joins (2026-11-21)
             jest.spyOn(service as any, 'createTimeout').mockImplementation(() => 1 as any);
             jest.spyOn(connectionManager, 'getClient').mockRejectedValue(new Error('SESSION_REVOKED'));
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
@@ -1650,6 +1659,7 @@ describe('PromoteClientService coverage', () => {
 
         it('uses broader channels pool once past 220 channels (583)', async () => {
             await service.create(makePromoteClientData({ mobile: '15554000003', channels: 230, status: 'active', clientId: 'test-client-1' }));
+            await PromoteClientModel.collection.updateMany({ mobile: { $in: ['15554000003'] } }, { $set: { warmupPhase: WarmupPhase.GROWING } }); // only growing+ joins (2026-11-21)
             jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
             // channelInfo reports 230 ids so fetchJoinCandidates takes the channelsService branch
@@ -1665,6 +1675,7 @@ describe('PromoteClientService coverage', () => {
 
     it('joinchannelForPromoteClients uses broader channels pool when at/over 220 (822)', async () => {
         await service.create(makePromoteClientData({ mobile: '15554600001', channels: 230, status: 'active', clientId: 'test-client-1' }));
+        await PromoteClientModel.collection.updateMany({ mobile: { $in: ['15554600001'] } }, { $set: { warmupPhase: WarmupPhase.GROWING } }); // only growing+ joins (2026-11-21)
         jest.spyOn(service as any, 'createTimeout').mockImplementation(() => 1 as any);
         jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
         jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
@@ -1748,6 +1759,13 @@ describe('PromoteClientService coverage', () => {
             jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
                 totalNeeded: 0, windowNeeds: [], totalActive: 0, totalNeededForCount: 0, calculationReason: 'ok', priority: 0,
             });
+            // create() stamps a fresh enrolment; restore the intended lifecycle (review 2026-11-22: a
+            // fresh 'wait' is DB-only and bypasses the cap, so the cap must be tested on slot steps).
+            await PromoteClientModel.collection.updateMany({ mobile: /^1555420[12]/ }, { $set: { enrolledAt: old, warmupJitter: 0 } });
+            await PromoteClientModel.collection.updateOne({ mobile: '15554201000' }, { $set: { warmupPhase: WarmupPhase.SETTLING, lastUpdateAttempt: staleAttempt } });
+            await PromoteClientModel.collection.updateMany({ mobile: /^15554202/ }, { $set: { warmupPhase: WarmupPhase.MATURING, channels: 230, lastUpdateAttempt: freshAttempt, privacyUpdatedAt: old, twoFASetAt: old, otherAuthsRemovedAt: old, profilePicsDeletedAt: old, nameBioUpdatedAt: old, usernameUpdatedAt: old, profilePicsUpdatedAt: null } });
+            // 10 due slot steps, 4 runs left -> cap 8 (pinned: the cap depends on the IST time of day).
+            jest.spyOn(service as any, 'getWarmupRunsLeftToday').mockReturnValue(4);
             const processed: string[] = [];
             const plannedActions: string[] = [];
             jest.spyOn(service as any, 'processClient').mockImplementation(async (doc: any, _client: any, warmupAction: any) => {
@@ -1769,6 +1787,9 @@ describe('PromoteClientService coverage', () => {
             for (let i = 0; i < 3; i++) {
                 await service.create(makePromoteClientData({ mobile: `1555421${String(i).padStart(4, '0')}`, status: 'active', clientId: 'test-client-1', warmupPhase: 'enrolled' }));
             }
+            // Enrolled 10 days ago: set_privacy is due (a slot step). A fresh account's 'wait' is
+            // DB-only and bypasses the cap since review 2026-11-22.
+            await PromoteClientModel.collection.updateMany({ mobile: /^1555421/ }, { $set: { enrolledAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000), warmupJitter: 0 } });
             // The effective per-run cap is self-healing (getEffectiveUpdatesCap clamps to
             // [MIN,MAX]). To force a cap of exactly 1 for this test, pin BOTH bounds to 1.
             (service as any).MAX_UPDATES_PER_CYCLE = 1;

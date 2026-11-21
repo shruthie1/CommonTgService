@@ -77,7 +77,6 @@ export const CURRENT = {
         joinSweepErrorWipesQueues: false,   // D39
         manualBulkEnrolCapsFromZero: false, // D10 (M12 commit)
         warmupRunHealthCheckConnects: 20,   // owner 2026-10-27: per-run cap on health-check connects
-        warmupRunCapCountsSessionRotated: true, // post-review P1-1: as before the unification (old buffer loop held them)
     },
     promote: {
         operationalFloor: 230,
@@ -99,7 +98,6 @@ export const CURRENT = {
         joinSweepErrorWipesQueues: false,   // M11
         manualBulkEnrolCapsFromZero: false, // D10 (M12 commit)
         warmupRunHealthCheckConnects: 4,    // Q2 2026-10-27: promote share of the per-run cap (was 0)
-        warmupRunCapCountsSessionRotated: false, // post-review P1-1: as before Q2 (old promote loop excluded them)
     },
 };
 
@@ -265,9 +263,9 @@ describe('pool onboarding parity (buffer vs promote)', () => {
     describe('M12 promote enrolment budget', () => {
         test('scheduled promote run hands the batch no more than the weekly engine budget', async () => {
             const svc: any = h.promote;
-            // 45 enrolled in the last 7 days (all inactive so they do not count as healthy supply):
-            // weekly ceiling 46 -> 1 slot left this week.
-            await h.models.promote.insertMany(Array.from({ length: 45 }, (_, i) => poolDoc('promote', {
+            // 102 enrolled in the last 7 days (all inactive so they do not count as healthy supply):
+            // weekly ceiling 103 (85% of sensitive cap 13 x 4 runs x 7, / 3; review 2026-11-22) -> 1 slot left.
+            await h.models.promote.insertMany(Array.from({ length: 102 }, (_, i) => poolDoc('promote', {
                 mobile: `9195000${String(i).padStart(5, '0')}`, status: 'inactive', enrolledAt: new Date(Date.now() - 864e5),
             })));
             jest.spyOn(svc, 'processClient').mockResolvedValue({ updateCount: 0 });
@@ -789,7 +787,7 @@ describe('pool onboarding parity (buffer vs promote)', () => {
                 sessionRotatedAt: new Date(Date.now() - 20 * day), ...extra,
             }));
 
-            test('P1-1: the mutation cap backlog counts session_rotated only where the pool did before', async () => {
+            test('P1-1 (2026-11-21): the mutation cap backlog is the due slot steps; session_rotated never counts', async () => {
                 const svc = h.services[pool];
                 const now = Date.now();
                 for (let i = 0; i < 3; i++) {
@@ -801,7 +799,7 @@ describe('pool onboarding parity (buffer vs promote)', () => {
                 jest.spyOn(svc, 'processClient').mockResolvedValue({ updateCount: 0 });
                 const cap = jest.spyOn(svc, 'getEffectiveUpdatesCap');
                 await runWarmup(svc);
-                expect(cap.mock.calls.map((c: any[]) => c[0])).toEqual([want.warmupRunCapCountsSessionRotated ? 8 : 3]);
+                expect(cap.mock.calls.map((c: any[]) => c[0])).toEqual([3]);
             });
 
             test('P1-2: warmup-run checks skip a check that failed in the last 24 h and go by the later of lastChecked / last attempt', async () => {

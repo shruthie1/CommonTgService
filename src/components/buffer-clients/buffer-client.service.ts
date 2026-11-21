@@ -58,6 +58,7 @@ import {
     calculateWarmupPriority,
 } from '../shared/base-client.service';
 import { ClientHelperUtils } from '../shared/client-helper.utils';
+import { getWarmupActionDueAt, isWarmupSlotAction, type WarmupAction } from '../shared/warmup-phases';
 import { withEnrollmentLock } from '../shared/enrollment-lock';
 import { accountHealthCollectionOf, recordAccountHealthSoon } from '../shared/account-health';
 import { describeClaimHolder, POOL_CLAIM_BODY_MAX_TIME_MS, POOL_CLAIM_INSERT_OPTIONS, withPoolClaim } from '../shared/onboarding/pool-claim';
@@ -167,6 +168,8 @@ type WarmupDiagnosticEntry = {
     authsRemoved: boolean;
     channels: number;
     onCooldown: boolean;
+    /** When the planned slot step became due (epoch ms); null for non-slot actions. */
+    dueAt: number | null;
 };
 type WarmupSimulationEntry = Pick<WarmupDiagnosticEntry, 'mobile' | 'dbPhase' | 'computedPhase' | 'action' | 'priority'> & {
     isMutation: boolean;
@@ -1113,6 +1116,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 authsRemoved: !!bc.otherAuthsRemovedAt,
                 channels: bc.channels || 0,
                 onCooldown: this.isOnCooldown(bc.mobile, bc.lastUpdateAttempt, now),
+                dueAt: isWarmupSlotAction(warmupAction.action) ? getWarmupActionDueAt(bc, warmupAction.action) : null,
             };
 
             if (warmupAction.phase === WarmupPhase.SETTLING) {
@@ -1121,16 +1125,34 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             wouldProcess.push(entry);
         }
 
-        wouldProcess.sort((a, b) => b.priority - a.priority);
+        // Same order as runWarmupMaintenance: due slot steps first, earliest due first, then priority.
+        wouldProcess.sort((a, b) => {
+            const aSlot = isWarmupSlotAction(a.action as WarmupAction['action']) ? 1 : 0;
+            const bSlot = isWarmupSlotAction(b.action as WarmupAction['action']) ? 1 : 0;
+            if (aSlot !== bSlot) return bSlot - aSlot;
+            if (aSlot) {
+                const aDue = a.dueAt ?? Number.MAX_SAFE_INTEGER;
+                const bDue = b.dueAt ?? Number.MAX_SAFE_INTEGER;
+                if (aDue !== bDue) return aDue - bDue;
+            }
+            return b.priority - a.priority;
+        });
 
-        // Simulate processing loop with the SELF-HEALING effective cap (sized to the live
-        // eligible backlog), matching what the real run does.
-        const simEffectiveCap = this.getEffectiveUpdatesCap(wouldProcess.length);
+        // Simulate the processing loop as the real run does: backlog-sized cap (due slot steps over
+        // the runs left today) that DB-only actions bypass, plus the sensitive and organic sub-caps.
+        // Every simulated step is assumed to succeed.
+        const simRunsLeftToday = this.getWarmupRunsLeftToday(now);
+        const simDueSlot = wouldProcess.filter((e) => !e.onCooldown && !e.processSkipReason && isWarmupSlotAction(e.action as WarmupAction['action'])).length;
+        const simEffectiveCap = this.getEffectiveUpdatesCap(simDueSlot, simRunsLeftToday);
         let simUpdates = 0;
+        let simSensitive = 0;
+        let simOrganic = 0;
         const simProcessed: WarmupSimulationEntry[] = [];
         const simSkipped: WarmupSimulationSkip[] = [];
         for (const entry of wouldProcess) {
-            if (simUpdates >= simEffectiveCap) {
+            const dbOnly = ['wait', 'join_channels', 'advance_to_ready'].includes(entry.action)
+                && entry.dbPhase !== WarmupPhase.SESSION_ROTATED;
+            if (!dbOnly && simUpdates >= simEffectiveCap) {
                 simSkipped.push({ mobile: entry.mobile, action: entry.action, priority: entry.priority, reason: 'slot_limit_reached' });
                 continue;
             }
@@ -1141,6 +1163,20 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             if (entry.processSkipReason) {
                 simSkipped.push({ mobile: entry.mobile, action: entry.action, reason: entry.processSkipReason });
                 continue;
+            }
+            if (entry.action === 'organic_only') {
+                if (simOrganic >= this.MAX_ORGANIC_ACTIONS_PER_CYCLE) {
+                    simSkipped.push({ mobile: entry.mobile, action: entry.action, priority: entry.priority, reason: 'organic_limit_reached' });
+                    continue;
+                }
+                simOrganic++;
+            }
+            if (this.isSensitiveWarmupAction(entry.action)) {
+                if (simSensitive >= this.MAX_SENSITIVE_ACTIONS_PER_CYCLE) {
+                    simSkipped.push({ mobile: entry.mobile, action: entry.action, priority: entry.priority, reason: 'sensitive_limit_reached' });
+                    continue;
+                }
+                simSensitive++;
             }
             const isMutation = !['wait', 'join_channels', 'advance_to_ready', 'organic_only'].includes(entry.action);
             simProcessed.push({
@@ -1163,7 +1199,8 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             maxUpdatesPerCycle: this.MAX_UPDATES_PER_CYCLE,
             effectiveUpdatesCap: simEffectiveCap,
             capMin: this.MIN_UPDATES_PER_CYCLE,
-            targetDrainDays: this.WARMUP_TARGET_DRAIN_DAYS,
+            runsLeftToday: simRunsLeftToday,
+            dueSlotActions: simDueSlot,
             runsPerDay: this.WARMUP_RUNS_PER_DAY,
             eligibleToProcess: wouldProcess.length,
             simulation: {
@@ -1172,6 +1209,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 totalProcessed: simProcessed.length,
                 totalSkippedAfterSlotLimit: simSkipped.filter(s => s.reason === 'slot_limit_reached').length,
                 totalSkippedCooldown: simSkipped.filter(s => s.reason === 'cooldown').length,
+                totalSkippedSensitive: simSkipped.filter(s => s.reason === 'sensitive_limit_reached').length,
                 totalSkippedOther: simSkipped.filter(s => s.reason !== 'slot_limit_reached' && s.reason !== 'cooldown').length,
             },
             top30WouldProcess: simProcessed.slice(0, 30),

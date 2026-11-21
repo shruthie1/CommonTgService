@@ -65,8 +65,8 @@ type SimAccount = {
     channels: number;
     // Real-world failure mode surfaced by prod DB review (2026-08-02): ~12% of promote 'growing'
     // accounts CANNOT accumulate channels (spam-limited / join-starved). When true, this account's
-    // channels never grow — but the growing ADVANCE DEADLINE lets it advance anyway (age never
-    // strands or retires an account), so it still drains rather than being lost.
+    // channels never grow. Since 2026-11-21 it stays in growing below the floor (logged as stuck,
+    // never retired) instead of graduating as unusable supply.
     joinBlocked?: boolean;
     privacyUpdatedAt?: number;
     twoFASetAt?: number;
@@ -302,15 +302,15 @@ describe('warmup drain — deterministic simulation over real prod population', 
             // rot until STUCK retires them. These tests prove: (a) the salvage actually drains the
             // join-blocked-but-salvageable cohort, and (b) the whole backlog (joinable + salvageable)
             // clears — so no account is lost to the channel-supply bottleneck.
-            it('DEEP-STALL SALVAGE drains join-blocked accounts (ch>=20) instead of losing them', () => {
+            it('FLOOR GATE (2026-11-21): join-blocked accounts stay in growing below the floor, the joinable backlog still drains', () => {
                 const pop = buildPopulation(snapshot[coll], START, 0.12); // inject 12% join-blocked growing (ch=20)
                 const res = simulate(pop, probe, START, probe.HORIZON - 5);
-                // The join-blocked cohort (ch=20, above the salvage floor) is now SALVAGED, not stuck.
-                expect(res.joinBlockedDrained).toBe(res.joinBlockedTotal);
-                // And the joinable backlog still fully drains — the throughput fix works too.
+                // Owner 2026-11-21: growing never graduates below the pool floor (every consumer refused
+                // such accounts). The join-blocked cohort stays in growing and is logged as stuck.
+                expect(res.joinBlockedTotal).toBeGreaterThan(0);
+                expect(res.joinBlockedDrained).toBe(0);
+                // And the joinable backlog still fully drains.
                 expect(res.joinableRemaining).toBe(0);
-                // eslint-disable-next-line no-console
-                console.log(`[${coll}] 12% join-blocked (ch=20): salvaged ${res.joinBlockedDrained}/${res.joinBlockedTotal}, joinable drained=${res.joinableRemaining === 0}`);
             });
 
             it('safety invariants still hold WITH the join-blocked cohort present (no burst)', () => {

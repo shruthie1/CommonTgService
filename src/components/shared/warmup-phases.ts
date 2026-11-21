@@ -47,14 +47,15 @@ export const MIN_DAYS_AFTER_USERNAME_BEFORE_GROWING = 2;
 export const MIN_CHANNELS_FOR_MATURING = 200;
 
 /**
- * Hard deadline (in days spent in the GROWING phase, past its normal threshold) after which an
- * account advances to maturing with WHATEVER channels it has — the channel target stops being a
- * gate entirely. Guarantees no account is ever stranded in growing by a channel-supply problem
- * (spam-limit / join-starvation). Policy: elapsed time never stalls or retires an account; only
- * permanent Telegram failures inactivate. (Real prod finding 2026-08-02: ~18 promote accounts had
- * been stuck sub-target in growing for 44-60 days.)
+ * Days IN the growing phase after which an account still below its pool's channel floor is reported
+ * as stuck (`warmup-health kind=stuck reason=below_floor_past_deadline`). Owner 2026-11-21: growing
+ * never advances below the pool floor (buffer 200 / promote 230). Before, past this deadline the
+ * target dropped to 0 and the account advanced to maturing/ready with any count, but every consumer
+ * (promote selection >= 230, buffer swap >= 200) refused it, so it was unusable supply that looked
+ * finished. Now it stays in growing, keeps join priority, and the stuck line makes it visible.
+ * Age still never retires an account; only permanent Telegram failures do.
  */
-export const GROWING_ADVANCE_DEADLINE_DAYS = 30; // days IN growing past which channel target no longer gates
+export const GROWING_ADVANCE_DEADLINE_DAYS = 30; // days IN growing past which a below-floor account is logged as stuck
 
 /**
  * Action returned by getWarmupPhaseAction — tells the caller what to do this cycle.
@@ -384,28 +385,11 @@ export function getWarmupPhaseAction(
         if (identityCatchup) return identityCatchup;
 
         const channels = doc.channels || 0;
-        // Channel target is a GOAL, never a permanent gate. Keep joining channels until the account
-        // reaches the target — but the requirement decays with time so a join-starved / spam-limited
-        // account is NEVER stranded in growing (policy: age never stalls or retires an account, only
-        // permanent Telegram failures do). Past GROWING_ADVANCE_DEADLINE_DAYS the account advances
-        // with whatever channels it has.
-        const growingDuration = daysSinceEnrolled - (WARMUP_PHASE_THRESHOLDS.growing + jitter);
-        const stalledLong = growingDuration > (WARMUP_PHASE_THRESHOLDS.maturing - WARMUP_PHASE_THRESHOLDS.growing) * 2;
-        const pastAdvanceDeadline = growingDuration > GROWING_ADVANCE_DEADLINE_DAYS;
-        // Full target normally; halved once stalled; no requirement at all past the deadline.
-        // Uses the POOL's floor rather than the global constant: advancing past growing on a count
-        // the pool's own gates will later reject is precisely what created the stranded band.
-        //
-        // The DEADLINE POLICY IS PRESERVED EXACTLY — past GROWING_ADVANCE_DEADLINE_DAYS the target
-        // drops to zero and the account advances with whatever it has. That is deliberate ("age
-        // never retires an account") and is covered by its own tests. An earlier version of this
-        // change blocked that advancement to avoid manufacturing under-qualified READY accounts;
-        // that was the wrong lever. The correct fix is the READY/SESSION_ROTATED re-entry below,
-        // which keeps an under-floor account joining even after it advances — so the salvage and
-        // the floor now coexist instead of contradicting each other.
-        const effectiveChannelTarget = pastAdvanceDeadline
-            ? 0
-            : (stalledLong ? Math.floor(operationalFloor / 2) : operationalFloor);
+        // Growing leaves only at the POOL's floor (owner 2026-11-21). No halving, no deadline drop:
+        // an account that advanced below the floor was refused by every consumer anyway. A slow
+        // account stays here, keeps join priority, and is logged as stuck past
+        // GROWING_ADVANCE_DEADLINE_DAYS (see getGrowingDaysInPhase).
+        const effectiveChannelTarget = operationalFloor;
         if (channels < effectiveChannelTarget) {
             return { phase: WarmupPhase.GROWING, action: 'join_channels', organicIntensity: 'light' };
         }
@@ -496,4 +480,78 @@ export function isAccountWarmingUp(phase: string | null | undefined): boolean {
         WarmupPhase.GROWING as string,
         WarmupPhase.MATURING as string,
     ].includes(phase as string);
+}
+
+/**
+ * Actions that do a real warmup mutation and consume a slot of the per-run mutation cap.
+ * organic_only / wait / join_channels / advance_to_ready do not (join_channels is delegated to the
+ * join queue; advance_to_ready is a DB-only write).
+ */
+export const WARMUP_SLOT_ACTIONS: ReadonlySet<WarmupAction['action']> = new Set<WarmupAction['action']>([
+    'set_privacy',
+    'set_2fa',
+    'remove_external_login_sessions',
+    'delete_photos',
+    'update_name_bio',
+    'update_username',
+    'upload_photo',
+    'rotate_session',
+]);
+
+export function isWarmupSlotAction(action: WarmupAction['action'] | undefined): boolean {
+    return !!action && WARMUP_SLOT_ACTIONS.has(action);
+}
+
+/**
+ * When a slot action became due (ms), mirroring the gates in getWarmupPhaseAction. Used to order the
+ * run longest-waiting first and to report a due step not done for >48 h as stuck. null when unknown
+ * or not a slot action.
+ */
+export function getWarmupActionDueAt(
+    doc: {
+        warmupJitter?: number;
+        enrolledAt?: Date | string | null;
+        createdAt?: Date | string | null;
+        privacyUpdatedAt?: Date | string | null;
+        twoFASetAt?: Date | string | null;
+        otherAuthsRemovedAt?: Date | string | null;
+        profilePicsDeletedAt?: Date | string | null;
+        nameBioUpdatedAt?: Date | string | null;
+        usernameUpdatedAt?: Date | string | null;
+    },
+    action: WarmupAction['action'],
+): number | null {
+    const ts = (v: Date | string | null | undefined) => ClientHelperUtils.getTimestamp(v as Date);
+    const jitter = doc.warmupJitter || 0;
+    const enrolled = ts(doc.enrolledAt) || ts(doc.createdAt);
+    const after = (base: number, days: number) => (base > 0 ? base + days * ONE_DAY_MS : 0);
+    let due = 0;
+    switch (action) {
+        case 'set_privacy': due = after(enrolled, WARMUP_PHASE_THRESHOLDS.settling + jitter); break;
+        case 'set_2fa': due = after(ts(doc.privacyUpdatedAt), MIN_DAYS_BETWEEN_IDENTITY_STEPS); break;
+        case 'remove_external_login_sessions': due = after(ts(doc.twoFASetAt), MIN_DAYS_BETWEEN_IDENTITY_STEPS); break;
+        case 'delete_photos': due = Math.max(
+            after(ts(doc.otherAuthsRemovedAt), MIN_DAYS_AFTER_AUTH_CLEANUP_BEFORE_IDENTITY),
+            after(enrolled, WARMUP_PHASE_THRESHOLDS.identity + jitter),
+        ); break;
+        case 'update_name_bio': due = after(ts(doc.profilePicsDeletedAt), MIN_DAYS_BETWEEN_IDENTITY_STEPS); break;
+        case 'update_username': due = after(ts(doc.nameBioUpdatedAt), MIN_DAYS_AFTER_NAME_BIO_BEFORE_USERNAME); break;
+        case 'upload_photo': due = Math.max(
+            after(enrolled, WARMUP_PHASE_THRESHOLDS.maturing + jitter),
+            after(ts(doc.usernameUpdatedAt), MIN_DAYS_AFTER_USERNAME_BEFORE_GROWING),
+        ); break;
+        default: return null;
+    }
+    return due > 0 ? due : null;
+}
+
+/** Days an account has spent in growing (from its growing threshold); 0 before it. */
+export function getGrowingDaysInPhase(
+    doc: { warmupJitter?: number; enrolledAt?: Date | string | null; createdAt?: Date | string | null },
+    now: number,
+): number {
+    const enrolled = ClientHelperUtils.getTimestamp(doc.enrolledAt as Date) || ClientHelperUtils.getTimestamp(doc.createdAt as Date);
+    if (enrolled <= 0) return 0;
+    const start = enrolled + (WARMUP_PHASE_THRESHOLDS.growing + (doc.warmupJitter || 0)) * ONE_DAY_MS;
+    return Math.max(0, (now - start) / ONE_DAY_MS);
 }

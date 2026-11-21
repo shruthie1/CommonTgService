@@ -1106,7 +1106,7 @@ describe('Service flow reliability', () => {
         });
     });
 
-    test('buffer join query permits only below-floor terminal capacity recovery', async () => {
+    test('buffer join query: growing, plus maturing/terminal only below the floor; never enrolled/settling/identity (2026-11-21)', async () => {
         let capturedQuery: Record<string, any> | undefined;
         const bufferModel: any = {
             find: jest.fn((query: Record<string, any>) => {
@@ -1129,19 +1129,9 @@ describe('Service flow reliability', () => {
         await service.joinchannelForBufferClients(true);
 
         expect(capturedQuery?.$or).toEqual([
+            { warmupPhase: WarmupPhase.GROWING },
             {
-                warmupPhase: {
-                    $in: [
-                        WarmupPhase.ENROLLED,
-                        WarmupPhase.SETTLING,
-                        WarmupPhase.IDENTITY,
-                        WarmupPhase.GROWING,
-                        WarmupPhase.MATURING,
-                    ],
-                },
-            },
-            {
-                warmupPhase: { $in: [WarmupPhase.READY, WarmupPhase.SESSION_ROTATED] },
+                warmupPhase: { $in: [WarmupPhase.MATURING, WarmupPhase.READY, WarmupPhase.SESSION_ROTATED] },
                 channels: { $lt: 200 },
             },
         ]);

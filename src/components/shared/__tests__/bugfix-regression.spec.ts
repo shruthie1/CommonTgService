@@ -325,24 +325,24 @@ describe('Real warmup pipeline — BufferClientService against real Mongo', () =
     // 4b. Stuck-account detection (REAL: surfaces in diagnoseWarmupPipeline skip reasons)
     // --------------------------------------------------------------------
     describe('Age never strands or skips an account (real pipeline)', () => {
-        test('an OLD GROWING account past the advance deadline is PROCESSED (advances), not stuck', async () => {
+        test('an OLD GROWING account below the floor stays in growing (join_channels), is not skipped (2026-11-21)', async () => {
             const longAgo = new Date(Date.now() - 65 * ONE_DAY_MS); // very old
             await BufferClientModel.create(baseClient({
                 mobile: '16660045001', warmupPhase: WarmupPhase.GROWING, enrolledAt: longAgo,
-                failedUpdateAttempts: 0, channels: 120, // under 200 target, but past the growing deadline
+                failedUpdateAttempts: 0, channels: 120, // under the 200 floor, long past the old deadline
                 privacyUpdatedAt: longAgo, twoFASetAt: longAgo, otherAuthsRemovedAt: longAgo,
                 profilePicsDeletedAt: longAgo, nameBioUpdatedAt: longAgo, usernameUpdatedAt: longAgo,
             }));
 
             const report: any = await service.diagnoseWarmupPipeline();
-            // Age no longer skips it, AND past the growing advance deadline the account advances
-            // (upload_photo → maturing) instead of looping join_channels forever. So it is processed,
-            // never marked stuck.
+            // Age never skips it. Growing no longer advances below the floor (owner 2026-11-21): it
+            // keeps joining (the join sweep picks it first) and the run logs it as stuck.
             expect(report.eligibleToProcess).toBe(1);
             expect(report.simulation.totalSkippedOther).toBe(0);
             const entry = report.top30WouldProcess.find((e: any) => e.mobile === '16660045001');
             expect(entry).toBeTruthy();
-            expect(entry.computedPhase).toBe(WarmupPhase.MATURING); // advanced past growing, not stuck
+            expect(entry.computedPhase).toBe(WarmupPhase.GROWING);
+            expect(entry.action).toBe('join_channels');
         });
 
         test('READY account past 60d is terminal and NOT counted as eligible churn', async () => {

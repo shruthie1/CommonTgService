@@ -51,6 +51,10 @@ import {
     isAccountWarmingUp,
     MIN_CHANNELS_FOR_MATURING,
     WARMUP_PHASE_THRESHOLDS,
+    GROWING_ADVANCE_DEADLINE_DAYS,
+    getGrowingDaysInPhase,
+    getWarmupActionDueAt,
+    isWarmupSlotAction,
 } from './warmup-phases';
 import { canonicalizeMobile, mobilesEqual } from './mobile-utils';
 import { checkParkedSession, describeParkedVerdict, PARKED_SESSION_BUSY, type ParkedGuardDb, type ParkedSessionVerdict } from '../clients/parked-session-guard';
@@ -261,6 +265,26 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     // global lock was starving the daily warmup-check for hours while the join sweep held it.
     protected isWarmupCheckProcessing: boolean = false;        // guards checkBuffer/PromoteClients vs itself
     protected isPrepareJoinChannelsProcessing: boolean = false; // guards the prepare-join sweep vs itself
+    /**
+     * A sweep that fired while a join round or leave round ran (review 2026-11-22). Kept with its
+     * own arguments and run as a real sweep (runJoinSweep: prepare + scope + prepare lock) when
+     * the busy round ends; kept again if something is still busy then.
+     */
+    protected pendingJoinSweep: { skipExisting: boolean; clientId?: string } | null = null;
+    /** Scope of the sweep holding the prepare lock right now (null when none runs). */
+    protected runningJoinSweepScope: { clientId?: string } | null = null;
+
+    /** An all-client sweep covers every scope; a client sweep covers only the same client. */
+    protected joinSweepCovers(running: { clientId?: string }, pending: { clientId?: string }): boolean {
+        return !running.clientId || running.clientId === pending.clientId;
+    }
+    /**
+     * Wall-clock budget for one join round (owner 2026-11-21). A round is serial: per mobile up
+     * to joinsPerMobilePerRound joins 90-180 s apart (~6.5 min), so 100 queued mobiles took ~11 h
+     * and the 3-hourly sweep logged "skipping re-entry" (x25 on 11-21). 150 min < the 3 h sweep
+     * gap; the rest of the queue continues next round. Per-account pacing is unchanged.
+     */
+    protected readonly JOIN_ROUND_TIME_BUDGET_MS = 150 * 60 * 1000;
     protected activeTimeouts: Set<NodeJS.Timeout> = new Set();
 
     protected readonly ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -278,24 +302,35 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     protected readonly MAX_FAILED_ATTEMPTS = 3;
     protected readonly FAILURE_RESET_DAYS = 7;
     protected readonly FAILURE_RETRY_BACKOFF_HOURS = 24;
-    // Self-healing warmup throughput — ANTI-DETECTION FIRST. Extra throughput comes from
-    // running MORE OFTEN (spread + jittered), NOT from bigger per-run batches: a dense cluster
-    // of sensitive actions on one IP in one window is itself a fingerprint, even though each
-    // account only ever does ONE action per cycle (individually rate-limited + cooldown-gated).
-    // So the per-run cap stays LOW (ceiling 20 ≈ the original conservative value); the cap is
-    // still self-healing within [MIN, MAX] so it never stalls, but it can never burst.
-    // getEffectiveUpdatesCap(pending) = clamp(ceil(pending / (TARGET_DRAIN_DAYS × RUNS_PER_DAY)), MIN, MAX).
-    protected readonly MAX_UPDATES_PER_CYCLE = 20;          // per-run CEILING (unchanged from original — density stays low)
-    protected readonly MIN_UPDATES_PER_CYCLE = 8;           // floor — guarantees baseline throughput even on a light backlog
-    protected readonly WARMUP_TARGET_DRAIN_DAYS = 8;        // SLA target: clear the pending backlog within ~8d
-    protected readonly WARMUP_RUNS_PER_DAY = 4;             // scheduler fires 4× daily (jittered) — throughput via frequency, not density
+    // Warmup throughput, sized from demand (owner 2026-11-21). Measured 11-21: ~10 mains/day
+    // consumed, ~27% of enrolled accounts retire before ready, so the fleet needs
+    // ceil(10 x 7 / 0.73) = 96 new accounts/week to graduate. Each account needs 7 slot steps
+    // (privacy, 2FA, remove auths, delete photos, name/bio, username, photo), 3 of them sensitive.
+    // Steady state = 96 x 7 / (7 days x 4 runs) = 24 mutations/run, 96 x 3 / 28 = 10.3 sensitive/run.
+    // The old fixed floor of 8/run (log "297 eligible, effective cap=8") warmed ~3/day.
+    // Per-ACCOUNT pacing is unchanged: one action per account per run (cooldownHours), the
+    // 2-3 day gaps between identity steps, and the 15-25 s sleeps around every action. Only the
+    // number of accounts served per run grows.
+    // getEffectiveUpdatesCap(due, runsLeft) = clamp(ceil(due / runsLeft), MIN, MAX).
+    protected readonly MAX_UPDATES_PER_CYCLE = 40;          // ceiling: steady 24/run + backlog drain headroom
+    protected readonly MIN_UPDATES_PER_CYCLE = 8;           // floor — baseline throughput on a light backlog
+    protected readonly WARMUP_RUNS_PER_DAY = 4;             // scheduler fires 4x daily (cms-buffer-check / maintenance-promote-client-check)
 
-    // Separate, tighter per-run cap for HIGH-RISK Telegram actions (2FA set, revoking other
-    // sessions, username changes). Even when the overall cap is at its ceiling, no single run
-    // performs more than this many sensitive actions on one IP — keeps risky-action density flat
-    // and low regardless of backlog. Lightweight actions (privacy, photo delete/upload, organic)
-    // are NOT limited by this — they fall under the normal cap only.
-    protected readonly MAX_SENSITIVE_ACTIONS_PER_CYCLE = 5;
+    // Separate per-run cap for HIGH-RISK Telegram actions (2FA set, revoking other sessions,
+    // username changes). 13/run = 364 sensitive steps/week. It also sets the enrolment ceiling at
+    // 85% of that capacity (engineWeeklyCeiling(13, 4) = 103/week >= 96 needed), so 103 x 3 = 309
+    // steps leave 55/week of headroom for retries (review 2026-11-22: 11/run left 2/week).
+    // A failed sensitive step counts in full: worst-case sensitive Telegram attempts stay 13/run.
+    // Lightweight actions (privacy, photo delete/upload, organic) fall under the normal cap only.
+    protected readonly MAX_SENSITIVE_ACTIONS_PER_CYCLE = 13;
+    /**
+     * Non-slot actions that never connect to Telegram (DB writes only: the phase write,
+     * lastUpdateAttempt, advance_to_ready). They run even when the mutation cap is full, so a full
+     * cap never blocks identity -> growing (needed by the join filter) or maturing -> ready.
+     */
+    protected static readonly DB_ONLY_WARMUP_ACTIONS: ReadonlySet<string> = new Set(['wait', 'join_channels', 'advance_to_ready']);
+    /** A due slot step not done this long after it became due is logged `warmup-health kind=stuck`. */
+    protected readonly WARMUP_STUCK_AFTER_MS = 48 * 60 * 60 * 1000;
 
     // Per-run cap for 'organic_only' activity. organic_only is what a day-gated account (waiting
     // out an inter-step cooldown) resolves to — it performs no phase MUTATION but still connects a
@@ -313,18 +348,29 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     ]);
 
     /**
-     * Self-healing per-run mutation cap. Sizes the cap to the LIVE pending backlog so the pool
-     * drains toward WARMUP_TARGET_DRAIN_DAYS regardless of how the backlog changes, clamped to
-     * [MIN_UPDATES_PER_CYCLE, MAX_UPDATES_PER_CYCLE]. Pure function of its input — no I/O.
+     * Per-run mutation cap sized from the real backlog: the slot steps due NOW spread over the
+     * warmup runs left today (this one included), clamped to [MIN, MAX]. The day's last run takes
+     * whatever is still due (up to MAX), so a due step waits at most a day. Pure, no I/O.
      *
-     * @param pendingMutationCount eligible accounts wanting a slot-consuming mutation this run
-     *        (the set the loop already built; session_rotated accounts only where the pool's
-     *        `warmupRun.capCountsSessionRotated` says so: buffer yes, promote no).
+     * @param dueSlotActions eligible accounts whose planned action is a slot step (isWarmupSlotAction)
+     * @param runsLeftToday warmup runs left today including this one (getWarmupRunsLeftToday)
      */
-    protected getEffectiveUpdatesCap(pendingMutationCount: number): number {
-        const pending = Math.max(0, Math.floor(pendingMutationCount || 0));
-        const perRunToHitSla = Math.ceil(pending / (this.WARMUP_TARGET_DRAIN_DAYS * this.WARMUP_RUNS_PER_DAY));
-        return Math.max(this.MIN_UPDATES_PER_CYCLE, Math.min(this.MAX_UPDATES_PER_CYCLE, perRunToHitSla));
+    protected getEffectiveUpdatesCap(dueSlotActions: number, runsLeftToday: number = this.WARMUP_RUNS_PER_DAY): number {
+        const due = Math.max(0, Math.floor(dueSlotActions || 0));
+        const runs = Math.max(1, Math.floor(runsLeftToday || 1));
+        return Math.max(this.MIN_UPDATES_PER_CYCLE, Math.min(this.MAX_UPDATES_PER_CYCLE, Math.ceil(due / runs)));
+    }
+
+    /**
+     * Warmup runs left in the IST day including the current one. The 4 daily runs sit one per
+     * 6-hour IST quarter (buffer 01/07/13/19:17, promote 04/10/16/22:43), so the quarter index
+     * tells how many are left: first quarter 4, last quarter 1.
+     */
+    protected getWarmupRunsLeftToday(now: number): number {
+        const ist = new Date(now + 5.5 * 60 * 60 * 1000);
+        const minutes = ist.getUTCHours() * 60 + ist.getUTCMinutes();
+        const slot = Math.floor(minutes / (1440 / this.WARMUP_RUNS_PER_DAY));
+        return Math.max(1, this.WARMUP_RUNS_PER_DAY - slot);
     }
 
     /** True if a warmup action is high-risk (sensitive) and should count against the sensitive sub-cap. */
@@ -454,26 +500,18 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     }
 
     /**
-     * Terminal accounts are normally excluded from channel joins. A verified
-     * count below the role's operational floor is the sole exception: restore
-     * capacity without rewinding warmup or touching the session lifecycle.
+     * Which accounts the join sweep and refill may pick (owner 2026-11-21): growing accounts (the
+     * phase that exists to join; the query also requires channels < channelTarget), and later phases
+     * (maturing / ready / session_rotated) only while below the pool's operational floor.
+     * Enrolled / settling / identity never join: before 11-21 they filled the 100 map slots and
+     * 39 of 43 growing buffer accounts sat at 0 channels for 21-32 days.
      */
     protected getJoinCapacityEligibilityFilter(): MongoQuery {
         return {
             $or: [
+                { warmupPhase: WarmupPhase.GROWING },
                 {
-                    warmupPhase: {
-                        $in: [
-                            WarmupPhase.ENROLLED,
-                            WarmupPhase.SETTLING,
-                            WarmupPhase.IDENTITY,
-                            WarmupPhase.GROWING,
-                            WarmupPhase.MATURING,
-                        ],
-                    },
-                },
-                {
-                    warmupPhase: { $in: [WarmupPhase.READY, WarmupPhase.SESSION_ROTATED] },
+                    warmupPhase: { $in: [WarmupPhase.MATURING, WarmupPhase.READY, WarmupPhase.SESSION_ROTATED] },
                     channels: { $lt: this.config.operationalChannelThreshold ?? MIN_CHANNELS_FOR_MATURING },
                 },
             ],
@@ -1017,8 +1055,26 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             toProcess.push({ doc, client, clientId: doc.clientId, priority, warmupAction });
         }
 
-        // Sort by priority (highest first)
-        toProcess.sort((a, b) => b.priority - a.priority);
+        // Order (owner 2026-11-21): due slot steps first, longest-waiting first (earliest due time),
+        // so enrolled/oldest accounts are never starved by fresher higher-phase ones; ties and all
+        // non-slot entries keep the phase/sub-step priority.
+        const dueAtOf = new Map<string, number | null>();
+        for (const entry of toProcess) {
+            dueAtOf.set(entry.doc.mobile, isWarmupSlotAction(entry.warmupAction.action)
+                ? getWarmupActionDueAt(entry.doc, entry.warmupAction.action)
+                : null);
+        }
+        toProcess.sort((a, b) => {
+            const aSlot = isWarmupSlotAction(a.warmupAction.action) ? 1 : 0;
+            const bSlot = isWarmupSlotAction(b.warmupAction.action) ? 1 : 0;
+            if (aSlot !== bSlot) return bSlot - aSlot;
+            if (aSlot) {
+                const aDue = dueAtOf.get(a.doc.mobile) ?? Number.MAX_SAFE_INTEGER;
+                const bDue = dueAtOf.get(b.doc.mobile) ?? Number.MAX_SAFE_INTEGER;
+                if (aDue !== bDue) return aDue - bDue;
+            }
+            return b.priority - a.priority;
+        });
         // Health-check connects are capped per run (HEALTH_CHECK_CONNECTIONS_PER_RUN): session_rotated
         // accounts keep their priority slots but are handed out oldest-checked first, so the ones a
         // full run defers go first next run.
@@ -1027,31 +1083,59 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         let healthCheckConnects = 0;
         let healthChecksDeferred = 0;
 
-        // Self-healing cap: size this run's mutation budget to the live pending backlog so the
-        // pool drains toward the target SLA — grows when starved, shrinks when caught up.
-        const capBacklog = profile.warmupRun.capCountsSessionRotated
-            ? toProcess.length
-            : toProcess.filter((entry) => entry.doc.warmupPhase !== WarmupPhase.SESSION_ROTATED).length;
-        const effectiveCap = this.getEffectiveUpdatesCap(capBacklog);
+        // Backlog-sized cap: the slot steps due now spread over the runs left today.
+        const dueSlotCount = toProcess.filter((entry) => isWarmupSlotAction(entry.warmupAction.action)).length;
+        const runsLeftToday = this.getWarmupRunsLeftToday(now);
+        const effectiveCap = this.getEffectiveUpdatesCap(dueSlotCount, runsLeftToday);
         let sensitiveUpdates = 0; // separate, tighter budget for high-risk actions (anti-detection)
         let organicUpdates = 0;   // separate budget so organic no-ops can't monopolize the run
-        this.logger.log(`${profile.label} warmup run: ${toProcess.length} eligible, effective cap=${effectiveCap} (ceiling ${this.MAX_UPDATES_PER_CYCLE}), sensitive sub-cap=${this.MAX_SENSITIVE_ACTIONS_PER_CYCLE}, organic sub-cap=${this.MAX_ORGANIC_ACTIONS_PER_CYCLE}`);
+        this.logger.log(`${profile.label} warmup run: ${toProcess.length} eligible, ${dueSlotCount} due, effective cap=${effectiveCap} (runs left today ${runsLeftToday}, ceiling ${this.MAX_UPDATES_PER_CYCLE}), sensitive sub-cap=${this.MAX_SENSITIVE_ACTIONS_PER_CYCLE}, organic sub-cap=${this.MAX_ORGANIC_ACTIONS_PER_CYCLE}`);
+
+        const stats = {
+            mutated: 0, failed: 0, organic: 0, joinDelegated: 0, dbOnly: 0,
+            skippedCap: 0, skippedSensitive: 0, skippedOrganic: 0,
+            skippedHealthCap: 0, skippedHealthBusy: 0, skippedHealthRecent: 0,
+        };
+        const byPhase: Record<string, number> = {};
+        const notDone: Array<{ doc: TDoc; action: WarmupAction }> = [];
+        const joinNotQueued: string[] = [];
 
         for (const { doc, client, warmupAction } of toProcess) {
-            if (totalUpdates >= effectiveCap) break;
             const warmupPhase = doc.warmupPhase || WarmupPhase.ENROLLED;
+            byPhase[warmupAction.phase] = (byPhase[warmupAction.phase] || 0) + 1;
+            const plannedAction = warmupAction.action; // computed once above; reused here
+            const plannedSlot = isWarmupSlotAction(plannedAction);
+            if (warmupAction.action === 'join_channels') {
+                stats.joinDelegated++;
+                if (!this.joinChannelMap.has(doc.mobile)) joinNotQueued.push(doc.mobile);
+            }
+            // DB-only actions (phase write, wait, join hand-off, advance_to_ready) never connect, so
+            // the cap does not apply to them (review 2026-11-22: a full cap starved identity ->
+            // growing and maturing -> ready). session_rotated always health-checks first, so it
+            // stays under the cap.
+            const dbOnly = BaseClientService.DB_ONLY_WARMUP_ACTIONS.has(plannedAction)
+                && warmupPhase !== WarmupPhase.SESSION_ROTATED;
+            // Cap reached: count and keep going so the summary sees every account (nothing that
+            // connects is processed past the cap; skipped accounts stay eligible next run).
+            if (!dbOnly && totalUpdates >= effectiveCap) {
+                stats.skippedCap++;
+                if (plannedSlot) notDone.push({ doc, action: warmupAction });
+                continue;
+            }
             if (warmupPhase === WarmupPhase.SESSION_ROTATED) {
                 // Same skips as the periodic run (post-review P2-a / P1-2): busy in a join/leave
                 // queue or client setup, or a check that failed within the retry window. Neither
                 // connects, so neither counts against the cap; both stay eligible next run.
                 if (this.getHealthCheckBusyMobiles().has(doc.mobile)) {
                     this.logger.debug(`Skipping ${pool} warmup health check for ${maskMobile(doc.mobile)}: busy in join/leave queue or client setup`);
+                    stats.skippedHealthBusy++;
                     continue;
                 }
-                if (this.healthCheckFailedRecently(doc, now)) continue;
+                if (this.healthCheckFailedRecently(doc, now)) { stats.skippedHealthRecent++; continue; }
                 // Cap reached: defer untouched (no write), so the account stays eligible next run.
                 if (healthCheckConnects >= healthCheckCap) {
                     healthChecksDeferred++;
+                    stats.skippedHealthCap++;
                     continue;
                 }
                 const lastChecked = doc.lastChecked ? new Date(doc.lastChecked).getTime() : 0;
@@ -1059,30 +1143,37 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 if (healthCheck.performed !== false) healthCheckConnects++;
                 if (!healthCheck.passed) continue;
             }
-            const plannedAction = warmupAction.action; // computed once above; reused here
 
             // Organic sub-cap: organic_only makes no phase progress but costs a ~20s TG session.
             // Skipped accounts keep lastUpdateAttempt untouched, so they stay eligible next run.
             if (plannedAction === 'organic_only' && organicUpdates >= this.MAX_ORGANIC_ACTIONS_PER_CYCLE) {
+                stats.skippedOrganic++;
                 continue;
             }
 
             // Anti-detection sub-cap: keep high-risk actions (2FA/remove_auths/username) sparse per
-            // run; a deferred account stays high-priority for a later run.
+            // run; a deferred account goes first next run (it has waited longest).
             const plannedSensitive = this.isSensitiveWarmupAction(plannedAction);
             if (plannedSensitive && sensitiveUpdates >= this.MAX_SENSITIVE_ACTIONS_PER_CYCLE) {
+                stats.skippedSensitive++;
+                notDone.push({ doc, action: warmupAction });
                 continue;
             }
 
-            // Count the PLANNED action against its sub-cap on commit — a failed sensitive action
-            // still consumed a risky attempt on this IP, so it must count.
+            // Count the PLANNED action against its sub-cap on commit. A failed sensitive step still
+            // counts in full: it may have reached Telegram, so attempts per run stay at the sub-cap.
             if (plannedSensitive) sensitiveUpdates++;
-            if (plannedAction === 'organic_only') organicUpdates++;
+            if (plannedAction === 'organic_only') { organicUpdates++; stats.organic++; }
+            if (dbOnly) stats.dbOnly++;
 
             const processResult = await this.processClient(doc, client, warmupAction);
             if (processResult.updateCount > 0) {
                 totalUpdates += processResult.updateCount;
+                stats.mutated++;
                 updatedEntries.push({ clientId: client.clientId, mobile: doc.mobile, change: processResult.updateSummary || 'updated', count: processResult.updateCount });
+            } else if (plannedSlot) {
+                stats.failed++;
+                notDone.push({ doc, action: warmupAction });
             }
         }
 
@@ -1090,7 +1181,82 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             this.logger.log(`${profile.label} warmup run: health-check cap ${healthCheckCap} reached, ${healthChecksDeferred} session_rotated account(s) deferred to the next run`);
         }
 
+        const skippedTotal = stats.skippedCap + stats.skippedSensitive + stats.skippedOrganic
+            + stats.skippedHealthCap + stats.skippedHealthBusy + stats.skippedHealthRecent;
+        const byPhaseText = Object.keys(byPhase).sort().map((k) => `${k}:${byPhase[k]}`).join(',') || 'none';
+        this.logger.log(
+            `warmup-health kind=run pool=${pool} eligible=${toProcess.length} due=${dueSlotCount} cap=${effectiveCap} runsLeft=${runsLeftToday} ` +
+            `mutated=${stats.mutated} failed=${stats.failed} skipped=${skippedTotal} skippedCap=${stats.skippedCap} ` +
+            `skippedSensitive=${stats.skippedSensitive} skippedOrganic=${stats.skippedOrganic} ` +
+            `skippedHealthCap=${stats.skippedHealthCap} skippedHealthBusy=${stats.skippedHealthBusy} skippedHealthRecent=${stats.skippedHealthRecent} ` +
+            `organic=${stats.organic} dbOnly=${stats.dbOnly} ` +
+            `joinDelegated=${stats.joinDelegated} joinNotQueued=${joinNotQueued.length} byPhase=${byPhaseText}`,
+        );
+        if (stats.joinDelegated > 0) {
+            // join_channels is not a warmup mutation: the join queue (3-hourly sweep + refills,
+            // fewest-served first) does the joins under its own per-account pacing and daily cap.
+            this.logger.log(
+                `warmup-health kind=join_delegated pool=${pool} accounts=${stats.joinDelegated} ` +
+                `queued=${stats.joinDelegated - joinNotQueued.length} notQueued=${joinNotQueued.length} ` +
+                `joinBusy=${this.isJoinChannelProcessing} next=join-sweep`,
+            );
+        }
+        this.logWarmupStuck(toProcess, notDone, now);
+
         await hooks.enrolAfterWarmup({ clients, assigned, goodIds, now, totalUpdates, updatedEntries });
+    }
+
+    /** channels last seen per growing mobile and since when (in-memory; restart resets the clock). */
+    protected growingChannelProgress: Map<string, { channels: number; since: number }> = new Map();
+
+    /**
+     * One `warmup-health kind=stuck` line per account with no progress for >48 h:
+     *   step_overdue              a due slot step not done this run (cap, sensitive cap or failure)
+     *                             more than WARMUP_STUCK_AFTER_MS after it became due;
+     *   no_channel_growth         a join_channels account whose channel count has not moved for
+     *                             more than WARMUP_STUCK_AFTER_MS (as seen by this process);
+     *   below_floor_past_deadline growing longer than GROWING_ADVANCE_DEADLINE_DAYS below the floor.
+     * Observability only: never changes status or phase.
+     */
+    protected logWarmupStuck(
+        entries: Array<{ doc: TDoc; warmupAction: WarmupAction }>,
+        notDone: Array<{ doc: TDoc; action: WarmupAction }>,
+        now: number,
+    ): number {
+        const pool = this.clientType;
+        const day = this.ONE_DAY_MS;
+        const fmt = (ms: number) => (ms / day).toFixed(1);
+        let logged = 0;
+        for (const { doc, action } of notDone) {
+            const dueAt = getWarmupActionDueAt(doc, action.action);
+            if (dueAt === null || now - dueAt <= this.WARMUP_STUCK_AFTER_MS) continue;
+            this.logger.warn(`warmup-health kind=stuck pool=${pool} mobile=${maskMobile(doc.mobile)} phase=${action.phase} action=${action.action} reason=step_overdue days=${fmt(now - dueAt)}`);
+            logged++;
+        }
+        const seen = new Set<string>();
+        for (const { doc, warmupAction } of entries) {
+            if (warmupAction.action !== 'join_channels') continue;
+            seen.add(doc.mobile);
+            const channels = doc.channels || 0;
+            const prev = this.growingChannelProgress.get(doc.mobile);
+            if (!prev || prev.channels !== channels) {
+                this.growingChannelProgress.set(doc.mobile, { channels, since: now });
+            } else if (now - prev.since > this.WARMUP_STUCK_AFTER_MS) {
+                this.logger.warn(`warmup-health kind=stuck pool=${pool} mobile=${maskMobile(doc.mobile)} phase=${warmupAction.phase} action=join_channels reason=no_channel_growth channels=${channels} days=${fmt(now - prev.since)}`);
+                logged++;
+            }
+            if (warmupAction.phase === WarmupPhase.GROWING) {
+                const daysInGrowing = getGrowingDaysInPhase(doc, now);
+                if (daysInGrowing > GROWING_ADVANCE_DEADLINE_DAYS && channels < this.operationalFloor) {
+                    this.logger.warn(`warmup-health kind=stuck pool=${pool} mobile=${maskMobile(doc.mobile)} phase=growing action=join_channels reason=below_floor_past_deadline channels=${channels} floor=${this.operationalFloor} days=${daysInGrowing.toFixed(1)}`);
+                    logged++;
+                }
+            }
+        }
+        for (const mobile of [...this.growingChannelProgress.keys()]) {
+            if (!seen.has(mobile)) this.growingChannelProgress.delete(mobile);
+        }
+        return logged;
     }
 
     /**
@@ -1166,39 +1332,69 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         return !!mobile && primaryClientMobiles.has(mobile);
     }
 
+    /** Max eligible docs read per selection before the in-memory fairness order picks maxMapSize. */
+    protected readonly JOIN_CANDIDATE_FETCH_LIMIT = 1000;
+    /** When this process last gave each mobile a join turn (in-memory; restart = everyone unserved). */
+    protected lastJoinServedAt: Map<string, number> = new Map();
+    /** Phase of each mobile at selection, for the join-sweep byPhase fields. */
+    protected joinCandidatePhase: Map<string, string> = new Map();
+    /** Channels skipped because this mobile already has a pending join request (per selection). */
+    protected joinPendingSkipped = 0;
+
+    /** Share of each selection's free slots reserved for recovery accounts (ready/session_rotated below the floor). */
+    protected readonly JOIN_RECOVERY_SHARE_PCT = 50;
+
     /**
-     * Recovery accounts are already terminal but cannot be selected by the runtime until they
-     * reach the pool floor. Put them ahead of new warmup accounts without changing which accounts
-     * are eligible or increasing any Telegram activity limits. Within a tier, closest to target first.
+     * Join candidates (owner 2026-11-21, review 2026-11-22), in two tiers:
+     *   1. recovery: ready/session_rotated below the floor, the closest to usable. Never-served
+     *      first, then most channels (fewest joins to the floor). Up to JOIN_RECOVERY_SHARE_PCT of
+     *      `slots`; any extra recovery accounts go after tier 2.
+     *   2. warming (growing, maturing): never-served / longest-since-served first, then fewest
+     *      channels, then oldest enrolment.
+     * Before 11-21 the order was channels DESC with a limit of 100, so 0-channel growing accounts
+     * were never picked. Eligibility is the query (getJoinCapacityEligibilityFilter); per-account
+     * caps and the free-slot bound are applied by callers.
      */
-    protected async findPrioritizedJoinCandidates(query: Record<string, unknown>): Promise<TDoc[]> {
+    protected async findPrioritizedJoinCandidates(query: Record<string, unknown>, slots: number = this.config.maxMapSize): Promise<TDoc[]> {
         const model = this.model as unknown as Model<any>;
         const limit = this.config.maxMapSize;
-        const operationalFloor = this.config.operationalChannelThreshold ?? this.poolProfile.operationalFloor;
-        const recoveryQuery = {
-            ...query,
-            warmupPhase: { $in: [WarmupPhase.READY, WarmupPhase.SESSION_ROTATED] },
-            channels: { $lt: operationalFloor },
-        };
-
-        const recoveryQueryResult = model
-            .find(recoveryQuery)
-            .sort({ channels: -1 })
-            .limit(limit);
-        const recoveryCandidates = await this.resolveJoinCandidateQuery(recoveryQueryResult);
-        if (recoveryCandidates.length >= limit) return recoveryCandidates;
-
-        const recoveryMobiles = new Set(recoveryCandidates.map((candidate) => candidate.mobile));
-        const standardQueryResult = model
+        const fetched = model
             .find(query)
-            .sort({ channels: -1 })
-            .limit(limit);
-        const standardCandidates = await this.resolveJoinCandidateQuery(standardQueryResult);
+            .sort({ channels: 1, enrolledAt: 1 })
+            .limit(this.JOIN_CANDIDATE_FETCH_LIMIT);
+        const docs = await this.resolveJoinCandidateQuery(fetched);
+        if (docs.length >= this.JOIN_CANDIDATE_FETCH_LIMIT) {
+            this.logger.warn(`join-sweep kind=select_truncated limit=${this.JOIN_CANDIDATE_FETCH_LIMIT}`);
+        }
+        for (const mobile of [...this.joinCandidatePhase.keys()]) {
+            if (!this.joinChannelMap.has(mobile)) this.joinCandidatePhase.delete(mobile);
+        }
+        const served = (mobile: string) => this.lastJoinServedAt.get(mobile) ?? 0;
+        const isRecovery = (doc: TDoc) => doc.warmupPhase === WarmupPhase.READY || doc.warmupPhase === WarmupPhase.SESSION_ROTATED;
+        const ranked = docs.map((doc, rank) => ({ doc, rank }));
+        const recovery = ranked
+            .filter((entry) => isRecovery(entry.doc))
+            .sort((a, b) => (served(a.doc.mobile) - served(b.doc.mobile))
+                || ((b.doc.channels || 0) - (a.doc.channels || 0))
+                || (a.rank - b.rank))
+            .map((entry) => entry.doc);
+        const warming = ranked
+            .filter((entry) => !isRecovery(entry.doc))
+            .sort((a, b) => (served(a.doc.mobile) - served(b.doc.mobile)) || (a.rank - b.rank))
+            .map((entry) => entry.doc);
+        const reserve = Math.ceil((Math.max(0, slots) * this.JOIN_RECOVERY_SHARE_PCT) / 100);
+        const ordered = [...recovery.slice(0, reserve), ...warming, ...recovery.slice(reserve)].slice(0, limit);
+        for (const doc of ordered) this.joinCandidatePhase.set(doc.mobile, doc.warmupPhase || WarmupPhase.ENROLLED);
+        return ordered;
+    }
 
-        return [
-            ...recoveryCandidates,
-            ...standardCandidates.filter((candidate) => !recoveryMobiles.has(candidate.mobile)),
-        ].slice(0, limit);
+    protected formatJoinByPhase(mobiles: Iterable<string>): string {
+        const counts: Record<string, number> = {};
+        for (const mobile of mobiles) {
+            const phase = this.joinCandidatePhase.get(mobile) || 'unknown';
+            counts[phase] = (counts[phase] || 0) + 1;
+        }
+        return Object.keys(counts).sort().map((k) => `${k}:${counts[k]}`).join(',') || 'none';
     }
 
     private async resolveJoinCandidateQuery(query: unknown): Promise<TDoc[]> {
@@ -1211,6 +1407,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     /** Re-query DB for mobiles below channelTarget not yet daily-capped. Populate joinChannelMap. Respects joinScopeClientId if set. */
     async refillJoinQueue(clientId?: string | null): Promise<number> {
         if (this.isJoinChannelProcessing || this.isLeaveChannelProcessing) return 0;
+        // A sweep is selecting right now; it fills the queue and starts the round itself.
+        if (this.isPrepareJoinChannelsProcessing) return 0;
         if (this.telegramService.hasActiveClientSetup()) return 0;
 
         this.resetDailyJoinCountersIfNeeded();
@@ -1237,16 +1435,25 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             });
         }
 
-        const eligible = await this.findPrioritizedJoinCandidates(query);
+        // Free slots first (review 2026-11-22): connect at most that many accounts, and stop as
+        // soon as the map is full, so a nearly full queue does not cost ~100 Telegram connects.
+        const freeSlots = this.config.maxMapSize - this.joinChannelMap.size;
+        this.joinPendingSkipped = 0;
+        const eligible = freeSlots > 0 ? await this.findPrioritizedJoinCandidates(query, freeSlots) : [];
 
         let added = 0;
         let leaveAdded = 0;
+        let capped = 0;
+        let connects = 0;
+        const addedMobiles: string[] = [];
         for (const doc of eligible) {
             if (this.isPrimaryClientMobile(doc.mobile, primaryClientMobiles)) {
                 this.logger.debug(`Skipping refill candidate ${maskMobile(doc.mobile)}: it is the live client mobile`);
                 continue;
             }
-            if (this.isMobileDailyCapped(doc.mobile)) continue;
+            if (this.isMobileDailyCapped(doc.mobile)) { capped++; continue; }
+            if (connects >= freeSlots || this.joinChannelMap.size >= this.config.maxMapSize) break;
+            connects++;
             // Hoisted so the catch can hand the live client to buildPermanentAccountReason —
             // freeze metadata (freeze_until_date / appeal_url) can only be read from Telegram
             // while the connection is still open.
@@ -1264,6 +1471,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
                     if (this.safeSetJoinChannelMap(doc.mobile, channelsToJoin)) {
                         added++;
+                        addedMobiles.push(doc.mobile);
                     }
                 } else if (!this.leaveChannelMap.has(doc.mobile)) {
                     if (this.queueLeaveChannelsIfAllowed(doc, channels.canSendFalseChats)) {
@@ -1284,9 +1492,10 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             }
         }
 
-        if (added > 0) {
-            this.logger.log(`Refilled join queue with ${added} ${this.clientType} clients`);
-        }
+        this.logger.log(
+            `join-sweep kind=select source=refill pool=${this.clientType} free=${Math.max(0, freeSlots)} candidates=${eligible.length} connects=${connects} picked=${added} ` +
+            `byPhase=${this.formatJoinByPhase(addedMobiles)} capped=${capped} leave=${leaveAdded} pendingSkipped=${this.joinPendingSkipped}`,
+        );
         if (leaveAdded > 0 && !this.leaveChannelIntervalId) {
             this.createTimeout(() => this.leaveChannelQueue(), this.drawPacing(ONBOARDING_PACING.joinSweep.refillLeaveQueueStart));
         }
@@ -1302,8 +1511,14 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         }
         // Don't destroy in-flight joins — skip if still processing
         if (this.isJoinChannelProcessing || this.isLeaveChannelProcessing) {
-            this.logger.warn('Join/leave processing still in progress, skipping re-entry');
-            return 'Join/leave still processing, skipped';
+            // Deferred, not lost: kept with this call's arguments and run when the busy join or
+            // leave round ends (runDeferredJoinSweep). The latest deferred call wins.
+            this.pendingJoinSweep = { skipExisting, clientId };
+            this.logger.warn(
+                `join-sweep kind=deferred pool=${this.clientType} reason=${this.isJoinChannelProcessing ? 'join_round_in_progress' : 'leave_in_progress'} ` +
+                `skipExisting=${skipExisting} clientId=${clientId || 'all'}`,
+            );
+            return 'Join/leave still processing, sweep deferred to the end of the round';
         }
         // Dedicated prepare-join reentrancy guard: two concurrent prepare sweeps (cron + API/manual)
         // must not overlap.
@@ -1311,6 +1526,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             return 'Join-channel prepare already running, skipped';
         }
         this.isPrepareJoinChannelsProcessing = true;
+        this.runningJoinSweepScope = { clientId };
+        // This sweep supersedes a deferred one only when it covers that one's scope.
+        if (this.pendingJoinSweep && this.joinSweepCovers({ clientId }, this.pendingJoinSweep)) {
+            this.pendingJoinSweep = null;
+        }
 
         this.logger.log(cfg.startLog);
         try {
@@ -1330,7 +1550,51 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             }
         } finally {
             this.isPrepareJoinChannelsProcessing = false;
+            this.runningJoinSweepScope = null;
         }
+    }
+
+    /**
+     * Run a deferred sweep once nothing blocks it. Returns true when the sweep ran (or another
+     * sweep was already running and supersedes it); false when it was kept for later.
+     * Logs `join-sweep kind=deferred_run|deferred_kept|deferred_superseded|deferred_run_failed`.
+     */
+    protected async runDeferredJoinSweep(trigger: 'join_round_end' | 'leave_end'): Promise<boolean> {
+        const pending = this.pendingJoinSweep;
+        if (!pending) return false;
+        const pool = this.clientType;
+        if (this.isPrepareJoinChannelsProcessing) {
+            const running = this.runningJoinSweepScope || {};
+            if (this.joinSweepCovers(running, pending)) {
+                this.pendingJoinSweep = null;
+                this.logger.log(`join-sweep kind=deferred_superseded pool=${pool} trigger=${trigger} reason=sweep_in_progress`);
+                return true;
+            }
+            this.logger.log(
+                `join-sweep kind=deferred_kept pool=${pool} trigger=${trigger} reason=sweep_other_scope ` +
+                `running=${running.clientId || 'all'} pending=${pending.clientId || 'all'}`,
+            );
+            return false;
+        }
+        const busy = this.isJoinChannelProcessing ? 'join_round_in_progress'
+            : this.isLeaveChannelProcessing ? 'leave_in_progress'
+                : this.telegramService.hasActiveClientSetup() ? 'client_setup'
+                    : null;
+        if (busy) {
+            this.logger.log(`join-sweep kind=deferred_kept pool=${pool} trigger=${trigger} reason=${busy}`);
+            return false;
+        }
+        this.pendingJoinSweep = null;
+        try {
+            const result = await this.runJoinSweep(pending.skipExisting, pending.clientId);
+            this.logger.log(
+                `join-sweep kind=deferred_run pool=${pool} trigger=${trigger} skipExisting=${pending.skipExisting} ` +
+                `clientId=${pending.clientId || 'all'} result="${result}"`,
+            );
+        } catch (error) {
+            this.logger.error(`join-sweep kind=deferred_run_failed pool=${pool} trigger=${trigger}`, error);
+        }
+        return true;
     }
 
     private async joinSweepAccounts(clientId: string | undefined, preservedMobiles: Set<string>, primaryClientMobiles: Set<string>): Promise<string> {
@@ -1351,17 +1615,24 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             });
         }
 
-        // Recovery-first: terminal accounts below the runtime floor must not lose their join slots.
-        const clients = await this.findPrioritizedJoinCandidates(query);
+        // Recovery tier first (share-limited), then warming accounts fairest first. Connects are
+        // bounded by the slots the preserved queue leaves free (same rule as refillJoinQueue).
+        const freeSlots = this.config.maxMapSize - this.joinChannelMap.size;
+        this.joinPendingSkipped = 0;
+        const clients = freeSlots > 0 ? await this.findPrioritizedJoinCandidates(query, freeSlots) : [];
 
         const joinSet = new Set<string>();
         const leaveSet = new Set<string>();
+        let capped = 0;
+        let connects = 0;
 
         for (let i = 0; i < clients.length; i++) {
             const document = clients[i];
             const mobile = document.mobile;
             // Same guard as refillJoinQueue: a capped mobile can't join today, so don't connect it.
-            if (this.isMobileDailyCapped(mobile)) continue;
+            if (this.isMobileDailyCapped(mobile)) { capped++; continue; }
+            if (connects >= freeSlots || this.joinChannelMap.size >= this.config.maxMapSize) break;
+            connects++;
             // Hoisted so the catch can hand the live client to buildPermanentAccountReason.
             let client: TelegramManager | null = null;
 
@@ -1412,6 +1683,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         }
 
         await this.pace(pacing.settle);
+
+        this.logger.log(
+            `join-sweep kind=select source=sweep pool=${this.clientType} free=${Math.max(0, freeSlots)} candidates=${clients.length} connects=${connects} picked=${joinSet.size} ` +
+            `byPhase=${this.formatJoinByPhase(joinSet)} capped=${capped} leave=${leaveSet.size} preserved=${preservedMobiles.size} pendingSkipped=${this.joinPendingSkipped}`,
+        );
 
         if (joinSet.size > 0) {
             this.createTimeout(() => this.joinChannelQueue(), this.drawPacing(pacing.joinQueueStart));
@@ -2541,6 +2817,9 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         }
 
         if (warmupAction.action === 'join_channels') {
+            // Delegated: the join queue does the joins (own pacing + daily cap). The run summary
+            // counts these as joinDelegated (`warmup-health kind=join_delegated`).
+            this.logger.debug(`warmup-health kind=join_delegated_one mobile=${maskMobile(doc.mobile)} phase=${warmupAction.phase} channels=${doc.channels || 0} queued=${this.joinChannelMap.has(doc.mobile)}`);
             return { updateCount: 0 };
         }
 
@@ -2749,8 +3028,12 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             this.logger.error('Error in join channel queue', error);
         } finally {
             this.isJoinChannelProcessing = false;
-            // Schedule next round (randomized) instead of fixed interval
-            await this.scheduleNextJoinRound();
+            // A sweep fired during this round: run it now as a real sweep (its own skipExisting
+            // and clientId, prepare, prepare lock) instead of waiting 3 h.
+            const ranDeferred = this.pendingJoinSweep ? await this.runDeferredJoinSweep('join_round_end') : false;
+            // Schedule next round (randomized) instead of fixed interval. A deferred sweep may
+            // already have scheduled one.
+            if (!ranDeferred || !this.joinChannelIntervalId) await this.scheduleNextJoinRound();
         }
     }
 
@@ -2782,6 +3065,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         const capped = Math.min(limit, 25);
         if (capped <= 0) return [];
         const pending = await this.getPendingJoinRequestChannelIds(mobile);
+        this.joinPendingSkipped += pending.length;
         const notIds = pending.length ? Array.from(new Set([...excludedIds, ...pending])) : excludedIds;
         // Curated activeChannels pool until 220, then the broader channels collection.
         const result: (Channel | ActiveChannel)[] = currentChannels < 220
@@ -2840,18 +3124,31 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
         const keys = Array.from(this.joinChannelMap.keys());
         this.logger.debug(`Processing join channel queue for ${keys.length} clients (round-robin, ${this.config.joinsPerMobilePerRound}/mobile)`);
+        const roundStart = Date.now();
+        const processed: string[] = [];
+        const round = { joined: 0, requested: 0, failed: 0, capped: 0, budgetStop: false };
 
         for (let i = 0; i < keys.length; i++) {
             const mobile = keys[i];
             let currentChannel: Channel | ActiveChannel | null = null;
             let joinCount = 0;
 
+            // Bounded round (owner 2026-11-21): stop at the time budget so a round never overruns
+            // the 3-hourly sweep. Unprocessed mobiles stay queued and go first next round.
+            if (Date.now() - roundStart >= this.JOIN_ROUND_TIME_BUDGET_MS) {
+                round.budgetStop = true;
+                break;
+            }
+
             // Daily cap check — skip and remove if already at limit
             if (this.isMobileDailyCapped(mobile)) {
                 this.logger.debug(`${maskMobile(mobile)} hit daily cap (${this.config.maxChannelJoinsPerDay}), removing from queue`);
                 this.removeFromJoinMap(mobile);
+                round.capped++;
                 continue;
             }
+            processed.push(mobile);
+            this.lastJoinServedAt.set(mobile, Date.now());
 
             try {
                 const channels = this.joinChannelMap.get(mobile);
@@ -2894,6 +3191,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
                     await this.telegramService.tryJoiningChannel(mobile, currentChannel);
                     joinCount++;
+                    round.joined++;
                     this.incrementDailyJoinCount(mobile);
 
                     // clientsJoined counter removed (spec 2026-08-01): it was a monotonic,
@@ -2966,6 +3264,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 );
                 const rawErrorMessage = this.getErrorText(error);
 
+                if (inviteRequestSent) round.requested++;
+                else if (!isDeadChannelError(error)) round.failed++;
                 if (inviteRequestSent) {
                     // Pending, NOT a failure: the channel requires admin approval and our join
                     // request was sent. Not re-queued, not a failure, and NOT a joined channel
@@ -3041,6 +3341,21 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 }
             }
         }
+
+        if (round.budgetStop) {
+            // Rotate: mobiles served this round go to the back so the unserved ones lead next round.
+            for (const mobile of processed) {
+                const queued = this.joinChannelMap.get(mobile);
+                if (!queued) continue;
+                this.joinChannelMap.delete(mobile);
+                this.joinChannelMap.set(mobile, queued);
+            }
+        }
+        this.logger.log(
+            `join-sweep kind=round pool=${this.clientType} picked=${keys.length} processed=${processed.length} ` +
+            `byPhase=${this.formatJoinByPhase(processed)} joined=${round.joined} requested=${round.requested} failed=${round.failed} ` +
+            `capped=${round.capped} budgetStop=${round.budgetStop} elapsedMin=${Math.round((Date.now() - roundStart) / 60000)} left=${this.joinChannelMap.size}`,
+        );
     }
 
     // ---- Leave Channel Queue ----
@@ -3094,6 +3409,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         } finally {
             this.isLeaveChannelProcessing = false;
             this.scheduleNextLeaveRound();
+
+            // A sweep deferred because of this leave round runs now, not after some later join round.
+            if (this.pendingJoinSweep && !this.isJoinChannelProcessing) {
+                await this.runDeferredJoinSweep('leave_end');
+            }
 
             // After leave processing, kick the join loop if it's idle — accounts that
             // just left channels may now be eligible for new joins.

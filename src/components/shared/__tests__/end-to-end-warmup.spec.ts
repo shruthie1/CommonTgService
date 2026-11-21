@@ -704,7 +704,7 @@ describe('Warmup phase transitions — jitter & stalled growing', () => {
         expect(result.action).toBe('advance_to_ready');
     });
 
-    test('growing stalled 2x expected duration → halved channel target (100 instead of 200)', () => {
+    test('growing stalled 2x expected duration → still needs the full floor (no halving, 2026-11-21)', () => {
         // Expected growing = maturing(18) - growing(8) = 10 days. 2x = 20 days of growing.
         // So if growing started at day 8 and it's now day 28+ (20 days of growing), channels target halves.
         const doc = {
@@ -720,9 +720,9 @@ describe('Warmup phase transitions — jitter & stalled growing', () => {
             usernameUpdatedAt: daysAgo(18, now),
         };
         const result = getWarmupPhaseAction(doc, now);
-        // 110 channels >= 100 (halved target), day 30 >= 18 → should advance
-        expect(result.action).toBe('upload_photo');
-        expect(result.phase).toBe(WarmupPhase.MATURING);
+        // Old code halved the target to 100 and advanced; the floor (200) now always gates.
+        expect(result.action).toBe('join_channels');
+        expect(result.phase).toBe(WarmupPhase.GROWING);
     });
 
     test('growing NOT stalled → requires full 200 channels', () => {

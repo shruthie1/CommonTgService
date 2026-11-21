@@ -180,7 +180,7 @@ class TestBaseService extends BaseClientService<BaseClientDocument> {
         removeExternalLoginSessions: (d: any, f: number) => (this as any).removeExternalLoginSessions(d, f),
         performHealthCheck: (m: string, l: number, n: number) => (this as any).performHealthCheck(m, l, n),
         logIfLongWarming: (d: any, n: number) => (this as any).logIfLongWarming(d, n),
-        getEffectiveUpdatesCap: (n: number) => (this as any).getEffectiveUpdatesCap(n),
+        getEffectiveUpdatesCap: (n: number, runs?: number) => (this as any).getEffectiveUpdatesCap(n, runs),
         isSensitiveWarmupAction: (a: string | undefined) => (this as any).isSensitiveWarmupAction(a),
         deactivateClient: (m: string, r: string, o?: any) => (this as any).deactivateClient(m, r, o),
         processJoinChannelSequentially: () => (this as any).processJoinChannelSequentially(),
@@ -2756,52 +2756,61 @@ describe('non-Error error-text fallbacks', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// Self-healing warmup throughput: getEffectiveUpdatesCap + sensitive-action sub-cap
-// Defaults on TestBaseService: MIN=8, MAX=20, TARGET_DRAIN_DAYS=8, RUNS_PER_DAY=4 -> divisor 32
+// Backlog-sized warmup cap (2026-11-21): clamp(ceil(due / runsLeftToday), MIN 8, MAX 40)
 // ════════════════════════════════════════════════════════════════════════════
-describe('getEffectiveUpdatesCap (self-healing per-run cap)', () => {
+describe('getEffectiveUpdatesCap (backlog-sized per-run cap)', () => {
     test('empty/zero backlog returns the floor (never zero — baseline throughput guaranteed)', () => {
         const s = new TestBaseService();
-        expect(s.pub.getEffectiveUpdatesCap(0)).toBe(8);   // MIN
-        expect(s.pub.getEffectiveUpdatesCap(-5 as any)).toBe(8);
-        expect(s.pub.getEffectiveUpdatesCap(1)).toBe(8);   // ceil(1/32)=1 -> clamped up to MIN
+        expect(s.pub.getEffectiveUpdatesCap(0, 4)).toBe(8);
+        expect(s.pub.getEffectiveUpdatesCap(-5 as any, 4)).toBe(8);
+        expect(s.pub.getEffectiveUpdatesCap(1, 1)).toBe(8);
     });
 
-    test('small backlog stays at the floor (no burst on a light day)', () => {
+    test('due steps are spread over the runs left today (red on old code: was ceil(n/32) clamped to 20)', () => {
         const s = new TestBaseService();
-        // ceil(200/32)=7 -> clamped up to MIN 8
-        expect(s.pub.getEffectiveUpdatesCap(200)).toBe(8);
-        // ceil(256/32)=8 -> exactly MIN
-        expect(s.pub.getEffectiveUpdatesCap(256)).toBe(8);
+        // 11-21 buffer: ~138 accounts skipped per run at cap 8. 100 due at the first run -> 25.
+        expect(s.pub.getEffectiveUpdatesCap(100, 4)).toBe(25);
+        // Same 100 due at the last run of the day -> everything up to the ceiling.
+        expect(s.pub.getEffectiveUpdatesCap(100, 1)).toBe(40);
+        expect(s.pub.getEffectiveUpdatesCap(60, 2)).toBe(30);
     });
 
-    test('grows with backlog between floor and ceiling (self-healing middle band)', () => {
+    test('large backlog is capped at the ceiling 40 (fleet throughput, never a burst past it)', () => {
         const s = new TestBaseService();
-        // ceil(320/32)=10
-        expect(s.pub.getEffectiveUpdatesCap(320)).toBe(10);
-        // ceil(480/32)=15
-        expect(s.pub.getEffectiveUpdatesCap(480)).toBe(15);
+        expect(s.pub.getEffectiveUpdatesCap(5000, 1)).toBe(40);
+        expect(s.pub.getEffectiveUpdatesCap(100000, 4)).toBe(40);
     });
 
-    test('large backlog is capped at the ceiling (never bursts — anti-detection)', () => {
+    test('runsLeft below 1 is treated as 1; default runsLeft is the full day (4)', () => {
         const s = new TestBaseService();
-        // ceil(640/32)=20 -> exactly MAX
-        expect(s.pub.getEffectiveUpdatesCap(640)).toBe(20);
-        // ceil(5000/32)=157 -> clamped down to MAX 20
-        expect(s.pub.getEffectiveUpdatesCap(5000)).toBe(20);
-        expect(s.pub.getEffectiveUpdatesCap(100000)).toBe(20);
+        expect(s.pub.getEffectiveUpdatesCap(30, 0)).toBe(30);
+        expect(s.pub.getEffectiveUpdatesCap(100)).toBe(25);
     });
 
     test('is monotonic non-decreasing in backlog and always within [MIN, MAX]', () => {
         const s = new TestBaseService();
-        let prev = 0;
-        for (let n = 0; n <= 2000; n += 37) {
-            const cap = s.pub.getEffectiveUpdatesCap(n);
-            expect(cap).toBeGreaterThanOrEqual(8);
-            expect(cap).toBeLessThanOrEqual(20);
-            expect(cap).toBeGreaterThanOrEqual(prev);
-            prev = cap;
+        for (const runs of [1, 2, 3, 4]) {
+            let prev = 0;
+            for (let n = 0; n <= 2000; n += 37) {
+                const cap = s.pub.getEffectiveUpdatesCap(n, runs);
+                expect(cap).toBeGreaterThanOrEqual(8);
+                expect(cap).toBeLessThanOrEqual(40);
+                expect(cap).toBeGreaterThanOrEqual(prev);
+                prev = cap;
+            }
         }
+    });
+});
+
+describe('getWarmupRunsLeftToday (IST quarter of the day)', () => {
+    const at = (istHour: number, istMinute: number) => Date.UTC(2026, 10, 21, istHour, istMinute) - 5.5 * 60 * 60 * 1000;
+    test('buffer run times 01:17 / 07:17 / 13:17 / 19:17 IST -> 4 / 3 / 2 / 1', () => {
+        const s: any = new TestBaseService();
+        expect([1, 7, 13, 19].map((h) => s.getWarmupRunsLeftToday(at(h, 17)))).toEqual([4, 3, 2, 1]);
+    });
+    test('promote run times 04:43 / 10:43 / 16:43 / 22:43 IST -> 4 / 3 / 2 / 1', () => {
+        const s: any = new TestBaseService();
+        expect([4, 10, 16, 22].map((h) => s.getWarmupRunsLeftToday(at(h, 43)))).toEqual([4, 3, 2, 1]);
     });
 });
 
