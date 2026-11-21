@@ -7,9 +7,10 @@
  *
  *   - idempotent: `_id` = `tg-aut:{mobile}:{clients.swappedAt ms}`, the same key tg-aut's boot fallback derives
  *     (apps/tg-aut/src/adapters/parked.ts), so whichever producer writes first wins and the other gets `exists`;
- *   - another OPEN tg-aut episode of the same mobile (an older swap) is stopped as `superseded`, then the insert is
+ *   - another OPEN tg-aut episode of the same mobile (an OLDER swap: parkedAt before this one) is stopped as `superseded`, then the insert is
  *     retried (at most 3 tries); an UNEXPIRED open episode of ANOTHER app is left alone (the insert then ends
- *     `failed`); an expired one of any app is superseded (final review M1);
+ *     `failed`); an expired one of any app is superseded (final review M1); an episode as new or newer is never
+ *     superseded: `failed` at once, logged `parked-episode kind=supersede_skip reason=newer_open` (owner 2026-11-21);
  *   - NEVER throws: every failure is logged and returned as `failed`; the swap has already happened;
  *   - bounded: every op races a CLIENT-SIDE deadline (insertOne ignores maxTimeMS, review nit P4), so a stalled
  *     socket cannot hold the caller; update/find also carry maxTimeMS;
@@ -119,6 +120,9 @@ export function buildSwapEpisode(input: SwapEpisodeInput, now: Date, random: () 
     liveSince: null,
     parkedAt: new Date(anchor),
     expiresAt: new Date(anchor + TGAUT_PARK_MAX_AGE_MS),
+    // Owner 2026-11-21 (A1): same rule as tg-platform openEpisode (gcAtFor = expiresAt + 30 d), so an episode nobody
+    // stops still leaves by the gcAt TTL. A stop resets it to stop time + 30 d.
+    gcAt: new Date(anchor + TGAUT_PARK_MAX_AGE_MS + PARKED_EPISODE_GC_MS),
     nextRunAt: new Date(anchor + delay),
     createdBy: 'cms',
     open: true,
@@ -159,10 +163,17 @@ export function supersededStopPipeline(): Record<string, unknown>[] {
  * an episode nobody closed must not block the mobile forever). MIRROR: tg-platform parked-accounts.repository.ts
  * `supersedeFilter`. Change both together.
  */
-export function swapSupersedeFilter(mobile: string, id: string): Record<string, unknown> {
+export function swapSupersedeFilter(mobile: string, id: string, parkedAt: Date): Record<string, unknown> {
   // Review M1: both stored forms (canonical, '+canonical'), as parked-session-guard.ts; the value as given otherwise.
   const forms = parkedMobileForms(mobile);
-  return { mobile: { $in: forms.length ? forms : [mobile] }, open: true, _id: { $ne: id }, $or: [{ app: 'tg-aut' }, { $expr: { $lte: ['$expiresAt', '$$NOW'] } }] };
+  // Owner 2026-11-21 (A3): only OLDER episodes; a delayed opener must not close a newer open one. `$not $gte` also
+  // matches a row with no parkedAt (treated as older). swapNewerOpenFilter is the exact complement.
+  return { mobile: { $in: forms.length ? forms : [mobile] }, open: true, _id: { $ne: id }, parkedAt: { $not: { $gte: parkedAt } }, $or: [{ app: 'tg-aut' }, { $expr: { $lte: ['$expiresAt', '$$NOW'] } }] };
+}
+
+/** Open episodes swapSupersedeFilter leaves alone only because they are as new as this one or newer. MIRROR: tg newerOpenFilter. */
+export function swapNewerOpenFilter(mobile: string, id: string, parkedAt: Date): Record<string, unknown> {
+  return { ...swapSupersedeFilter(mobile, id, parkedAt), parkedAt: { $gte: parkedAt } };
 }
 
 /** tg-aut's boot fallback writes this fixed reason (tg-platform apps/tg-aut/src/adapters/parked.ts). */
@@ -325,7 +336,7 @@ export async function openSwapEpisode(
         let closed = 0;
         while (closed < SUPERSEDE_LOOP_MAX) {
           const stopped = await withDeadline(collection.findOneAndUpdate(
-            swapSupersedeFilter(input.mobile, String(doc._id)),
+            swapSupersedeFilter(input.mobile, String(doc._id), doc.parkedAt as Date),
             supersededStopPipeline(),
             { ...OP, returnDocument: 'after', projection: { _id: 1, app: 1, mobile: 1, clientId: 1, stopReason: 1 } },
           ), deadlineMs, 'parkedAccounts.findOneAndUpdate') as Record<string, unknown> | null;
@@ -336,6 +347,15 @@ export async function openSwapEpisode(
         if (closed === 0) {
           const same = await withDeadline(collection.findOne({ _id: doc._id }, { projection: { _id: 1 }, ...OP }), deadlineMs, 'parkedAccounts.findOne');
           if (same) return exists();
+          const newer = await withDeadline(
+            collection.findOne(swapNewerOpenFilter(input.mobile, String(doc._id), doc.parkedAt as Date), { projection: { _id: 1 }, ...OP }),
+            deadlineMs, 'parkedAccounts.findOne(newer)',
+          ) as Record<string, unknown> | null;
+          if (newer) {
+            const mask = (id: unknown) => String(id).split(input.mobile).join(String(meta.mobile));
+            logger.warn(`parked-episode kind=supersede_skip reason=newer_open episode=${mask(doc._id)} newer=${mask(newer._id)}`, meta);
+            return 'failed';
+          }
         }
       } catch (stopError) {
         logger.warn(`[${input.clientId}] Parked swap episode: superseding the older episode failed: ${describe(stopError)}`, meta);

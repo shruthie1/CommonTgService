@@ -235,6 +235,132 @@ describe('ScheduledJobsService scheduler ownership', () => {
     }
   });
 
+  it('A4: a run that lost its lease cannot complete or release the new claimant (complete and fail), terminal_skip logged, a third claimant stays blocked', async () => {
+    const mongod = await MongoMemoryServer.create({ instance: { ip: '127.0.0.1' } });
+    const connection = await mongoose
+      .createConnection(mongod.getUri(), { dbName: 'scheduled-jobs-fencing' })
+      .asPromise();
+    try {
+      const runs = connection.db.collection<any>('controlPlaneJobRuns');
+      const svc = createService(['CMS_SCHEDULER'], connection);
+      const other = createService(['CMS_SCHEDULER'], connection);
+      (other as any).owner = 'host-b:2';
+      const warn = jest.spyOn((svc as any).logger, 'warn');
+      let tokenB: string | null = null;
+      // A outlived its lease (expired), then B reclaimed the same key through the real claimJob.
+      const reclaimByB = async (jobId: string) => {
+        await runs.updateOne({ _id: jobId } as any, { $set: { leaseExpiresAt: new Date(Date.now() - 1000) } });
+        tokenB = await (other as any).claimJob(runs, jobId);
+        expect(typeof tokenB).toBe('string');
+      };
+      for (const phase of ['complete', 'fail'] as const) {
+        const jobId = `fence-${phase}:1`;
+        const run = (svc as any).runClaimed(jobId, 'fence', async () => {
+          await reclaimByB(jobId);
+          if (phase === 'fail') throw new Error('late failure');
+          return { results: 'stale' };
+        });
+        if (phase === 'fail') await expect(run).rejects.toThrow('late failure');
+        else await run;
+        const doc = await runs.findOne({ _id: jobId } as any);
+        expect([doc.claimToken, doc.leaseOwner, doc.completedAt, doc.failedAt, doc.results]).toEqual([tokenB, 'host-b:2', undefined, undefined, undefined]);
+        expect(doc.leaseExpiresAt.getTime()).toBeGreaterThan(Date.now());
+        expect(warn.mock.calls.map((c) => String(c[0]))).toContain(`job-run kind=terminal_skip reason=lease_lost job=${jobId} phase=${phase}`);
+        // B's live lease still blocks a third claimant.
+        expect(await (svc as any).claimJob(runs, jobId)).toBeNull();
+        // B's own terminal write with its token persists B's outcome and releases the lease.
+        expect(await (other as any).finishRun(runs, jobId, tokenB, 'complete', { $set: { completedAt: new Date(), results: 'b' }, $unset: { leaseOwner: '', leaseExpiresAt: '' } })).toBe(true);
+        const done = await runs.findOne({ _id: jobId } as any);
+        expect([done.results, done.completedAt instanceof Date, done.leaseOwner, done.leaseExpiresAt]).toEqual(['b', true, undefined, undefined]);
+      }
+      // The normal path still completes with the token it claimed.
+      await (svc as any).runClaimed('fence-ok:1', 'fence', async () => ({ results: 'ok' }));
+      const ok = await runs.findOne({ _id: 'fence-ok:1' } as any);
+      expect([ok.results, ok.completedAt instanceof Date, ok.leaseOwner, typeof ok.claimToken]).toEqual(['ok', true, undefined, 'string']);
+    } finally {
+      await connection.dropDatabase();
+      await connection.close();
+      await mongod.stop();
+    }
+  });
+
+  it('A1: scheduler-owned keys in a task outcome are dropped before the $set (shape kept), reserved_key_dropped logged', async () => {
+    const mongod = await MongoMemoryServer.create({ instance: { ip: '127.0.0.1' } });
+    const connection = await mongoose
+      .createConnection(mongod.getUri(), { dbName: 'scheduled-jobs-reserved' })
+      .asPromise();
+    try {
+      const runs = connection.db.collection<any>('controlPlaneJobRuns');
+      const svc = createService(['CMS_SCHEDULER'], connection);
+      const warn = jest.spyOn((svc as any).logger, 'warn');
+      await (svc as any).runClaimed('reserved:1', 'reserved', async () => ({
+        _id: 'evil', completedAt: 'no', leaseOwner: 'x', leaseExpiresAt: new Date(8.64e15), claimToken: 't', failedAt: 1, error: 'e', startedAt: 0,
+        day: '2026-11-21', sent: true,
+      }));
+      const doc = await runs.findOne({ _id: 'reserved:1' } as any);
+      expect(await runs.countDocuments({ _id: 'evil' } as any)).toBe(0);
+      expect(doc.completedAt).toBeInstanceOf(Date);
+      expect(doc.startedAt).toBeInstanceOf(Date);
+      expect([doc.day, doc.sent, doc.leaseOwner, doc.leaseExpiresAt, doc.failedAt, doc.error]).toEqual(['2026-11-21', true, undefined, undefined, undefined, undefined]);
+      expect(doc.claimToken).not.toBe('t');
+      expect(warn.mock.calls.map((c) => String(c[0]))).toContain(
+        'job-run kind=reserved_key_dropped job=reserved:1 keys=_id,startedAt,completedAt,leaseOwner,leaseExpiresAt,claimToken,failedAt,error',
+      );
+    } finally {
+      await connection.dropDatabase();
+      await connection.close();
+      await mongod.stop();
+    }
+  });
+
+  it.each([
+    ['analytics health', 'runAnalyticsHealth', 'analytics-health:'],
+    ['promote reset', 'runDailyPromoteReset', 'daily-promote-stats-reset:'],
+    ['user reset', 'runDailyUserStatsReset', 'daily-user-stats-reset:'],
+  ])('A4: %s terminal write matches _id + its claim token; a miss logs terminal_skip', async (_label, method, prefix) => {
+    const controlPlaneJobRuns: any = {
+      updateOne: jest.fn().mockResolvedValueOnce({ modifiedCount: 0 }).mockResolvedValueOnce({ matchedCount: 0, modifiedCount: 0 }),
+      insertOne: jest.fn().mockResolvedValue({ acknowledged: true }),
+      find: jest.fn(() => ({ sort: () => ({ limit: () => ({ next: async () => null }) }) })),
+    };
+    const db = {
+      collection: jest.fn((name: string) => {
+        if (name === 'controlPlaneJobRuns') return controlPlaneJobRuns;
+        if (name === 'promoteStats') return { find: () => ({ toArray: async () => [] }), updateMany: jest.fn().mockResolvedValue({ matchedCount: 0, modifiedCount: 0 }) };
+        if (name === 'stats2') return { deleteMany: jest.fn().mockResolvedValue({ deletedCount: 0 }) };
+        if (name === 'userData') return { updateMany: jest.fn().mockResolvedValue({ matchedCount: 0, modifiedCount: 0 }) };
+        throw new Error(`Unexpected collection: ${name}`);
+      }),
+    };
+    const service = createService(['CMS_SCHEDULER'], { db });
+    const warn = jest.spyOn((service as any).logger, 'warn');
+    await (service as any)[method]();
+    const inserted = controlPlaneJobRuns.insertOne.mock.calls[0][0];
+    expect(typeof inserted.claimToken).toBe('string');
+    const [filter] = controlPlaneJobRuns.updateOne.mock.calls[1];
+    expect(filter).toEqual({ _id: inserted._id, claimToken: inserted.claimToken });
+    expect(String(inserted._id).startsWith(prefix)).toBe(true);
+    expect(warn.mock.calls.map((c) => String(c[0]))).toContain(`job-run kind=terminal_skip reason=lease_lost job=${inserted._id} phase=complete`);
+  });
+
+  it('A4: a failing analytics health run writes its failure on _id + its claim token; a miss logs terminal_skip phase=fail', async () => {
+    const controlPlaneJobRuns: any = {
+      updateOne: jest.fn().mockResolvedValueOnce({ modifiedCount: 0 }).mockResolvedValueOnce({ matchedCount: 0, modifiedCount: 0 }),
+      insertOne: jest.fn().mockResolvedValue({ acknowledged: true }),
+      find: jest.fn(() => ({ sort: () => ({ limit: () => ({ next: async () => null }) }) })),
+    };
+    const service = createService(['CMS_SCHEDULER'], { db: { collection: () => controlPlaneJobRuns } });
+    const warn = jest.spyOn((service as any).logger, 'warn');
+    analyticsHealth.runWithState.mockRejectedValueOnce(new Error('pg down'));
+    await expect((service as any).runAnalyticsHealth()).rejects.toThrow('pg down');
+    const inserted = controlPlaneJobRuns.insertOne.mock.calls[0][0];
+    const [filter, update] = controlPlaneJobRuns.updateOne.mock.calls[1];
+    expect(filter).toEqual({ _id: inserted._id, claimToken: inserted.claimToken });
+    expect(update.$set.error).toBe('pg down');
+    expect(update.$set.leaseExpiresAt).toEqual(new Date(0));
+    expect(warn.mock.calls.map((c) => String(c[0]))).toContain(`job-run kind=terminal_skip reason=lease_lost job=${inserted._id} phase=fail`);
+  });
+
   it('analytics health: guardrail dedupe state is read from the last completed day and stored on today\'s run', async () => {
     const mongod = await MongoMemoryServer.create({ instance: { ip: '127.0.0.1' } });
     const connection = await mongoose
@@ -391,7 +517,7 @@ describe('ScheduledJobsService scheduler ownership', () => {
       updateOne: jest
         .fn()
         .mockResolvedValueOnce({ modifiedCount: 0 })
-        .mockResolvedValueOnce({ modifiedCount: 1 }),
+        .mockResolvedValueOnce({ matchedCount: 1, modifiedCount: 1 }),
       insertOne: jest.fn().mockResolvedValue({ acknowledged: true }),
     };
     const db = {
@@ -478,7 +604,7 @@ describe('ScheduledJobsService scheduler ownership', () => {
       updateOne: jest
         .fn()
         .mockResolvedValueOnce({ modifiedCount: 0 })
-        .mockResolvedValueOnce({ modifiedCount: 1 }),
+        .mockResolvedValueOnce({ matchedCount: 1, modifiedCount: 1 }),
       insertOne: jest.fn().mockResolvedValue({ acknowledged: true }),
     };
     const db = {

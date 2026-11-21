@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Types, type Connection } from 'mongoose';
+import { randomUUID } from 'crypto';
 import * as schedule from 'node-schedule-tz';
 import {
   ActiveChannelsService,
@@ -30,6 +31,11 @@ const IST = 'Asia/Kolkata';
  * must outlive the run; a crashed run blocks at most the next one or two slots.
  */
 export const SWAP_MAINTENANCE_CLAIM_TTL_MS = 60 * 60 * 1000;
+/**
+ * Keys the scheduler owns on a controlPlaneJobRuns doc. A task outcome is spread into the completion $set, so these
+ * are dropped from it first (schema audit A1, owner 2026-11-21): a task can never overwrite the lease state.
+ */
+export const JOB_RUN_RESERVED_KEYS = ['_id', 'startedAt', 'completedAt', 'leaseOwner', 'leaseExpiresAt', 'claimToken', 'failedAt', 'error'] as const;
 /** Daily user reset: payers (payAmount > 10) whose reply window passed this many messages get it reopened. */
 export const DAILY_RESET_WINDOW_ABOVE = 30;
 /** ...at this windowCount (tg-platform @tg/parked/constants WINDOW_COUNT_ESTABLISHED; the old totalCount reset value). */
@@ -347,26 +353,48 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
         return;
       }
     }
-    if (!(await this.claimJob(runs, jobId, options.ttlMs))) {
+    const token = await this.claimJob(runs, jobId, options.ttlMs);
+    if (!token) {
       this.logger.warn(`${label} already claimed or completed: ${jobId}`);
       return;
     }
     try {
-      const outcome = await task();
-      await runs.updateOne(
-        { _id: jobId },
-        { $set: { completedAt: new Date(), ...outcome }, $unset: { leaseOwner: '', leaseExpiresAt: '' } },
-      );
+      const outcome = this.withoutReservedKeys(jobId, await task());
+      await this.finishRun(runs, jobId, token, 'complete',
+        { $set: { completedAt: new Date(), ...outcome }, $unset: { leaseOwner: '', leaseExpiresAt: '' } });
     } catch (error) {
-      await runs.updateOne(
-        { _id: jobId },
-        {
-          $set: { failedAt: new Date(), error: error instanceof Error ? error.message : String(error), leaseExpiresAt: new Date(0) },
-          $unset: { leaseOwner: '' },
-        },
-      );
+      await this.finishRun(runs, jobId, token, 'fail', this.failureUpdate(error));
       throw error;
     }
+  }
+
+  /** A task outcome without the scheduler-owned keys (A1). Logs `job-run kind=reserved_key_dropped` when any was there. */
+  private withoutReservedKeys(jobId: string, outcome: Record<string, unknown> | null | undefined): Record<string, unknown> {
+    const out: Record<string, unknown> = { ...(outcome ?? {}) };
+    const dropped = JOB_RUN_RESERVED_KEYS.filter((k) => Object.prototype.hasOwnProperty.call(out, k));
+    for (const k of dropped) delete out[k];
+    if (dropped.length) this.logger.warn(`job-run kind=reserved_key_dropped job=${jobId} keys=${dropped.join(',')}`);
+    return out;
+  }
+
+  /** The failure write: failure history kept (owner 2026-11-21); an expired lease permits a safe restart/manual retry. */
+  private failureUpdate(error: unknown): Record<string, unknown> {
+    return {
+      $set: { failedAt: new Date(), error: error instanceof Error ? error.message : String(error), leaseExpiresAt: new Date(0) },
+      $unset: { leaseOwner: '' },
+    };
+  }
+
+  /**
+   * Every terminal write (complete / fail) matches `_id` + this claim's token (A4, owner 2026-11-21). A run that
+   * outlived its lease and was reclaimed cannot complete or release the new claimant's run: the write matches
+   * nothing and logs `job-run kind=terminal_skip reason=lease_lost`. Returns whether the write matched.
+   */
+  private async finishRun(runs: any, jobId: string, token: string, phase: 'complete' | 'fail', update: Record<string, unknown>): Promise<boolean> {
+    const result = await runs.updateOne({ _id: jobId, claimToken: token }, update);
+    if (result?.matchedCount === 1) return true;
+    this.logger.warn(`job-run kind=terminal_skip reason=lease_lost job=${jobId} phase=${phase}`);
+    return false;
   }
 
   /** UTC hour, e.g. 2026-11-07T05, the run-claim key of the hourly pool snapshot. */
@@ -394,7 +422,8 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
     const db = this.requireDatabase('analytics health check');
     const runs = db.collection<any>('controlPlaneJobRuns');
     const jobId = `analytics-health:${this.istDateKey()}`;
-    if (!(await this.claimJob(runs, jobId))) {
+    const token = await this.claimJob(runs, jobId);
+    if (!token) {
       this.logger.warn(`Analytics health check already claimed or completed: ${jobId}`);
       return;
     }
@@ -409,26 +438,12 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
         Date.now(),
         previous?.historyAlerts ?? {},
       );
-      await runs.updateOne(
-        { _id: jobId },
-        {
-          $set: { completedAt: new Date(), problems, suppressed, historyAlerts },
-          $unset: { leaseOwner: '', leaseExpiresAt: '' },
-        },
-      );
+      await this.finishRun(runs, jobId, token, 'complete', {
+        $set: { completedAt: new Date(), problems, suppressed, historyAlerts },
+        $unset: { leaseOwner: '', leaseExpiresAt: '' },
+      });
     } catch (error) {
-      await runs.updateOne(
-        { _id: jobId },
-        {
-          $set: {
-            failedAt: new Date(),
-            error: error instanceof Error ? error.message : String(error),
-            // An expired lease permits a safe manual/restart retry for this day.
-            leaseExpiresAt: new Date(0),
-          },
-          $unset: { leaseOwner: '' },
-        },
-      );
+      await this.finishRun(runs, jobId, token, 'fail', this.failureUpdate(error));
       throw error;
     }
   }
@@ -437,9 +452,9 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
     const db = this.requireDatabase('daily promoteStats reset');
 
     const jobId = `daily-promote-stats-reset:${this.istDateKey()}`;
-    if (
-      !(await this.claimJob(db.collection<any>('controlPlaneJobRuns'), jobId))
-    ) {
+    const runs = db.collection<any>('controlPlaneJobRuns');
+    const token = await this.claimJob(runs, jobId);
+    if (!token) {
       this.logger.warn(
         `Daily promoteStats reset already claimed or completed: ${jobId}`,
       );
@@ -464,30 +479,16 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
       const result = await this.resetPromoteStatsWithRetries(
         db.collection<any>('promoteStats'),
       );
-      await db.collection<any>('controlPlaneJobRuns').updateOne(
-        { _id: jobId },
-        {
-          $set: {
-            completedAt: new Date(),
-            resetMatchedCount: result.matchedCount,
-            resetModifiedCount: result.modifiedCount,
-          },
-          $unset: { leaseOwner: '', leaseExpiresAt: '' },
+      await this.finishRun(runs, jobId, token, 'complete', {
+        $set: {
+          completedAt: new Date(),
+          resetMatchedCount: result.matchedCount,
+          resetModifiedCount: result.modifiedCount,
         },
-      );
+        $unset: { leaseOwner: '', leaseExpiresAt: '' },
+      });
     } catch (error) {
-      await db.collection<any>('controlPlaneJobRuns').updateOne(
-        { _id: jobId },
-        {
-          $set: {
-            failedAt: new Date(),
-            error: error instanceof Error ? error.message : String(error),
-            // An expired lease permits a safe manual/restart retry for this day.
-            leaseExpiresAt: new Date(0),
-          },
-          $unset: { leaseOwner: '' },
-        },
-      );
+      await this.finishRun(runs, jobId, token, 'fail', this.failureUpdate(error));
       throw error;
     }
 
@@ -520,7 +521,9 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
     const now = new Date();
     const dayKey = this.istDateKey(now);
     const jobId = `daily-user-stats-reset:${dayKey}`;
-    if (!(await this.claimJob(db.collection<any>('controlPlaneJobRuns'), jobId))) {
+    const runs = db.collection<any>('controlPlaneJobRuns');
+    const token = await this.claimJob(runs, jobId);
+    if (!token) {
       this.logger.warn(
         `Daily user stats reset already claimed or completed: ${jobId}`,
       );
@@ -533,30 +536,17 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
         db.collection<any>('userData'),
         new Date(`${dayKey}T00:00:00+05:30`),
       );
-      await db.collection<any>('controlPlaneJobRuns').updateOne(
-        { _id: jobId },
-        {
-          $set: {
-            completedAt: new Date(),
-            stats2DeletedCount: result.stats2DeletedCount,
-            paidUsersMatchedCount: result.paidUsersMatchedCount,
-            paidUsersModifiedCount: result.paidUsersModifiedCount,
-          },
-          $unset: { leaseOwner: '', leaseExpiresAt: '' },
+      await this.finishRun(runs, jobId, token, 'complete', {
+        $set: {
+          completedAt: new Date(),
+          stats2DeletedCount: result.stats2DeletedCount,
+          paidUsersMatchedCount: result.paidUsersMatchedCount,
+          paidUsersModifiedCount: result.paidUsersModifiedCount,
         },
-      );
+        $unset: { leaseOwner: '', leaseExpiresAt: '' },
+      });
     } catch (error) {
-      await db.collection<any>('controlPlaneJobRuns').updateOne(
-        { _id: jobId },
-        {
-          $set: {
-            failedAt: new Date(),
-            error: error instanceof Error ? error.message : String(error),
-            leaseExpiresAt: new Date(0),
-          },
-          $unset: { leaseOwner: '' },
-        },
-      );
+      await this.finishRun(runs, jobId, token, 'fail', this.failureUpdate(error));
       throw error;
     }
   }
@@ -660,9 +650,14 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
     return db;
   }
 
-  private async claimJob(collection: any, jobId: string, ttlMs: number = 15 * 60 * 1000): Promise<boolean> {
+  /**
+   * Claim `jobId`; returns this claim's token, or null when another live claim or a completed run holds it.
+   * The token (A4) is stored as `claimToken` and every terminal write matches it (finishRun).
+   */
+  private async claimJob(collection: any, jobId: string, ttlMs: number = 15 * 60 * 1000): Promise<string | null> {
     const now = new Date();
     const leaseExpiresAt = new Date(now.getTime() + ttlMs);
+    const claimToken = randomUUID();
     const claimed = await collection.updateOne(
       {
         _id: jobId,
@@ -672,9 +667,9 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
           { leaseExpiresAt: { $exists: false } },
         ],
       },
-      { $set: { leaseOwner: this.owner, leaseExpiresAt, startedAt: now } },
+      { $set: { leaseOwner: this.owner, leaseExpiresAt, startedAt: now, claimToken } },
     );
-    if (claimed.modifiedCount === 1) return true;
+    if (claimed.modifiedCount === 1) return claimToken;
 
     try {
       await collection.insertOne({
@@ -682,10 +677,11 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
         leaseOwner: this.owner,
         leaseExpiresAt,
         startedAt: now,
+        claimToken,
       });
-      return true;
+      return claimToken;
     } catch (error) {
-      if ((error as { code?: number }).code === 11000) return false;
+      if ((error as { code?: number }).code === 11000) return null;
       throw error;
     }
   }

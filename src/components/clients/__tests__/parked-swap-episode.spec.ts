@@ -108,6 +108,8 @@ describe('openSwapEpisode (real Mongo)', () => {
       liveSince: null,
       parkedAt: SWAPPED_AT,
       expiresAt: new Date(SWAPPED_AT.getTime() + 2 * 24 * 3600_000),
+      // Owner 2026-11-21: same rule as tg openEpisode (expiresAt + 30 d).
+      gcAt: new Date(SWAPPED_AT.getTime() + 2 * 24 * 3600_000 + 30 * 24 * 3600_000),
       nextRunAt: new Date(SWAPPED_AT.getTime() + SWAP_FIRST_PASS_MIN_MS + Math.round((SWAP_FIRST_PASS_MAX_MS - SWAP_FIRST_PASS_MIN_MS) * 0.5)),
       createdBy: 'cms',
       open: true,
@@ -144,6 +146,24 @@ describe('openSwapEpisode (real Mongo)', () => {
     expect(old.version).toBe(4);
     expect(old.gcAt).toBeInstanceOf(Date);
     expect(await episodes.countDocuments({ mobile: OLD, open: true })).toBe(1);
+  });
+
+  test('A3: a delayed opener (older swappedAt) does not close a NEWER open episode: failed, newer_open logged', async () => {
+    const newer = buildSwapEpisode(input({ swappedAt: new Date(SWAPPED_AT.getTime() + 3_600_000) }), new Date(), () => 0);
+    await episodes.insertOne({ ...newer, version: 2 });
+    expect(await openSwapEpisode(col(), input(), { logger, control: ctl() })).toBe('failed');
+    const kept = await episodes.findOne({ _id: newer._id });
+    expect([kept.open, kept.state, kept.version]).toEqual([true, 'pending', 2]);
+    expect(await episodes.countDocuments({ _id: swapEpisodeKey(OLD, SWAPPED_AT) })).toBe(0);
+    const lines = logger.warn.mock.calls.map((c) => String(c[0]));
+    expect(lines.some((l) => l.startsWith('parked-episode kind=supersede_skip reason=newer_open'))).toBe(true);
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain(OLD);
+  });
+
+  test('A3: an older open episode with no parkedAt counts as older and is superseded', async () => {
+    await episodes.insertOne({ _id: `tg-aut:${OLD}:1`, app: 'tg-aut', mobile: OLD, open: true, state: 'active', version: 1, expiresAt: new Date(Date.now() + 3_600_000) });
+    expect(await openSwapEpisode(col(), input(), { logger, control: ctl() })).toBe('inserted');
+    expect((await episodes.findOne({ _id: `tg-aut:${OLD}:1` })).stopReason).toBe('superseded');
   });
 
   test('an UNEXPIRED open episode of ANOTHER app (promote) is left alone: failed, logged, nothing thrown', async () => {
@@ -313,8 +333,8 @@ describe('openSwapEpisode (real Mongo)', () => {
   });
 
   test("review M1: the supersede filter matches both mobile forms (a '+'-form episode is seen)", () => {
-    expect(swapSupersedeFilter(OLD, 'id-1')).toEqual({
-      mobile: { $in: [OLD, `+${OLD}`] }, open: true, _id: { $ne: 'id-1' },
+    expect(swapSupersedeFilter(OLD, 'id-1', SWAPPED_AT)).toEqual({
+      mobile: { $in: [OLD, `+${OLD}`] }, open: true, _id: { $ne: 'id-1' }, parkedAt: { $not: { $gte: SWAPPED_AT } },
       $or: [{ app: 'tg-aut' }, { $expr: { $lte: ['$expiresAt', '$$NOW'] } }],
     });
   });

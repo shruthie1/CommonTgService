@@ -398,7 +398,7 @@ export class PaymentProofsService {
                 .lean<ChatUser[]>()
                 .exec();
             // Display name (owner 2026-11-07): tg-aut stores userData.username as `@username || firstName`, so it is a
-            // first name exactly when the person has no Telegram handle (userIdentity.handle; index chatId_1). Live
+            // first name exactly when the person has no Telegram handle (userIdentity.handle; index chatId_unique). Live
             // 2026-11-07, 1,000 newest chats: username = handle on 425/426 with a handle, a first name on 574/574 without.
             const handles = new Map((await this.proofModel.db.collection('userIdentity')
                 .find({ chatId: { $in: chunk } }, { projection: { _id: 0, chatId: 1, handle: 1 } }).toArray())
