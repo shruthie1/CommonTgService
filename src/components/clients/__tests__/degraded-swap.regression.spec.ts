@@ -47,8 +47,23 @@ interface Row {
 
 const T3 = '919000915704';
 const T1 = '919000911111';
+/** A second clean spare: refill keeps the last clean spare (owner 2026-11-21), so refill rows need two. */
+const T1B = '919000911112';
 const setup = (fx: Fixture, req: any = deadReq()) => fx.svc.setupClient(CLIENT, req);
 const maintain = (fx: Fixture) => fx.svc.runSwapMaintenance();
+/** setupClient plus every ClientService logger.log line it wrote (owner 2026-11-21 swap-candidate lines). */
+const setupLogged = async (fx: Fixture, req: any) => {
+  const spy = jest.spyOn(fx.svc.logger, 'log');
+  try {
+    const out = await fx.svc.setupClient(CLIENT, req);
+    return { ...out, logs: spy.mock.calls.map((c: any[]) => String(c[0])) };
+  } finally { spy.mockRestore(); }
+};
+/** The reason tg-aut's promo-health / ban-gate swap sends (job-manager.ts handleFailedRetry). */
+const promoReq = () => ({
+  days: 3, archiveOld: true, formalities: true,
+  reason: 'Promotion health check failed: retry gate_start (landed=0, failed=0 since the retry), failStreak=0, failedRetries=0',
+});
 /** runSwapMaintenance plus every ClientService logger.log line it wrote (owner 2026-11-19 decision lines). */
 const maintainLogged = async (fx: Fixture) => {
   const spy = jest.spyOn(fx.svc.logger, 'log');
@@ -425,7 +440,7 @@ const rows: Row[] = [
     run: (fx) => maintain(fx),
     expect: async (out, fx) => { expect(out.rescue).toEqual([]); expect((await fx.client()).mobile).toBe(MAIN); } },
   { id: 'DS-80', name: 'refill: SpamBot-limited (alive) main + tier-1 appears -> swapped, reason POOL_REFILL, old returned (D8)',
-    setup: async (fx) => { await fx.world({}, { mainBuffer: limited(4) }); await fx.addBuffer(T1); },
+    setup: async (fx) => { await fx.world({}, { mainBuffer: limited(4) }); await fx.addBuffer(T1); await fx.addBuffer(T1B, { availableDate: '2026-01-02' }); },
     run: (fx) => maintain(fx),
     expect: async (out, fx) => {
       expect(out.refill).toEqual([{ clientId: CLIENT, status: 'swapped', newMobile: T1 }]);
@@ -647,6 +662,7 @@ const rows: Row[] = [
       for (let i = 0; i < 5; i++) {
         await fx.addClient(`lim${i}`, `91900098000${i}`, {}, { mainBuffer: limited(4) });
         await fx.addBuffer(`91900097000${i}`, { clientId: `lim${i}` });
+        await fx.addBuffer(`91900096000${i}`, { clientId: `lim${i}`, availableDate: '2026-01-02' }); // a clean spare stays (owner 2026-11-21)
       }
     },
     run: (fx) => maintain(fx),
@@ -1041,7 +1057,7 @@ const rows: Row[] = [
   { id: 'DS-125', name: 'refill trusts the main\'s stored SpamBot verdict only when <= 7 days old (60-day-old harsh: no swap, no restart)',
     setup: async (fx) => {
       await fx.world({ deployKey: 'http://deploy' }, { mainBuffer: { spamStatus: 'harsh', spamCheckedAt: new Date(Date.now() - 60 * DAY) } });
-      await fx.addBuffer(T1);
+      await fx.addBuffer(T1); await fx.addBuffer(T1B, { availableDate: '2026-01-02' });
     },
     run: async (fx) => {
       const stale = (await maintain(fx)).refill;
@@ -1064,6 +1080,7 @@ const rows: Row[] = [
       await fx.addClient('bad2', '919000940003', { dbcoll: 'b2' }, { mainBuffer: limited(4) });
       await fx.addClient('ok2', '919000940004', { dbcoll: 'o2' }, { mainBuffer: limited(4) });
       await fx.addBuffer('919000940014', { clientId: 'ok2' });
+      await fx.addBuffer('919000940024', { clientId: 'ok2', availableDate: '2026-01-02' });
       const orig = Object.getPrototypeOf(fx.buffer).executeQuery;
       fx.buffer.executeQuery.mockImplementation(function (this: any, q: any, ...rest: any[]) {
         const ids = q?.clientId?.$in ?? [];
@@ -1405,7 +1422,7 @@ const rows: Row[] = [
       expect(out.logs).toContain(`pool-refill kind=skip client=${CLIENT} reason=short_limit daysLeft=1 hoursSinceSwap=none`);
     } },
   { id: 'DS-143', name: 'refill still swaps a main limited 4 days out whose last swap was 25 h ago',
-    setup: async (fx) => { await fx.world({ swappedAt: new Date(Date.now() - 25 * 3600_000) }, { mainBuffer: limited(4) }); await fx.addBuffer(T1); },
+    setup: async (fx) => { await fx.world({ swappedAt: new Date(Date.now() - 25 * 3600_000) }, { mainBuffer: limited(4) }); await fx.addBuffer(T1); await fx.addBuffer(T1B, { availableDate: '2026-01-02' }); },
     run: (fx) => maintainLogged(fx),
     expect: async (out, fx) => {
       expect(out.refill).toEqual([{ clientId: CLIENT, status: 'swapped', newMobile: T1 }]);
@@ -1427,6 +1444,7 @@ const rows: Row[] = [
       await fx.addBuffer('919000950011', { clientId: 'hr1' });
       await fx.addClient('hr2', '919000950002', { dbcoll: 'h2', swappedAt: new Date(Date.now() - 25 * 3600_000) }, { mainBuffer: harsh() });
       await fx.addBuffer('919000950012', { clientId: 'hr2' });
+      await fx.addBuffer('919000950022', { clientId: 'hr2', availableDate: '2026-01-02' });
     },
     run: (fx) => maintain(fx),
     expect: (out) => {
@@ -1439,7 +1457,7 @@ const rows: Row[] = [
     setup: async (fx) => {
       const at = new Date(Date.now() - 2 * 3600_000);
       await fx.world({ swappedAt: at, sessionChangedAt: at }, { mainBuffer: limited(4) });
-      await fx.addBuffer(T1);
+      await fx.addBuffer(T1); await fx.addBuffer(T1B, { availableDate: '2026-01-02' });
     },
     run: (fx) => maintain(fx),
     expect: (out) => { expect(out.refill).toEqual([{ clientId: CLIENT, status: 'swapped', newMobile: T1 }]); } },
@@ -1533,7 +1551,7 @@ const rows: Row[] = [
     setup: async (fx) => {
       const legacy = new Date(Date.now() - 2 * 3600_000);
       await fx.world({ swappedAt: legacy, sessionChangedAt: legacy } as any, { mainBuffer: limited(10) });
-      await fx.addBuffer(T1);
+      await fx.addBuffer(T1); await fx.addBuffer(T1B, { availableDate: '2026-01-02' });
     },
     run: async (fx) => {
       const spy = jest.spyOn(fx.svc.logger, 'log');
@@ -1554,7 +1572,7 @@ const rows: Row[] = [
   { id: 'DS-153', name: 'a cutover between the refill snapshot and the setup lease aborts the refill (stale_main): new main kept, no retry episode',
     setup: async (fx) => {
       await fx.world({ swappedAt: new Date(Date.now() - 25 * 3600_000) }, { mainBuffer: limited(10) });
-      await fx.addBuffer(T1);
+      await fx.addBuffer(T1); await fx.addBuffer(T1B, { availableDate: '2026-01-02' });
     },
     run: async (fx) => {
       const svc = fx.svc as any;
@@ -1722,6 +1740,210 @@ const rows: Row[] = [
       expect(out.upgrade).toEqual([{ clientId: CLIENT, fromTier: 3, status: 'cleared' }]);
       expect((await fx.client()).degraded).toBeUndefined();
       expect(out.logs).toContain(`degraded-clear kind=cleared client=${CLIENT} tier=3`);
+    } },
+  // ── 12. Main-swap candidate fixes (owner 2026-11-21) ──────────────────────────────────────────
+  { id: 'DS-162', name: 'promo-health swap, own pool empty: borrows a sibling spare (tier-2 rules), clientId reassigned, no marker; logs own=none then sibling=found',
+    setup: async (fx) => { await fx.world(); await sibling(fx, ['919000920001', '919000920002', '919000920003']); },
+    run: (fx) => setupLogged(fx, promoReq()),
+    expect: async (out, fx) => {
+      await swappedTo('919000920001', null)(out, fx);
+      expect((await fx.buf('919000920001')).clientId).toBe(CLIENT);
+      expect(fx.count('Buffer borrowed')).toBe(1);
+      expect(fx.notices().find((n: any) => n.title === 'Buffer borrowed').summary).toMatch(/^Main replaced by a spare borrowed from sneha1/);
+      expect(out.logs).toContain(`swap-candidate kind=tier tier=own result=none client=${CLIENT} scanned=0 limit=25 cleanOnly=true`);
+      expect(out.logs).toContain(`swap-candidate kind=tier tier=sibling result=found client=${CLIENT} from=${SIBLING} lenders=1`);
+    } },
+  { id: 'DS-163', name: 'promo-health swap with an own spare: own pool used, sibling never scanned',
+    setup: async (fx) => { await fx.world(); await fx.addBuffer(T1); await sibling(fx, ['919000920001', '919000920002', '919000920003']); },
+    run: (fx) => setupLogged(fx, promoReq()),
+    expect: async (out, fx) => {
+      await swappedTo(T1, null)(out, fx);
+      expect(out.logs).toContain(`swap-candidate kind=tier tier=own result=found client=${CLIENT} scanned=1 limit=25 cleanOnly=true`);
+      expect(out.logs.some((l: string) => l.includes('tier=sibling'))).toBe(false);
+    } },
+  { id: 'DS-164', name: 'promo-health swap never takes a limited account: sibling spares probe limited -> rejected; own limited row (tier 3) never scanned; no_candidate',
+    setup: async (fx) => {
+      await fx.world(); await fx.addBuffer(T3, limited(5));
+      await sibling(fx, ['919000920001', '919000920002', '919000920003', '919000920004']);
+      mockProbe.mockImplementation(async () => probeAs('limited'));
+    },
+    run: (fx) => setupLogged(fx, promoReq()),
+    expect: async (out, fx) => {
+      await noSwap(2)(out, fx);
+      expect(out.status).toBe('no_candidate');
+      expect(mockProbe.mock.calls.map((c: any[]) => c[0])).not.toContain(T3);
+      expect(out.logs).toContain(`swap-candidate kind=skip reason=limited client=${CLIENT} mobile=****0001`);
+      expect(out.logs).toContain(`swap-candidate kind=tier tier=sibling result=none client=${CLIENT} siblings=1 lenders=1`);
+      expect(out.logs).toContain(`swap-candidate kind=result status=no_candidate client=${CLIENT} pending=false cause=promo_health detail=sibling_none`);
+    } },
+  { id: 'DS-165', name: 'promo-health swap is clean-only: an inconclusive SpamBot probe (unknown) is rejected and logged',
+    setup: async (fx) => { await fx.world(); await fx.addBuffer(T1); mockProbe.mockImplementation(async () => ({ status: 'unknown', limitedUntil: null, error: 'timeout' })); },
+    run: (fx) => setupLogged(fx, promoReq()),
+    expect: async (out, fx) => {
+      await noSwap(1)(out, fx);
+      // Review M2: not a pool miss; tg-aut retries on its short pending backoff.
+      expect(out).toMatchObject({ status: 'no_candidate', moreCandidatesPending: true, probeUnknown: true });
+      expect(out.logs).toContain(`swap-candidate kind=skip reason=probe_unknown client=${CLIENT} mobile=****1111`);
+      expect(out.logs).toContain(`swap-candidate kind=result status=no_candidate client=${CLIENT} pending=true cause=promo_health detail=probe_unknown`);
+    } },
+  { id: 'DS-166', name: 'control: a SpamBot-limited main report (not clean-only) still allows an inconclusive probe (SpamBot outage never blocks it)',
+    setup: async (fx) => { await fx.world(); await fx.addBuffer(T1); mockProbe.mockImplementation(async () => ({ status: 'unknown', limitedUntil: null, error: 'timeout' })); },
+    run: (fx) => setupLogged(fx, limitedReq()),
+    expect: swappedTo(T1, null) },
+  { id: 'DS-167', name: 'refill is clean-only: two spares that both probe inconclusive -> no swap, main kept',
+    setup: async (fx) => {
+      await fx.world({ swappedAt: new Date(Date.now() - 25 * 3600_000) }, { mainBuffer: limited(4) });
+      await fx.addBuffer(T1); await fx.addBuffer(T1B, { availableDate: '2026-01-02' });
+      mockProbe.mockImplementation(async () => ({ status: 'unknown', limitedUntil: null, error: 'timeout' }));
+    },
+    run: (fx) => maintainLogged(fx),
+    expect: async (out, fx) => {
+      // Review M2: an inconclusive-only miss is not counted toward the 6-miss hard stop.
+      expect(out.refill).toEqual([{ clientId: CLIENT, status: 'no_candidate' }]);
+      expect((await fx.client()).mobile).toBe(MAIN);
+      expect((await fx.client()).swapRetry).toBeUndefined();
+      expect(out.logs).toContain(`swap-candidate kind=skip reason=probe_unknown client=${CLIENT} mobile=****1111`);
+      expect(out.logs).toContain(`swap-candidate kind=result status=no_candidate client=${CLIENT} pending=true cause=pool_refill detail=probe_unknown`);
+      expect(out.logs).toContain(`swap-retry kind=skip op=record reason=probe_unknown client=${CLIENT} pass=refill`);
+    } },
+  { id: 'DS-168', name: 'refill keeps the last usable spare: one usable row (+ one without a users doc, + one in a future limit) -> skipped_last_spare, no setup',
+    setup: async (fx) => {
+      await fx.world({ swappedAt: new Date(Date.now() - 25 * 3600_000) }, { mainBuffer: limited(4) });
+      await fx.addBuffer(T1); await fx.addBuffer(T1B, { availableDate: '2026-01-02' }, null);
+      await fx.addBuffer('919000911113', limited(5));
+    },
+    run: (fx) => maintainLogged(fx),
+    expect: async (out, fx) => {
+      expect(out.refill).toEqual([{ clientId: CLIENT, status: 'skipped_last_spare' }]);
+      expect(fx.tg.setActiveClientSetup).not.toHaveBeenCalled();
+      expect((await fx.client()).mobile).toBe(MAIN);
+      expect((await fx.client()).swapRetry).toBeUndefined();
+      expect(out.logs).toContain(`pool-refill kind=skip client=${CLIENT} reason=last_spare daysLeft=4 hoursSinceSwap=25.0 usableSpares=1`);
+    } },
+  { id: 'DS-169', name: 'refill with no usable spare logs reason=no_spare and writes no row',
+    setup: async (fx) => { await fx.world({ swappedAt: new Date(Date.now() - 25 * 3600_000) }, { mainBuffer: limited(4) }); },
+    run: (fx) => maintainLogged(fx),
+    expect: (out) => {
+      expect(out.refill).toEqual([]);
+      expect(out.logs).toContain(`pool-refill kind=skip client=${CLIENT} reason=no_spare daysLeft=4 hoursSinceSwap=25.0 usableSpares=0`);
+    } },
+  { id: 'DS-170', name: 'a dead main still takes the only spare (the last-spare rule is refill only)',
+    setup: async (fx) => { await fx.world(); await fx.addBuffer(T1); },
+    run: (fx) => setup(fx), expect: swappedTo(T1, null) },
+  { id: 'DS-171', name: 'own scan reads up to 25 rows (14 here; scanned count logged); the 10th backup check still runs',
+    setup: async (fx) => {
+      await fx.world();
+      for (let i = 0; i < 9; i++) await fx.addBuffer(`9190009800${String(i).padStart(2, '0')}`, { availableDate: '2025-12-01' }, null);
+      await fx.addBuffer(T1);
+      for (let i = 0; i < 4; i++) await fx.addBuffer(`9190009810${i}`, { availableDate: '2026-01-02' });
+    },
+    run: (fx) => setupLogged(fx, limitedReq()),
+    expect: async (out, fx) => {
+      await swappedTo(T1, null)(out, fx);
+      expect(out.logs).toContain(`swap-candidate kind=tier tier=own result=found client=${CLIENT} scanned=14 limit=25`);
+    } },
+  { id: 'DS-172', name: 'tg-aut can tell no_candidate from cooldown: no_candidate carries no cooldownRemainingMs and starts no cooldown; after a swap the next call is cooldown with time left',
+    setup: async (fx) => { await fx.world(); },
+    run: async (fx) => {
+      const first = await setupLogged(fx, promoReq());
+      await fx.addBuffer(T1);
+      const second = await setupLogged(fx, promoReq());
+      const third = await setupLogged(fx, promoReq());
+      // Past the report window (a reportedMobile = the new main), the in-process 4-min cooldown answers.
+      const spy = jest.spyOn(fx.svc.logger, 'log');
+      const fourth = await fx.svc.runSetup(CLIENT, promoReq(), {});
+      const fourthLogs = spy.mock.calls.map((c: any[]) => String(c[0]));
+      spy.mockRestore();
+      return { first, second, third, fourth: { ...fourth, logs: fourthLogs } };
+    },
+    expect: (r) => {
+      expect(r.first).toMatchObject({ status: 'no_candidate', swapped: false });
+      expect(r.first.cooldownRemainingMs).toBeUndefined();
+      expect(r.first.logs).toContain(`swap-candidate kind=result status=no_candidate client=${CLIENT} pending=false cause=promo_health detail=sibling_none`);
+      expect(r.second).toMatchObject({ status: 'swapped', newMobile: T1 });
+      expect(r.third.status).toBe('cooldown');
+      expect(r.third.cooldownRemainingMs).toBeGreaterThan(0);
+      // An old-bundle report right after the cutover is held by the 15-min report window (screenSetupReport).
+      expect(r.third.logs.some((l: string) => l.startsWith(`swap-candidate kind=result status=cooldown client=${CLIENT} cause=report_grace cooldownRemainingMs=`))).toBe(true);
+      expect(r.fourth).toMatchObject({ status: 'cooldown', swapped: false });
+      expect(r.fourth.cooldownRemainingMs).toBeGreaterThan(0);
+      expect(r.fourth.logs.some((l: string) => l.startsWith(`swap-candidate kind=result status=cooldown client=${CLIENT} cause=recent_swap cooldownRemainingMs=`))).toBe(true);
+    } },
+
+  // ── 13. Review fixes (2026-11-21) ──────────────────────────────────────────────────────────────
+  { id: 'DS-173', name: 'review H1: refill counts stale-harsh (>30 d) and lifted-limited spares as usable (re-probed at swap time) and refills',
+    setup: async (fx) => {
+      await fx.world({ swappedAt: new Date(Date.now() - 25 * 3600_000) }, { mainBuffer: limited(4) });
+      await fx.addBuffer(T1, { spamStatus: 'harsh', limitedUntil: null, spamCheckedAt: new Date(Date.now() - 31 * DAY) });
+      await fx.addBuffer(T1B, limited(-1, { availableDate: '2026-01-02' }));
+      mockProbe.mockImplementation(async () => probeAs('free'));
+    },
+    run: (fx) => maintainLogged(fx),
+    expect: async (out, fx) => {
+      expect(out.refill).toEqual([{ clientId: CLIENT, status: 'swapped', newMobile: T1 }]);
+      expect((await fx.client()).mobile).toBe(T1);
+    } },
+  { id: 'DS-174', name: 'review M3: a lender lends a no-verdict row (probed live) and keeps its two fresh-free rows',
+    setup: async (fx) => {
+      await fx.world();
+      const fresh = () => ({ spamStatus: 'free', spamCheckedAt: new Date(Date.now() - 3600_000) });
+      await sibling(fx, ['919000920001', '919000920002', '919000920003'], (m) => (m.endsWith('3') ? { availableDate: '2026-01-03' } : fresh()));
+    },
+    run: (fx) => setupLogged(fx, promoReq()),
+    expect: async (out, fx) => {
+      await swappedTo('919000920003', null)(out, fx);
+      expect((await fx.buf('919000920001')).clientId).toBe(SIBLING);
+      expect((await fx.buf('919000920002')).clientId).toBe(SIBLING);
+    } },
+  { id: 'DS-175', name: 'review M4: promo-health own + sibling share one probe budget: 3 own probes spend it, sibling not probed, pending',
+    setup: async (fx) => {
+      await fx.world();
+      for (const m of [T1, T1B, '919000911113']) await fx.addBuffer(m);
+      await sibling(fx, ['919000920001', '919000920002', '919000920003', '919000920004']);
+      mockProbe.mockImplementation(async () => probeAs('limited'));
+    },
+    run: (fx) => setupLogged(fx, promoReq()),
+    expect: async (out, fx) => {
+      await noSwap(3)(out, fx);
+      expect(out).toMatchObject({ status: 'no_candidate', moreCandidatesPending: true });
+      expect(mockProbe.mock.calls.map((c: any[]) => c[0]).some((m: string) => m.startsWith('91900092'))).toBe(false);
+    } },
+  { id: 'DS-176', name: 'review M5: at most 10 backup-session checks per tier scan; a cap hit ends the tier (not pending), nothing probed',
+    setup: async (fx) => {
+      await fx.world();
+      for (let i = 0; i < 11; i++) await fx.addBuffer(`9190009800${String(i).padStart(2, '0')}`, { availableDate: '2025-12-01' }, null);
+      await fx.addBuffer(T1);
+    },
+    run: (fx) => setupLogged(fx, limitedReq()),
+    expect: async (out, fx) => {
+      await noSwap(0)(out, fx);
+      expect(out.status).toBe('no_candidate');
+      expect(out.moreCandidatesPending).toBeUndefined();
+      expect(fx.buffer.getOrEnsureDistinctUsersBackupSession).toHaveBeenCalledTimes(10);
+      expect(out.logs).toContain(`swap-candidate kind=skip reason=backup_cap client=${CLIENT} mobile=****0010 cap=10`);
+      expect(out.logs).toContain(`swap-candidate kind=result status=no_candidate client=${CLIENT} pending=false detail=backup_cap`);
+    } },
+  { id: 'DS-177', name: 're-review: a dead main is never backup-capped: its first 10 own rows fail the backup check, row 11 replaces it',
+    setup: async (fx) => {
+      await fx.world();
+      for (let i = 0; i < 10; i++) await fx.addBuffer(`9190009800${String(i).padStart(2, '0')}`, { availableDate: '2025-12-01' }, null);
+      await fx.addBuffer(T1);
+    },
+    run: (fx) => setupLogged(fx, deadReq()),
+    expect: async (out, fx) => {
+      await swappedTo(T1, null)(out, fx);
+      expect(out.logs.some((l: string) => l.includes('reason=backup_cap'))).toBe(false);
+    } },
+  { id: 'DS-178', name: 're-review: a promo-health swap whose own scan hits the backup cap still borrows a sibling spare',
+    setup: async (fx) => {
+      await fx.world();
+      for (let i = 0; i < 11; i++) await fx.addBuffer(`9190009800${String(i).padStart(2, '0')}`, { availableDate: '2025-12-01' }, null);
+      await sibling(fx, ['919000920001', '919000920002', '919000920003']);
+    },
+    run: (fx) => setupLogged(fx, promoReq()),
+    expect: async (out, fx) => {
+      await swappedTo('919000920001', null)(out, fx);
+      expect(out.logs).toContain(`swap-candidate kind=skip reason=backup_cap client=${CLIENT} mobile=****0010 cap=10`);
     } },
 ];
 

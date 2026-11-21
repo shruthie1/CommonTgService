@@ -76,7 +76,11 @@ import {
   UPGRADE_MAX_PER_RUN,
   DegradedTier,
   isDeadSwapReason,
+  isCleanOnlySwapReason,
+  isPromoHealthSwapReason,
   last4,
+  SETUP_SCAN_LIMIT,
+  swapCandidateLogLine,
   markerTierFromVerdict,
   parseDegradedSwapTiers,
   passRetryDelayMs,
@@ -127,6 +131,12 @@ const SPAM_FREE_FRESH_MS = 6 * 60 * 60 * 1000;
  * most 3 probes and stop starting new ones once 45s of probing has been spent.
  */
 const MAX_SETUP_PROBES = 3;
+/**
+ * Rows per tier scan that may run assertDistinctUserBackupSession (it may connect and create a backup session). The
+ * old 10-row scan bounded this; the scan now reads SETUP_SCAN_LIMIT rows, so the checks stay at 10 per scan. Never
+ * applied to a dead-main request (it must reach every row); a cap hit ends that tier, the next tiers still run.
+ */
+const MAX_SETUP_BACKUP_CHECKS = 10;
 const SETUP_PROBE_TIME_BUDGET_MS = 45_000;
 /** Do not start a probe with less than this left of the request budget; it could not finish. */
 const MIN_SETUP_PROBE_MS = 8_000;
@@ -150,6 +160,12 @@ interface SetupProbeBudget {
   skipped: string[];
   /** True when an unprobed candidate was passed over only because this budget ran out. */
   moreCandidatesPending?: boolean;
+  /** Clean-only swap: a candidate was rejected on an inconclusive ('unknown') probe (SpamBot may be down). */
+  unknownRejected?: boolean;
+  /** Apply MAX_SETUP_BACKUP_CHECKS per tier scan (off for a dead-main request). */
+  backupCap?: boolean;
+  /** A tier scan stopped at MAX_SETUP_BACKUP_CHECKS (not pending: a retry would recheck the same rows). */
+  backupCapped?: boolean;
   /** Verdict of the candidate isSpamSafeForSwap last accepted (read right after a true return). */
   lastVerdict?: { status: SpamProbeResult['status']; limitedUntil: Date | null };
   /** Cross-process lease owner of this setup run: every candidate is leased before any probe/connect. */
@@ -166,7 +182,7 @@ interface SetupProbeBudget {
 /** One row of a swap-maintenance pass (rescue / upgrade / pool refill). */
 export interface SwapMaintenanceResult {
   clientId: string;
-  status: SetupClientStatus | 'cleared' | 'skipped_cooldown' | 'stopped' | 'waiting_handoff' | PoolRefillSkip;
+  status: SetupClientStatus | 'cleared' | 'skipped_cooldown' | 'stopped' | 'waiting_handoff' | PoolRefillSkip | 'skipped_last_spare';
   /** rescue / upgrade / refill: attempts used in this episode after this run. */
   attempts?: number;
   /** rescue / upgrade / refill: the pool changed since the last attempt, so a stopped or cooling episode re-armed. */
@@ -246,6 +262,8 @@ export interface SetupClientResult {
   usedFutureAvailableFallback?: boolean;
   /** no_candidate only: unprobed candidates remain; the probe budget ran out, so retrying may find one. */
   moreCandidatesPending?: boolean;
+  /** no_candidate only: a clean-only swap rejected a candidate on an inconclusive SpamBot probe (not a pool miss). */
+  probeUnknown?: boolean;
   /** swapped only: the new account is a degraded-swap pick of this tier (2 sibling, 3 limited, 4 harsh). */
   degradedTier?: DegradedTier;
   /** no_candidate only: the client already runs degraded; the CMS upgrade job owns moving it up. */
@@ -816,6 +834,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         const fixLeftMs = fixedAtMs + SWAP_REPORT_GRACE_MS - Date.now();
         if (dto?.reason && !dto?.mobile && fixedAtMs && fixLeftMs > 0) {
           this.logger.warn(`[${clientId}] setupClient report for the main ${Math.round((Date.now() - fixedAtMs) / 1000)}s after a session change; ignored (may be the process on the old session)`, { reason: dto.reason });
+          this.logger.log(swapCandidateLogLine('result', clientId, { status: 'cooldown', cause: 'session_changed', cooldownRemainingMs: fixLeftMs }));
           return {
             answer: {
               status: 'cooldown',
@@ -848,6 +867,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     const graceLeftMs = swappedAtMs + SWAP_REPORT_GRACE_MS - Date.now();
     if (dto?.reason && !dto?.mobile && swappedAtMs && graceLeftMs > 0) {
       this.logger.warn(`[${clientId}] setupClient report without reportedMobile ${Math.round((Date.now() - swappedAtMs) / 1000)}s after a cutover or session change; ignored (may be the replaced process)`, { reason: dto.reason });
+      this.logger.log(swapCandidateLogLine('result', clientId, { status: 'cooldown', cause: 'report_grace', cooldownRemainingMs: graceLeftMs }));
       return {
         answer: {
           status: 'cooldown',
@@ -903,6 +923,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         `Profile Setup Recently tried for ${clientId}, wait ::`,
         getReadableTimeDifference(this.setupCooldownMap.get(clientId)!),
       );
+      this.logger.log(swapCandidateLogLine('result', clientId, { status: 'cooldown', cause: 'recent_swap', cooldownRemainingMs }));
       return {
         status: 'cooldown',
         swapped: false,
@@ -955,12 +976,14 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       if (holder) {
         const untilMs = holder.swapLease?.until ? new Date(holder.swapLease.until).getTime() : now.getTime();
         this.logger.warn(`[${clientId}] Setup already in progress in another CMS process (${holder.swapLease?.owner}); not started`);
+        const cooldownRemainingMs = Math.min(CONFIG.COOLDOWN_PERIOD, Math.max(0, untilMs - now.getTime()));
+        this.logger.log(swapCandidateLogLine('result', clientId, { status: 'cooldown', cause: 'lease_held', cooldownRemainingMs }));
         return {
           status: 'cooldown',
           swapped: false,
           clientId,
           message: 'Client setup is in progress in another CMS process',
-          cooldownRemainingMs: Math.min(CONFIG.COOLDOWN_PERIOD, Math.max(0, untilMs - now.getTime())),
+          cooldownRemainingMs,
         };
       }
       // No such client: handleSetupClient answers client_not_found.
@@ -1053,15 +1076,23 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     const permanentReplacement = this.isPermanentReplacementReason(setupClientQueryDto.reason);
     const upgradeFromTier = internal.upgradeFromTier;
     const dead = !upgradeFromTier && isDeadSwapReason(setupClientQueryDto.reason);
+    // Owner 2026-11-21: a promo-health / ban-gate swap (alive main) may borrow a same-persona sibling spare
+    // (tier 2 rules) when its own pool has none; it and the pool refill only ever take a SpamBot-clean account.
+    const promoHealth = !upgradeFromTier && !dead && isPromoHealthSwapReason(setupClientQueryDto.reason);
+    const cleanOnly = !upgradeFromTier && !dead && isCleanOnlySwapReason(setupClientQueryDto.reason);
+    const tier1Accept: SwapProbeAcceptance = cleanOnly ? { requireClean: true } : {};
     // Degraded tiers: only for a DEAD live account (or an upgrade run, which only moves UP), never
-    // when the caller pinned a mobile. DEGRADED_SWAP_TIERS is read now, so a config change applies
-    // to the next request.
+    // when the caller pinned a mobile. A promo-health swap gets the sibling tier only (never 3 / 4:
+    // limited / harsh). DEGRADED_SWAP_TIERS is read now, so a config change applies to the next request.
     const configuredTiers = parseDegradedSwapTiers();
     const degradedTiers: DegradedTier[] = setupClientQueryDto.mobile
       ? []
       : upgradeFromTier
         ? configuredTiers.filter((tier) => tier < upgradeFromTier)
-        : dead ? configuredTiers : [];
+        : dead ? configuredTiers : promoHealth ? configuredTiers.filter((tier) => tier === 2) : [];
+    if (promoHealth && !setupClientQueryDto.mobile && !degradedTiers.includes(2)) {
+      this.logger.log(swapCandidateLogLine('tier', clientId, { tier: 'sibling', result: 'off', cause: 'DEGRADED_SWAP_TIERS' }));
+    }
     // Never a candidate: the current main, any mobile in an in-flight setup (this process), and any
     // other client's current main. Two siblings racing for one spare cannot both take it.
     const busyMobiles = await this.busyCandidateMobiles(clientId, existingClientMobile);
@@ -1072,6 +1103,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     const parkedScan: ParkedOpenScan = {}; // one open parked-episode read per swap, shared by every tier's budget
     const newProbeBudget = (): SetupProbeBudget => ({
       clientId, remaining: MAX_SETUP_PROBES, spentMs: 0, skipped: [], parkedScan,
+      ...(dead ? {} : { backupCap: true }),
       ...(internal.leaseOwner ? { leaseOwner: internal.leaseOwner } : {}),
       ...(internal.jobPass ? { jobPass: true } : {}),
     });
@@ -1086,14 +1118,18 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     // Reader R3 of the account split (S2): the query keeps today's spam filter; behind ACCOUNT_HEALTH_READ the scanned
     // rows get a drop-only accountHealth re-check (off = the rows as scanned, no extra read).
     const r3Mode = accountFacetReadMode('health', 'R3');
-    const dueScanned = await this.bufferClientService.executeQuery(dueCandidateQuery, { availableDate: 1, createdAt: 1 }, 10);
+    const dueScanned = await this.bufferClientService.executeQuery(dueCandidateQuery, { availableDate: 1, createdAt: 1 }, SETUP_SCAN_LIMIT);
     const candidateBufferClients = r3Mode === 'off' ? dueScanned : await this.recheckSpamEligible(r3Mode, dueScanned);
     this.logger.info(
       `[${clientId}] Setup candidate scan completed`,
       { existingMobile: maskMobile(existingClientMobile), candidateCount: candidateBufferClients.length, query: dueCandidateQuery },
     );
-    let newBufferClient = await this.findSafeSetupBufferCandidate(candidateBufferClients, existingClient.session, probeBudget);
+    let newBufferClient = await this.findSafeSetupBufferCandidate(candidateBufferClients, existingClient.session, probeBudget, tier1Accept);
     let usedFutureAvailableFallback = false;
+    this.logger.log(swapCandidateLogLine('tier', clientId, {
+      tier: 'own', result: newBufferClient ? 'found' : 'none', scanned: dueScanned.length, limit: SETUP_SCAN_LIMIT,
+      ...(cleanOnly ? { cleanOnly: true } : {}), ...(probeBudget.moreCandidatesPending ? { pending: true } : {}),
+    }));
 
     // A permanent Telegram failure means the current main account cannot safely serve users.
     // Preserve the normal availability gate for every ordinary replacement, but when no due
@@ -1108,13 +1144,16 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       const futureScanned = await this.bufferClientService.executeQuery(
         futureCandidateQuery,
         { availableDate: 1, createdAt: 1 },
-        10,
+        SETUP_SCAN_LIMIT,
       );
       const futureCandidateBufferClients = r3Mode === 'off' ? futureScanned : await this.recheckSpamEligible(r3Mode, futureScanned);
       fallbackBudget = newProbeBudget();
       // Rescue tier: an open parked episode does not exclude (P4 verification fix 2).
-      newBufferClient = await this.findSafeSetupBufferCandidate(futureCandidateBufferClients, existingClient.session, fallbackBudget, {}, 'allow');
+      newBufferClient = await this.findSafeSetupBufferCandidate(futureCandidateBufferClients, existingClient.session, fallbackBudget, tier1Accept, 'allow');
       usedFutureAvailableFallback = !!newBufferClient;
+      this.logger.log(swapCandidateLogLine('tier', clientId, {
+        tier: 'own_future', result: newBufferClient ? 'found' : 'none', scanned: futureScanned.length, limit: SETUP_SCAN_LIMIT,
+      }));
       this.logger.warn(`[${clientId}] Permanent replacement fallback scan completed`, {
         existingMobile: maskMobile(existingClientMobile),
         reason: setupClientQueryDto.reason,
@@ -1129,9 +1168,14 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     let degradedBudget: SetupProbeBudget | undefined;
     let degradedPlan: DegradedSwapPlan | null = null;
     const tier1Pending = !!(probeBudget.moreCandidatesPending || fallbackBudget?.moreCandidatesPending);
+    if (!newBufferClient && degradedTiers.length && tier1Pending) {
+      this.logger.log(swapCandidateLogLine('tier', clientId, { tier: degradedTiers.join(','), result: 'not_tried', cause: 'own_pending' }));
+    }
+    const siblingTried = promoHealth && !newBufferClient && degradedTiers.length > 0 && !tier1Pending;
     if (!newBufferClient && degradedTiers.length && !tier1Pending) {
-      degradedBudget = newProbeBudget();
-      const pick = await this.findDegradedCandidate(existingClient, degradedTiers, degradedBudget, today, busyMobiles);
+      // Promo-health: own and sibling tiers share ONE probe budget (3 probes / 45 s per request, inside tg-aut's fetch window).
+      degradedBudget = promoHealth ? probeBudget : newProbeBudget();
+      const pick = await this.findDegradedCandidate(existingClient, degradedTiers, degradedBudget, today, busyMobiles, cleanOnly);
       if (pick) {
         newBufferClient = pick.candidate;
         const previous = existingClient.degraded;
@@ -1163,6 +1207,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       if (upgradeFromTier) {
         // Upgrade run: the current degraded account is alive and keeps serving. Nothing to say.
         this.logger.log(`[${clientId}] No better-tier buffer for degraded client (tier ${upgradeFromTier})`);
+        this.logger.log(swapCandidateLogLine('result', clientId, { status: 'no_candidate', cause: 'upgrade' }));
         return {
           status: 'no_candidate',
           swapped: false,
@@ -1181,9 +1226,13 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         await this.retireReplacedMobile(existingClientMobile, setupClientQueryDto.reason);
         existingRetired = true;
       }
-      const moreCandidatesPending = !!(
+      // An inconclusive-probe rejection (clean-only swap) is not a pool miss: SpamBot may be down, so tg-aut retries
+      // on its short pending backoff, and a job pass does not count it toward the hard stop.
+      const probeUnknown = !!(probeBudget.unknownRejected || fallbackBudget?.unknownRejected || degradedBudget?.unknownRejected);
+      const budgetPending = !!(
         probeBudget.moreCandidatesPending || fallbackBudget?.moreCandidatesPending || degradedBudget?.moreCandidatesPending
       );
+      const moreCandidatesPending = budgetPending || probeUnknown;
       const pendingNote = moreCandidatesPending
         ? ' (SpamBot probe budget exhausted; more unprobed candidates remain, retry to check them)'
         : '';
@@ -1204,10 +1253,21 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
             ...(dead ? [{ label: 'Reason', value: String(setupClientQueryDto.reason).substring(0, 80), code: false }] : []),
             ...(alreadyDegraded ? [{ label: 'Degraded', value: `tier ${existingClient.degraded?.tier}`, code: false }] : []),
           ],
-          tables: this.probeSkipTables(probeBudget, fallbackBudget, degradedBudget),
+          tables: this.probeSkipTables(probeBudget, fallbackBudget, degradedBudget === probeBudget ? undefined : degradedBudget),
         });
       }
       this.logger.log('Buffer Clients not safely available', { clientId, dead, moreCandidatesPending, alreadyDegraded });
+      const detail = probeUnknown ? 'probe_unknown'
+        : budgetPending ? 'budget_pending'
+          : siblingTried ? 'sibling_none'
+            : (probeBudget.backupCapped || fallbackBudget?.backupCapped || degradedBudget?.backupCapped) ? 'backup_cap'
+            : dueScanned.length === 0 && !fallbackBudget ? 'no_rows'
+              : 'all_rejected';
+      this.logger.log(swapCandidateLogLine('result', clientId, {
+        status: 'no_candidate', pending: moreCandidatesPending,
+        ...(promoHealth ? { cause: 'promo_health' } : cleanOnly ? { cause: 'pool_refill' } : dead ? { cause: 'dead' } : {}),
+        detail,
+      }));
       return {
         status: 'no_candidate',
         swapped: false,
@@ -1215,6 +1275,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         existingMobile: existingClientMobile,
         existingRetired,
         ...(moreCandidatesPending ? { moreCandidatesPending: true } : {}),
+        ...(probeUnknown ? { probeUnknown: true } : {}),
         ...(alreadyDegraded ? { degraded: true } : {}),
         message: `No safe buffer client is currently available${pendingNote}`,
       };
@@ -1265,7 +1326,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
           { label: 'New mobile', value: newBufferClient.mobile },
           ...(degradedPlan ? [{ label: 'Degraded tier', value: String(degradedPlan.markerTier ?? `${degradedPlan.pickTier} (meets tier-1 rules)`), code: false }] : []),
         ],
-        tables: this.probeSkipTables(probeBudget, fallbackBudget, degradedBudget),
+        tables: this.probeSkipTables(probeBudget, fallbackBudget, degradedBudget === probeBudget ? undefined : degradedBudget),
       });
       this.logger.debug(`[${clientId}] Active client setup registered`, {
         existingMobile: maskMobile(existingClientMobile),
@@ -1931,6 +1992,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     parkedPolicy: ParkedEpisodePolicy = 'exclude',
   ): Promise<SafeSetupBufferCandidate | null> {
     let parkedOpen = new Set<string>();
+    let backupChecks = 0;
     if (parkedPolicy === 'exclude' && candidates?.length) {
       const nonPhone = candidates.filter((c) => c?.mobile && parkedCanonicalMobile(c.mobile) === null).length;
       if (nonPhone > 0) {
@@ -1973,6 +2035,15 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       }
       let picked = false;
       try {
+        if (!probeBudget.jobPass && probeBudget.backupCap) {
+          if (backupChecks >= MAX_SETUP_BACKUP_CHECKS) {
+            // This tier is done (not pending: a retry would recheck the same rows); the next tiers still run.
+            this.logger.log(swapCandidateLogLine('skip', probeBudget.clientId, { reason: 'backup_cap', mobile: last4(candidate.mobile), cap: MAX_SETUP_BACKUP_CHECKS }));
+            probeBudget.backupCapped = true;
+            return null;
+          }
+          backupChecks += 1;
+        }
         const backupUser = probeBudget.jobPass
           ? await this.storedDistinctBackup(candidate.mobile, candidate.session)
           : await this.assertDistinctUserBackupSession(candidate.mobile, candidate.session);
@@ -2002,7 +2073,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
           session: candidate.session,
           backupUser,
           // Degraded tiers only (non-empty acceptance): tier-1 picks keep their original shape.
-          ...(verdict && Object.keys(accept).length
+          ...(verdict && Object.keys(accept).some((key) => key !== 'requireClean')
             ? { spamStatus: verdict.status, limitedUntil: verdict.status === 'unknown' ? storedLimitedUntil : verdict.limitedUntil }
             : {}),
         };
@@ -2107,6 +2178,13 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         budget.skipped.push(`${candidate.mobile} frozen (SpamBot reply)`);
         return false;
       }
+      if (accept.requireClean) {
+        // Clean-only swap (alive main): an unprobed account is never taken.
+        this.logger.log(swapCandidateLogLine('skip', budget.clientId, { reason: 'probe_unknown', mobile: last4(candidate.mobile) }));
+        budget.unknownRejected = true;
+        budget.skipped.push(`${candidate.mobile} SpamBot inconclusive (clean-only swap)`);
+        return false;
+      }
       this.logger.warn(`[${budget.clientId}] SpamBot probe inconclusive for ${maskMobile(candidate.mobile)} (${result.error || 'unrecognized reply'}); allowing candidate`);
       budget.lastVerdict = { status: 'unknown', limitedUntil: null };
       return true;
@@ -2141,6 +2219,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       ? `limited until ${result.limitedUntil.toISOString().slice(0, 16).replace('T', ' ')} UTC`
       : 'harsh limit (indefinite)';
     this.logger.warn(`[${budget.clientId}] Skipping setup candidate ${maskMobile(candidate.mobile)}: SpamBot ${detail}`);
+    this.logger.log(swapCandidateLogLine('skip', budget.clientId, { reason: result.status, mobile: last4(candidate.mobile) }));
     budget.skipped.push(`${candidate.mobile} ${detail}`);
     return false;
   }
@@ -2237,6 +2316,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     budget: SetupProbeBudget,
     today: string,
     busyMobiles: string[],
+    cleanOnly = false,
   ): Promise<{ tier: DegradedTier; candidate: SafeSetupBufferCandidate; fromClientId?: string } | null> {
     for (const tier of tiers) {
       if (budget.remaining <= 0) {
@@ -2244,7 +2324,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         break;
       }
       if (tier === 2) {
-        const pick = await this.findSiblingCandidate(existingClient, budget, today, busyMobiles);
+        const pick = await this.findSiblingCandidate(existingClient, budget, today, busyMobiles, cleanOnly);
         if (pick) return { tier, ...pick };
         continue;
       }
@@ -2281,38 +2361,78 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     budget: SetupProbeBudget,
     today: string,
     busyMobiles: string[],
+    cleanOnly = false,
   ): Promise<{ candidate: SafeSetupBufferCandidate; fromClientId: string } | null> {
     const persona = (existingClient.dbcoll || '').trim().toLowerCase();
-    if (!persona) return null;
+    if (!persona) {
+      this.logger.log(swapCandidateLogLine('tier', existingClient.clientId, { tier: 'sibling', result: 'none', cause: 'no_persona' }));
+      return null;
+    }
     const siblings = (await this.findAll()).filter((client) =>
       client.clientId !== existingClient.clientId && (client.dbcoll || '').trim().toLowerCase() === persona);
     const ranked: Array<{ siblingId: string; spares: Awaited<ReturnType<BufferClientService['executeQuery']>> }> = [];
     for (const sibling of siblings) {
-      const scanned = await this.bufferClientService.executeQuery(
-        {
-          ...this.buildEligibleBufferQuery(sibling.clientId, { $nin: [...busyMobiles, sibling.mobile] }),
-          availableDate: { $lte: today },
-        },
-        { availableDate: 1, createdAt: 1 },
-      );
-      // Reader R3 (see handleSetupClient): drop-only re-check before the spares are counted.
-      const r3Mode = accountFacetReadMode('health', 'R3');
-      const rows = r3Mode === 'off' ? scanned : await this.recheckSpamEligible(r3Mode, scanned);
-      const spares = await this.filterServingUsers(rows, { requireDistinctBackup: true });
-      if (spares.length >= SIBLING_MIN_SPARES_AFTER + 1) ranked.push({ siblingId: sibling.clientId, spares });
+      const spares = await this.usableSpares(sibling.clientId, [...busyMobiles, sibling.mobile], today, budget);
+      if (spares.length >= SIBLING_MIN_SPARES_AFTER + 1) ranked.push({ siblingId: sibling.clientId, spares: ClientService.lendOrder(spares) });
     }
     ranked.sort((a, b) => b.spares.length - a.spares.length || a.siblingId.localeCompare(b.siblingId));
     this.logger.info(`[${existingClient.clientId}] Degraded tier 2 scan`, {
       siblings: siblings.map((s) => s.clientId),
       lenders: ranked.map((r) => `${r.siblingId}:${r.spares.length}`),
     });
+    const accept: SwapProbeAcceptance = { ...probeAcceptanceForTier(2), ...(cleanOnly ? { requireClean: true } : {}) };
     for (const { siblingId, spares } of ranked) {
       const tryable = spares.slice(0, spares.length - SIBLING_MIN_SPARES_AFTER);
-      const candidate = await this.findSafeSetupBufferCandidate(tryable, existingClient.session, budget, probeAcceptanceForTier(2), 'allow');
-      if (candidate) return { candidate, fromClientId: siblingId };
+      const candidate = await this.findSafeSetupBufferCandidate(tryable, existingClient.session, budget, accept, 'allow');
+      if (candidate) {
+        this.logger.log(swapCandidateLogLine('tier', existingClient.clientId, { tier: 'sibling', result: 'found', from: siblingId, lenders: ranked.length }));
+        return { candidate, fromClientId: siblingId };
+      }
       if (budget.remaining <= 0) break;
     }
+    this.logger.log(swapCandidateLogLine('tier', existingClient.clientId, {
+      tier: 'sibling', result: 'none', siblings: siblings.length, lenders: ranked.length, ...(budget.moreCandidatesPending ? { pending: true } : {}),
+    }));
     return null;
+  }
+
+  /**
+   * Spares a swap could use, counted without a probe (owner review 2026-11-21): the tier-1 query (due), the R3
+   * re-check, a users doc (present, not expired, 2FA on) with a STORED backup session distinct from the row's own,
+   * and no open parked episode. The refill pre-check and the sibling lender count both use it, so a stale-harsh or
+   * lifted-limited row (re-probed at swap time) counts as a spare, as it does for the tier-1 scan.
+   */
+  private async usableSpares(
+    clientId: string,
+    excludeMobiles: string[],
+    today: string,
+    budget: SetupProbeBudget,
+  ): Promise<Awaited<ReturnType<BufferClientService['executeQuery']>>> {
+    const scanned = await this.bufferClientService.executeQuery(
+      { ...this.buildEligibleBufferQuery(clientId, { $nin: excludeMobiles }), availableDate: { $lte: today } },
+      { availableDate: 1, createdAt: 1 },
+    );
+    const r3Mode = accountFacetReadMode('health', 'R3');
+    const rows = r3Mode === 'off' ? scanned : await this.recheckSpamEligible(r3Mode, scanned);
+    const serving = await this.filterServingUsers(rows, { requireDistinctBackup: true });
+    if (!serving.some((row) => parkedCanonicalMobile(row.mobile) !== null)) return serving;
+    const parkedOpen = await this.parkedOpenOnce(budget);
+    return parkedOpen.size ? serving.filter((row) => !parkedOpen.has(parkedCanonicalMobile(row.mobile) ?? '')) : serving;
+  }
+
+  /**
+   * Lend order (owner review 2026-11-21): rows whose stored verdict is stale (limited / harsh, re-probed live) or
+   * missing go first; 'free' rows last, the freshest at the very end. The lender keeps the last
+   * SIBLING_MIN_SPARES_AFTER rows, so it keeps its freshest clean ones. Stable otherwise (availableDate, createdAt).
+   */
+  private static lendOrder<T extends { spamStatus?: string | null; spamCheckedAt?: Date | string | null }>(spares: T[]): T[] {
+    const rank = (row: T) => (row.spamStatus === 'free' ? 2 : row.spamStatus ? 0 : 1);
+    return spares
+      .map((row, i) => ({ row, i }))
+      .sort((a, b) => rank(a.row) - rank(b.row)
+        || (rank(a.row) === 2 ? toTimeMs(a.row.spamCheckedAt) - toTimeMs(b.row.spamCheckedAt) : 0)
+        || a.i - b.i)
+      .map((x) => x.row);
   }
 
   /**
@@ -2374,7 +2494,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       await this.notify({
         severity: 'warning',
         title: 'Buffer borrowed',
-        summary: `Dead main replaced by a spare borrowed from ${plan.fromClientId} (meets tier-1 rules; no degraded marker)`,
+        summary: `${isDeadSwapReason(plan.reason) ? 'Dead main' : 'Main'} replaced by a spare borrowed from ${plan.fromClientId} (meets tier-1 rules; no degraded marker)`,
         fields: [
           { label: 'Client ID', value: clientId },
           { label: 'Borrowed from', value: plan.fromClientId },
@@ -2629,6 +2749,12 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     // Nothing was probed: CMS cooldown / another process's lease, or AUTO_CLIENT_SETUP off.
     // stale_main (refill): the main changed under the sweep; this client's retry episode is not touched.
     if (result.status === 'cooldown' || result.status === 'disabled' || result.status === 'stale_main') return { clientId: client.clientId, status: result.status };
+    // A clean-only pass that found candidates but got only inconclusive SpamBot answers: SpamBot may be down. Not a
+    // miss toward the PASS_MAX_ATTEMPTS hard stop; the episode is left as read.
+    if (result.status === 'no_candidate' && result.probeUnknown) {
+      this.logger.log(`swap-retry kind=skip op=record reason=probe_unknown client=${client.clientId} pass=${pass}`);
+      return { clientId: client.clientId, status: result.status };
+    }
     const used = await this.notePassOutcome(pass, client, all, decision, result.swapped);
     return {
       clientId: client.clientId,
@@ -2800,14 +2926,17 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
           results.push({ clientId: client.clientId, status: decision.kind === 'stopped' ? 'stopped' : 'skipped_cooldown', attempts: decision.attempts });
           continue;
         }
-        // Cheap pre-check (no probe, no notice): only ask setupClient when a tier-1 row exists.
+        // Cheap pre-check (no probe, no notice): only ask setupClient when the own pool keeps a usable spare after
+        // the swap (owner 2026-11-21): the last one is kept for a dead main. Usable = usableSpares (the tier-1
+        // scan's rules without the probe; stale verdicts count, they are re-probed at swap time).
         const busy = await this.busyCandidateMobiles(client.clientId, client.mobile);
-        const spare = await this.bufferClientService.executeQuery(
-          { ...this.buildEligibleBufferQuery(client.clientId, { $nin: busy }), availableDate: { $lte: today } },
-          undefined,
-          1,
-        );
-        if (!spare.length) continue;
+        const spares = await this.usableSpares(client.clientId, busy, today, { clientId: client.clientId, remaining: 0, spentMs: 0, skipped: [] });
+        if (spares.length <= 1) {
+          const reason = spares.length ? 'last_spare' : 'no_spare';
+          this.logger.log(poolRefillLogLine('skip', client.clientId, reason, client, health, Date.now(), `usableSpares=${spares.length}`));
+          if (spares.length) results.push({ clientId: client.clientId, status: 'skipped_last_spare' });
+          continue;
+        }
         attempts++;
         const row = await this.runPassAttempt('refill', client, all, decision,
           { days: 0, archiveOld: true, formalities: true, reason: POOL_REFILL_REASON },

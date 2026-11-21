@@ -46,6 +46,39 @@ export const DEAD_MAIN_RESCUE_REASON = 'DEAD_MAIN_RESCUE';
 /** Pool-refill pass reason: a SpamBot-limited (alive) main is moved once a tier-1 buffer exists. Not dead. */
 export const POOL_REFILL_REASON = 'POOL_REFILL';
 
+/**
+ * tg-aut promo-health swap reason prefix (tg-platform apps/tg-aut/src/jobs/job-manager.ts handleFailedRetry; the
+ * ban-gate swap uses the same reason). An alive main is moved, so the request may borrow a same-persona sibling
+ * spare (tier 2 rules) when its own pool has none, but never a limited / harsh / unprobed account.
+ */
+export const PROMO_HEALTH_REASON_PREFIX = 'Promotion health check failed';
+
+export function isPromoHealthSwapReason(reason?: string | null): boolean {
+  return typeof reason === 'string' && reason.trimStart().startsWith(PROMO_HEALTH_REASON_PREFIX);
+}
+
+/**
+ * Swaps of an ALIVE main (promo-health / ban gate, pool refill): the new main must be SpamBot clean. A probe that
+ * says limited or harsh is always rejected; for these reasons an inconclusive probe ('unknown') is rejected too.
+ */
+export function isCleanOnlySwapReason(reason?: string | null): boolean {
+  return isPromoHealthSwapReason(reason) || (typeof reason === 'string' && reason.trim() === POOL_REFILL_REASON);
+}
+
+/** Rows read per own-pool setup scan (due, and the permanent-replacement future fallback). Probes stay capped by MAX_SETUP_PROBES. */
+export const SETUP_SCAN_LIMIT = 25;
+
+/**
+ * One greppable line per swap-candidate decision (owner 2026-11-21), e.g.
+ * `swap-candidate kind=tier tier=own result=none client=sneha2 scanned=0`.
+ */
+export function swapCandidateLogLine(kind: 'tier' | 'skip' | 'result', clientId: string, fields: Record<string, string | number | boolean>): string {
+  const head = Object.entries(fields).filter(([key]) => key === 'tier' || key === 'reason' || key === 'status' || key === 'result');
+  const rest = Object.entries(fields).filter(([key]) => !head.some(([h]) => h === key));
+  const fmt = (pairs: Array<[string, string | number | boolean]>) => pairs.map(([k, v]) => `${k}=${v}`);
+  return ['swap-candidate', `kind=${kind}`, ...fmt(head), `client=${clientId}`, ...fmt(rest)].join(' ');
+}
+
 /** Recoverable errors that contain a dead token (same override as isPermanentError). */
 const DEAD_REASON_OVERRIDES: readonly string[] = ['INPUT_USER_DEACTIVATED'];
 
@@ -381,6 +414,8 @@ export interface SwapProbeAcceptance {
   harsh?: boolean;
   /** Reject an unrecognised SpamBot reply that mentions a frozen account. */
   rejectFrozenReply?: boolean;
+  /** Clean-only swaps (isCleanOnlySwapReason): reject an inconclusive ('unknown') probe as well. */
+  requireClean?: boolean;
 }
 
 export function probeAcceptanceForTier(tier: DegradedTier): SwapProbeAcceptance {
