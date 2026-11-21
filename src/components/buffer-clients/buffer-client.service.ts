@@ -46,6 +46,7 @@ import { nameMatchesAssignment, lastNameMatches } from '../../utils/homoglyph-no
 import { BotsService, ChannelCategory } from '../bots';
 import {
     BaseClientUpdate,
+    BaseClientUpdateOptions,
     BaseClientService,
     type WarmupRunContext,
     ClientStatusType,
@@ -636,7 +637,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         } catch { /* best-effort; the pool write already happened */ }
     }
 
-    async update(mobile: string, updateClientDto: BaseClientUpdate, opts?: { accountHealthBy?: string }): Promise<BufferClientDocument> {
+    async update(mobile: string, updateClientDto: BaseClientUpdate, opts?: BaseClientUpdateOptions): Promise<BufferClientDocument> {
         const canonicalMobile = this.canonicalMobile(mobile);
         const updateData: BaseClientUpdate & { mobile?: string } = { ...updateClientDto };
         // `channels` is a count: never persist a negative or fractional one (a -13 reached prod once).
@@ -657,9 +658,11 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         if (updateData.status === 'active' && !(updateData.session || await this.getStoredActiveSession(canonicalMobile))) {
             throw new BadRequestException('Cannot activate BufferClient without a session');
         }
-        const updatedBufferClient = await this.bufferClientModel
-            .findOneAndUpdate({ mobile: canonicalMobile }, { $set: updateData }, { returnDocument: 'after' })
-            .exec();
+        const updatedBufferClient = opts?.onBeforeStatus
+            ? await this.findOneAndUpdateCapturingBefore<BufferClientDocument>(this.bufferClientModel as any, { mobile: canonicalMobile }, updateData, opts.onBeforeStatus)
+            : await this.bufferClientModel
+                .findOneAndUpdate({ mobile: canonicalMobile }, { $set: updateData }, { returnDocument: 'after' })
+                .exec();
         if (!updatedBufferClient) {
             throw new NotFoundException(`BufferClient with mobile ${mobile} not found`);
         }

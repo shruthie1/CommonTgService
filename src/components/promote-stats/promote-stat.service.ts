@@ -38,32 +38,4 @@ export class PromoteStatService {
     }
     return promoteStat;
   }
-
-  async deleteOne(client: string): Promise<void> {
-    const result = await this.promoteStatModel.deleteOne({ client }).exec();
-    if (result.deletedCount === 0) {
-      throw new NotFoundException(`PromoteStat not found for client ${client}`);
-    }
-  }
-
-  async deleteAll(): Promise<void> {
-    await this.promoteStatModel.deleteMany({}).exec();
-  }
-
-  async reinitPromoteStats() {
-    const users = await this.findAll()
-    for (const user of users) {
-      await this.promoteStatModel.updateOne({ client: user.client },
-        {
-          $set: {
-            totalCount: 0,
-            uniqueChannels: 0,
-            releaseDay: Date.now(),
-            lastUpdatedTimeStamp: Date.now(),
-            data: {}//Object.fromEntries((await this.promoteStatModel.findOne({ client: user.client })).channels?.map(channel => [channel, 0])),
-          }
-        }
-      );
-    }
-  }
 }

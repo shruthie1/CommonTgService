@@ -133,6 +133,14 @@ export interface BaseClientDocument extends Document {
     assignedProfilePics?: string[];
 }
 
+/** Options for BaseClientService.update(). */
+export interface BaseClientUpdateOptions {
+    /** buffer only: `by` of the accountHealth mirror when a spam field is written. */
+    accountHealthBy?: string;
+    /** Called with the doc's status BEFORE this write (null when it had none); see findOneAndUpdateCapturingBefore. */
+    onBeforeStatus?: (status: string | null) => void;
+}
+
 export type BaseClientUpdate = Partial<Pick<
     BaseClientDocument,
     | 'session'
@@ -583,7 +591,29 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     abstract findOne(mobile: string, throwErr?: boolean): Promise<TDoc | null>;
 
     /** Update a document by mobile */
-    abstract update(mobile: string, updateDto: BaseClientUpdate): Promise<TDoc>;
+    abstract update(mobile: string, updateDto: BaseClientUpdate, opts?: BaseClientUpdateOptions): Promise<TDoc>;
+
+    /**
+     * The `update()` write when `opts.onBeforeStatus` is given (batch 5, owner 2026-11-21): ONE atomic
+     * findOneAndUpdate returning the BEFORE doc, so updateStatus can tell a real status change from a repeat with no
+     * extra read and no `$ne` filter. updatedAt is set here (timestamps off for this write) so the AFTER doc returned
+     * to the caller is exact: before + the $set fields. Returns null when no doc matched.
+     */
+    protected async findOneAndUpdateCapturingBefore<D>(
+        model: Model<any>,
+        filter: Record<string, unknown>,
+        updateData: Record<string, unknown>,
+        onBeforeStatus: (status: string | null) => void,
+    ): Promise<D | null> {
+        const set = { ...updateData, updatedAt: new Date() };
+        const before = await model
+            .findOneAndUpdate(filter as any, { $set: set } as any, { returnDocument: 'before', timestamps: false })
+            .exec();
+        if (!before) return null;
+        const plain = typeof (before as any).toObject === 'function' ? (before as any).toObject() : before;
+        onBeforeStatus(typeof plain?.status === 'string' ? plain.status : null);
+        return model.hydrate({ ...plain, ...set }) as unknown as D;
+    }
 
     /**
      * Persona name/bio step for both pools (pool-onboarding M8: was two copies differing only in
@@ -844,13 +874,16 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             updateData.inUse = false;
         }
         try {
-            const updated = await this.update(mobile, updateData);
+            let beforeStatus: string | null | undefined;
+            const updated = await this.update(mobile, updateData, { onBeforeStatus: (s) => { beforeStatus = s; } });
             this.logger.log(`${Pool} client ${maskMobile(mobile)} status updated to ${status}`);
-            // accountRoleEvents (S1, additive): every deactivateClient / markAsInactive / markAsActive and the
-            // expireAccount cascade land here. Fire-and-forget; never throws or delays the status write.
-            // Not deduped: update() returns only the AFTER doc, so a no-op (already inactive / already active) cannot
-            // be told apart without an extra read (markAsInactive already skips an inactive doc). Design S1 review fixes.
-            this.recordRoleEvent({
+            // accountRoleEvents: every deactivateClient / markAsInactive / markAsActive and the expireAccount cascade
+            // land here. Fire-and-forget; never throws or delays the status write. Deduped on the atomic write's
+            // BEFORE status (batch 5, owner 2026-11-21): a repeat (already inactive / already active) records nothing.
+            // A temporary -> permanent retirement of an already-inactive doc is such a repeat and gets no row.
+            if (beforeStatus === status) {
+                this.logger.log(`role-event kind=skip reason=same_status pool=${pool} status=${status} mobile=${maskMobile(mobile)} by=cms:status`);
+            } else this.recordRoleEvent({
                 mobile, clientId: (updated as { clientId?: string | null } | null)?.clientId ?? null,
                 event: status === 'inactive' ? 'retired' : 'reactivated', pool, by: 'cms:status', reason: message ?? null,
                 reasonCode: classifyRoleEventReason(message, 'status_change'),

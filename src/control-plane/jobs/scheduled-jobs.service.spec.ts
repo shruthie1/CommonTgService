@@ -326,7 +326,7 @@ describe('ScheduledJobsService scheduler ownership', () => {
     const db = {
       collection: jest.fn((name: string) => {
         if (name === 'controlPlaneJobRuns') return controlPlaneJobRuns;
-        if (name === 'promoteStats') return { find: () => ({ toArray: async () => [] }), updateMany: jest.fn().mockResolvedValue({ matchedCount: 0, modifiedCount: 0 }) };
+        if (name === 'promoteStats') return { countDocuments: jest.fn().mockResolvedValue(0), find: () => ({ toArray: async () => [] }), updateMany: jest.fn().mockResolvedValue({ matchedCount: 0, modifiedCount: 0 }) };
         if (name === 'stats2') return { deleteMany: jest.fn().mockResolvedValue({ deletedCount: 0 }) };
         if (name === 'userData') return { updateMany: jest.fn().mockResolvedValue({ matchedCount: 0, modifiedCount: 0 }) };
         throw new Error(`Unexpected collection: ${name}`);
@@ -595,6 +595,7 @@ describe('ScheduledJobsService scheduler ownership', () => {
   it('uses the injected Nest connection for the complete legacy promoteStats reset', async () => {
     const updateMany = jest.fn().mockResolvedValue({ matchedCount: 20, modifiedCount: 20 });
     const promoteStats = {
+      countDocuments: jest.fn().mockResolvedValue(0),
       find: jest.fn(() => ({
         toArray: jest.fn().mockResolvedValue([{ client: 'ums', totalCount: 7 }]),
       })),
@@ -620,13 +621,16 @@ describe('ScheduledJobsService scheduler ownership', () => {
 
     expect(db.collection).toHaveBeenCalledWith('controlPlaneJobRuns');
     expect(db.collection).toHaveBeenCalledWith('promoteStats');
+    const runId = expect.stringMatching(/^daily-promote-stats-reset:/);
+    expect(promoteStats.countDocuments).toHaveBeenCalledWith({ resetRunId: runId });
     expect(updateMany).toHaveBeenCalledWith(
-      {},
+      { resetRunId: { $ne: runId } },
       {
         $set: expect.objectContaining({
           totalCount: 0,
           uniqueChannels: 0,
           data: {},
+          resetRunId: runId,
         }),
       },
     );
@@ -676,6 +680,65 @@ describe('ScheduledJobsService scheduler ownership', () => {
       );
       expect(runs).toHaveLength(1);
       expect(runs[0]).toEqual(expect.objectContaining({ completedAt: expect.any(Date) }));
+    } finally {
+      await connection.dropDatabase();
+      await connection.close();
+      await mongod.stop();
+    }
+  });
+
+  it('batch 5: a re-claim after a failed finishRun resets nothing again and logs kind=already_reset', async () => {
+    jest.setTimeout(60_000);
+    const mongod = await MongoMemoryServer.create({ instance: { ip: '127.0.0.1' } });
+    const connection = await mongoose.createConnection(mongod.getUri(), { dbName: 'sj-reset-idempotent' }).asPromise();
+    try {
+      const realDb = connection.db!;
+      await realDb.collection('promoteStats').insertMany([
+        { client: 'ums', totalCount: 40, uniqueChannels: 4, data: { a: 40 } },
+        { client: 'ums-test', totalCount: 5, uniqueChannels: 1, data: { a: 5 } },
+      ]);
+      let failCompletion = true;
+      const db = new Proxy(realDb, {
+        get(target, prop) {
+          if (prop !== 'collection') return (target as any)[prop]?.bind ? (target as any)[prop].bind(target) : (target as any)[prop];
+          return (name: string) => {
+            const coll = target.collection(name);
+            if (name !== 'controlPlaneJobRuns') return coll;
+            return new Proxy(coll, {
+              get(c, p) {
+                if (p === 'updateOne') {
+                  return async (filter: any, update: any, ...rest: any[]) => {
+                    if (failCompletion && update?.$set?.completedAt) { failCompletion = false; throw new Error('write concern timeout'); }
+                    return (c.updateOne as any)(filter, update, ...rest);
+                  };
+                }
+                const v = (c as any)[p];
+                return typeof v === 'function' ? v.bind(c) : v;
+              },
+            });
+          };
+        },
+      });
+      const service = createService(['UMS_SCHEDULER'], { db });
+      const warn = jest.spyOn((service as any).logger, 'warn');
+
+      await expect((service as any).runDailyPromoteReset()).rejects.toThrow('write concern timeout');
+      expect(sendBotNotice).not.toHaveBeenCalled();
+      // tg counts 3 sends of the new day on one row.
+      await realDb.collection('promoteStats').updateOne({ client: 'ums' }, { $inc: { totalCount: 3, 'data.b': 3 } });
+      // Recovery tick re-claims the failed run.
+      await (service as any).runDailyPromoteReset();
+
+      const rows = await realDb.collection('promoteStats').find({}).sort({ client: 1 }).toArray();
+      expect(rows.map((r) => [r.client, r.totalCount, r.data])).toEqual([['ums', 3, { b: 3 }], ['ums-test', 0, {}]]);
+      expect(warn.mock.calls.map((c) => String(c[0]))).toContainEqual(
+        expect.stringMatching(/^daily-promote-reset kind=already_reset job=daily-promote-stats-reset:\S+ rows=2$/),
+      );
+      // Nothing new to report on the re-claim: no second notice.
+      expect(sendBotNotice).not.toHaveBeenCalled();
+      const runs = (await realDb.collection('controlPlaneJobRuns').find({}).toArray())
+        .filter((run) => String(run._id).startsWith('daily-promote-stats-reset:'));
+      expect(runs).toEqual([expect.objectContaining({ completedAt: expect.any(Date) })]);
     } finally {
       await connection.dropDatabase();
       await connection.close();

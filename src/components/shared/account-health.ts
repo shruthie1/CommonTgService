@@ -5,9 +5,12 @@
  * bufferClients (spamStatus / limitedUntil / spamCheckedAt / spamCheckSource), in tg-platform's Redis
  * tg::acct::{mobile}, and nowhere for promote accounts in Mongo.
  *
- * S2 is ADDITIVE (dual-write only):
+ * Dual-write:
  *   - every producer keeps its existing write; this mirrors it AFTER, fire-and-forget;
- *   - nothing reads it yet (no reader switched, no field removed, no backfill run);
+ *   - readers: tg-platform promote boot / refill selection (promote.repository.ts readPromoteSelectionHealth ->
+ *     mobile-manager.ts) decides on it today: harsh (< 30 d) dropped, a future limit held back, an expired limit
+ *     counts as free, no row = allowed (owner 2026-11-21). The CMS readers here (account-facet-read.ts) read it only
+ *     when ACCOUNT_HEALTH_READ is on. A lost mirror leaves the older verdict in place for those readers;
  *   - NEVER throws and never delays the caller: `recordAccountHealthSoon` returns at once, and the write races a
  *     CLIENT-SIDE deadline, so a stalled socket cannot hold anything;
  *   - a failure is logged once at warn (mobile masked) and dropped.

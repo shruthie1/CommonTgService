@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { PromoteStatService } from './promote-stat.service';
 import { CreatePromoteStatDto } from './dto/create-promote-stat.dto';
@@ -25,15 +25,5 @@ export class PromoteStatController {
     @Body() updatePromoteStatDto: UpdatePromoteStatDto,
   ) {
     return this.promoteStatService.update(client, updatePromoteStatDto);
-  }
-
-  @Delete(':client')
-  async deleteOne(@Param('client') client: string) {
-    return this.promoteStatService.deleteOne(client);
-  }
-
-  @Delete()
-  async deleteAll() {
-    return this.promoteStatService.deleteAll();
   }
 }

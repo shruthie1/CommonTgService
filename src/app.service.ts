@@ -167,9 +167,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       //   await this.userDataService.resetPaidUsers();
       //   await this.statService.deleteAll();
       //   await this.stat2Service.deleteAll();
-      //   await this.promoteStatService.reinitPromoteStats();
       // })
-      // this.checkPromotions();
       console.log(
         'Added enabled UMS cron jobs:',
         this.runtimeConfig.activeSchedulers(),
@@ -236,39 +234,6 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
 
   async processEligibleUsers(limit: number, skip: number) {
     return this.maintenance.processEligibleUsers(limit, skip);
-  }
-  async checkPromotions() {
-    setInterval(async () => {
-      const clients = await this.clientService.findAll();
-      for (const client of clients) {
-        const userPromoteStats = await this.promoteStatService.findByClient(
-          client.clientId,
-        );
-        if (
-          userPromoteStats?.isActive &&
-          (Date.now() - userPromoteStats?.lastUpdatedTimeStamp) / (1000 * 60) >
-            6
-        ) {
-          try {
-            await fetchWithTimeout(`${client.repl}/promote`, {
-              timeout: 120000,
-            });
-            console.log(client.clientId, ': Promote Triggered!!');
-          } catch (error) {
-            parseError(error, 'Promotion Check Err');
-          }
-        } else {
-          console.log(
-            client.clientId,
-            ': ALL Good!! ---',
-            Math.floor(
-              (Date.now() - userPromoteStats?.lastUpdatedTimeStamp) /
-                (1000 * 60),
-            ),
-          );
-        }
-      }
-    }, 240000);
   }
 
   async getPromotionStatsPlain() {

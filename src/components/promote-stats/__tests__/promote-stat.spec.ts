@@ -1,4 +1,5 @@
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, RequestMethod } from '@nestjs/common';
+import 'reflect-metadata';
 import { Connection, Model } from 'mongoose';
 import { startMongo, stopMongo, MongoTestContext } from '../../__tests__/api-test-helpers';
 import { PromoteStatService } from '../promote-stat.service';
@@ -77,32 +78,8 @@ describe('PromoteStatService (real Mongo)', () => {
         await expect(service.update('nope', { totalCount: 1 } as any)).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    test('deleteOne removes a stat', async () => {
-        await service.create(makeData({ client: 'del' }));
-        await service.deleteOne('del');
-        expect(await model.countDocuments()).toBe(0);
-    });
-
-    test('deleteOne throws NotFound when missing', async () => {
-        await expect(service.deleteOne('nope')).rejects.toBeInstanceOf(NotFoundException);
-    });
-
-    test('deleteAll removes everything', async () => {
-        await service.create(makeData({ client: 'a' }));
-        await service.create(makeData({ client: 'b' }));
-        await service.deleteAll();
-        expect(await model.countDocuments()).toBe(0);
-    });
-
-    test('reinitPromoteStats resets counters for every client', async () => {
-        await service.create(makeData({ client: 'r1', totalCount: 10, uniqueChannels: 4 }));
-        await service.create(makeData({ client: 'r2', totalCount: 20, uniqueChannels: 7 }));
-        await service.reinitPromoteStats();
-        const all = await service.findAll();
-        for (const stat of all) {
-            expect(stat.totalCount).toBe(0);
-            expect(stat.uniqueChannels).toBe(0);
-        }
+    test('batch 5: the service has no delete or reinit methods (no promoteStats row is ever deleted by CMS)', () => {
+        for (const name of ['deleteOne', 'deleteAll', 'reinitPromoteStats']) expect((service as any)[name]).toBeUndefined();
     });
 });
 
@@ -111,8 +88,6 @@ describe('PromoteStatController', () => {
         create: jest.fn(),
         findByClient: jest.fn(),
         update: jest.fn(),
-        deleteOne: jest.fn(),
-        deleteAll: jest.fn(),
     };
     const controller = new PromoteStatController(svc as any);
 
@@ -137,15 +112,10 @@ describe('PromoteStatController', () => {
         expect(svc.update).toHaveBeenCalledWith('x', { totalCount: 5 });
     });
 
-    test('deleteOne delegates', async () => {
-        svc.deleteOne.mockResolvedValue(undefined);
-        await controller.deleteOne('x');
-        expect(svc.deleteOne).toHaveBeenCalledWith('x');
-    });
-
-    test('deleteAll delegates', async () => {
-        svc.deleteAll.mockResolvedValue(undefined);
-        await controller.deleteAll();
-        expect(svc.deleteAll).toHaveBeenCalled();
+    test('batch 5: no DELETE route is mapped (DELETE /promote-stats and /promote-stats/:client removed)', () => {
+        const proto = PromoteStatController.prototype as any;
+        const methods = Object.getOwnPropertyNames(proto).filter((name) => name !== 'constructor');
+        expect(methods.sort()).toEqual(['create', 'findByClient', 'update']);
+        for (const name of methods) expect(Reflect.getMetadata('method', proto[name])).not.toBe(RequestMethod.DELETE);
     });
 });

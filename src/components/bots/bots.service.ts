@@ -1140,7 +1140,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                     totalDocumentsSent: { $sum: '$stats.documentsSent' },
                     totalAudiosSent: { $sum: '$stats.audiosSent' },
                     totalMediaGroupsSent: { $sum: '$stats.mediaGroupsSent' },
-                    avgFailedAttempts: { $avg: '$failedAttempts' }
+                    // avgFailedAttempts removed (batch 5, 2026-11-21): no bot doc carries failedAttempts and no caller read it.
                 }
             }
         ]);

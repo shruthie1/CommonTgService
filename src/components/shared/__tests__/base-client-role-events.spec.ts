@@ -5,8 +5,11 @@ jest.mock('telegram/Helpers', () => ({ ...jest.requireActual('telegram/Helpers')
 jest.mock('../../../utils/fetchWithTimeout', () => ({ fetchWithTimeout: jest.fn(async () => ({ ok: true })) }));
 jest.mock('../../../utils/logbots', () => ({ notifbot: jest.fn(() => 'https://example.test/mock-bot') }));
 
+import mongoose, { Connection } from 'mongoose';
+import { MongoMemoryServer } from 'mongodb-memory-server';
 import { BaseClientDocument, BaseClientService, ClientConfig, WarmupPhase } from '../base-client.service';
 import { Client } from '../../clients';
+import { PromoteClientSchema } from '../../promote-clients/schemas/promote-client.schema';
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
@@ -44,7 +47,13 @@ class RoleEventsTestService extends BaseClientService<BaseClientDocument> {
   get config(): ClientConfig { return {} as ClientConfig; }
   async updateUsername(): Promise<number> { return 0; }
   async findOne(mobile: string): Promise<any> { return { mobile, status: 'active', clientId: 'shruthi1' }; }
-  async update(mobile: string, dto: any): Promise<any> { return this.updateMock(mobile, dto); }
+  /** Status the stored doc had before the write (fed to opts.onBeforeStatus like the real atomic write). */
+  public beforeStatus: string | null = null;
+  async update(mobile: string, dto: any, opts?: { onBeforeStatus?: (s: string | null) => void }): Promise<any> {
+    const after = await this.updateMock(mobile, dto);
+    opts?.onBeforeStatus?.(this.beforeStatus);
+    return after;
+  }
 }
 
 function makeModel(insertOne: jest.Mock = jest.fn().mockResolvedValue({ acknowledged: true })) {
@@ -125,6 +134,36 @@ describe('accountRoleEvents: updateStatus', () => {
       const service = new RoleEventsTestService(model, 'buffer');
       expect(await within500(service.updateStatus('919000000015', 'inactive', 'x'))).toBe('done');
     }
+  });
+
+  it.each([
+    ['inactive', 'inactive'],
+    ['active', 'active'],
+  ] as const)('batch 5: a repeat %s (before status %s) records nothing and logs kind=skip reason=same_status', async (status, before) => {
+    const { model, insertOne } = makeModel();
+    const service = new RoleEventsTestService(model, 'promote');
+    service.beforeStatus = before;
+    const log = jest.spyOn((service as any).logger, 'log').mockImplementation(() => undefined);
+    try {
+      const updated = await service.updateStatus('919000000021', status, 'again');
+      expect(updated).toEqual(expect.objectContaining({ status }));
+      await flush();
+      expect(insertOne).not.toHaveBeenCalled();
+      expect(log.mock.calls.map((c: unknown[]) => String(c[0]))).toContain(
+        `role-event kind=skip reason=same_status pool=promote status=${status} mobile=••••0021 by=cms:status`,
+      );
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('batch 5: a real change (before active -> inactive) still records retired', async () => {
+    const { model, insertOne } = makeModel();
+    const service = new RoleEventsTestService(model, 'buffer');
+    service.beforeStatus = 'active';
+    await service.updateStatus('919000000022', 'inactive', 'x');
+    await flush();
+    expect(docsOf(insertOne).map((d) => [d.event, d.pool])).toEqual([['retired', 'buffer']]);
   });
 
   it('a model without a db handle records nothing and does not throw', async () => {
@@ -240,5 +279,49 @@ describe('accountRoleEvents: pool create (POST /bufferclients, /promoteclients a
     await expect((BufferClientService.prototype.create as any).call(self, { mobile: '919000000142', session: 'S' })).rejects.toThrow();
     await flush();
     expect(insertOne).not.toHaveBeenCalled();
+  });
+});
+
+/** batch 5: the atomic before-image write that updateStatus dedupes on, against a real MongoDB. */
+describe('findOneAndUpdateCapturingBefore (real MongoDB)', () => {
+  let mongod: MongoMemoryServer;
+  let connection: Connection;
+  let Model: mongoose.Model<any>;
+  const capture = (BaseClientService.prototype as any).findOneAndUpdateCapturingBefore as (...a: any[]) => Promise<any>;
+
+  beforeAll(async () => {
+    mongod = await MongoMemoryServer.create({ instance: { ip: '127.0.0.1', launchTimeout: 60_000 } });
+    connection = await mongoose.createConnection(mongod.getUri(), { dbName: 'roleEventsBefore' }).asPromise();
+    Model = connection.model('PromoteClientBeforeSpec', PromoteClientSchema, 'promoteClients');
+  }, 60_000);
+
+  afterAll(async () => {
+    if (connection) { await connection.dropDatabase(); await connection.close(); }
+    if (mongod) await mongod.stop();
+  });
+
+  it('returns the AFTER doc, reports the BEFORE status, and stamps updatedAt', async () => {
+    const old = new Date('2026-01-01T00:00:00Z');
+    await connection.collection('promoteClients').insertOne({ mobile: '919000000031', status: 'active', inUse: true, updatedAt: old });
+    const seen: Array<string | null> = [];
+    const t0 = Date.now();
+    const after = await capture.call({}, Model, { mobile: '919000000031' }, { status: 'inactive', inUse: false }, (s: string | null) => seen.push(s));
+    expect(seen).toEqual(['active']);
+    expect(after.status).toBe('inactive');
+    expect(after.inUse).toBe(false);
+    expect(after.updatedAt.getTime()).toBeGreaterThanOrEqual(t0);
+    const stored = await connection.collection('promoteClients').findOne({ mobile: '919000000031' });
+    expect(stored).toEqual(expect.objectContaining({ status: 'inactive', inUse: false }));
+    expect((stored as any).updatedAt.getTime()).toBe(after.updatedAt.getTime());
+
+    const again: Array<string | null> = [];
+    await capture.call({}, Model, { mobile: '919000000031' }, { status: 'inactive' }, (s: string | null) => again.push(s));
+    expect(again).toEqual(['inactive']);
+  });
+
+  it('no match returns null and never calls back', async () => {
+    const cb = jest.fn();
+    expect(await capture.call({}, Model, { mobile: '919000000099' }, { status: 'inactive' }, cb)).toBeNull();
+    expect(cb).not.toHaveBeenCalled();
   });
 });

@@ -7,15 +7,18 @@
  *
  * S1 is ADDITIVE:
  *   - every producer keeps its existing writes; this is one extra insert AFTER the real write succeeded;
- *   - nothing reads it yet (no reader switched, no field removed);
+ *   - readers: tg-aut's hourly promotion send cap reads the mobile's newest became_main (checked against
+ *     clients.swappedAt, so a lost or stale event does not decide alone) and monitor-parked.ts reads became_main rows
+ *     for swap cohorts. The pool docs stay the truth;
  *   - NEVER throws and never delays the caller: `recordAccountRoleEventSoon` is fire-and-forget, and the insert races
  *     a CLIENT-SIDE deadline (insertOne ignores maxTimeMS), so a stalled socket cannot hold anything;
  *   - a failure is logged once at warn and dropped (history is best-effort; the pool docs stay the truth).
  *
- * Indexes ({mobile:1, at:-1, _id:-1}, {clientId:1, at:-1, _id:-1}, and the partial unique {opId:1, event:1, mobile:1}
- * on docs that carry an opId) are created by tg-platform packages/tg-db/src/collections/account-role-events.repository.ts
- * (ensureAllIndexes, on process start). A duplicate of the same operation's event (E11000 on that unique index) is
- * dropped silently and counts as success.
+ * Indexes ({mobile:1, at:-1, _id:-1}, {clientId:1, at:-1, _id:-1}, and the partial unique
+ * {opId:1, event:1, mobile:1, pool:1} on docs that carry an opId) are created by tg-platform
+ * packages/tg-db/src/collections/account-role-events.repository.ts (ensureAllIndexes, on process start). A duplicate
+ * of the same operation's event in the same pool (E11000 on that unique index) is dropped silently and counts as
+ * success. One row per pool (owner 2026-11-21): the expiry cascade's one opId gives each pool its own `retired` row.
  * MIRROR: the document shape (ACCOUNT_ROLE_EVENT_VERSION, field names, event names, reason codes and the reason
  * classifier) must stay identical to that repository's AccountRoleEventDocument / classifyRoleEventReason. Change both
  * together.
@@ -103,7 +106,7 @@ export interface AccountRoleEventInput {
   reasonCode?: AccountRoleReasonCode | null;
   /**
    * Links the events of one operation (a cutover's became_main + swapped_out + the old main's return). Unique per
-   * (opId, event, mobile): a repeat of the same operation's event is dropped.
+   * (opId, event, mobile, pool): a repeat of the same operation's event in the same pool is dropped.
    */
   opId?: string | null;
   fromMobile?: string | null;

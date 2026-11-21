@@ -462,11 +462,19 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
     }
 
     let resetRows: Array<[string, number]> = [];
+    let alreadyReset = 0;
     try {
-      const stats = await db
-        .collection<any>('promoteStats')
+      const promoteStats = db.collection<any>('promoteStats');
+      // Idempotent per run (batch 5, owner 2026-11-21): every reset row is stamped resetRunId = jobId, and the reset
+      // matches only rows without this run's stamp. A re-claim after a failed finishRun (or a retry after a partial
+      // updateMany) resets only the rows this run has not reset yet, so sends counted since are never wiped again.
+      alreadyReset = await promoteStats.countDocuments({ resetRunId: jobId });
+      if (alreadyReset > 0) {
+        this.logger.warn(`daily-promote-reset kind=already_reset job=${jobId} rows=${alreadyReset}`);
+      }
+      const stats = await promoteStats
         .find(
-          {},
+          { resetRunId: { $ne: jobId } },
           { projection: { client: 1, totalCount: 1, lastUpdatedTimeStamp: 1 } },
         )
         .toArray();
@@ -476,9 +484,7 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
           Number(stat.totalCount || 0),
         ],
       );
-      const result = await this.resetPromoteStatsWithRetries(
-        db.collection<any>('promoteStats'),
-      );
+      const result = await this.resetPromoteStatsWithRetries(promoteStats, jobId);
       await this.finishRun(runs, jobId, token, 'complete', {
         $set: {
           completedAt: new Date(),
@@ -492,6 +498,9 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
       throw error;
     }
 
+    // A re-claim that found every row already reset by this run has nothing new to report (the first notice may
+    // already be out); the already_reset line above records it.
+    if (alreadyReset > 0 && resetRows.length === 0) return;
     try {
       await sendBotNotice('pppl', {
         severity: 'success',
@@ -551,15 +560,17 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /** Resets only rows not yet stamped with `runId` (see runDailyPromoteReset), so every attempt is safe to repeat. */
   private async resetPromoteStatsWithRetries(
     promoteStats: any,
+    runId: string,
   ): Promise<{ matchedCount: number; modifiedCount: number }> {
     let lastError: unknown;
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
         const now = Date.now();
         return await promoteStats.updateMany(
-          {},
+          { resetRunId: { $ne: runId } },
           {
             $set: {
               totalCount: 0,
@@ -567,6 +578,7 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
               releaseDay: now,
               lastUpdatedTimeStamp: now,
               data: {},
+              resetRunId: runId,
             },
           },
         );

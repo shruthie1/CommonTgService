@@ -1,6 +1,7 @@
+import { Logger } from '@nestjs/common';
 import mongoose, { Connection, Model as MongooseModel } from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
-import { PromoteStatSchema, stripTgOwnedFromBulkOps, stripTgOwnedPaths } from '../schemas/promote-stat.schema';
+import { PromoteStatPipelineUpdateError, PromoteStatSchema, stripTgOwnedFromBulkOps, stripTgOwnedPaths } from '../schemas/promote-stat.schema';
 
 /**
  * tg-aut promotion-health cycle (tg-platform 2026-11-20): promoteStats.promoHealthPause (with nested retryBase) is
@@ -71,6 +72,32 @@ describe('PromoteStat schema: promoHealthPause (tg-written, read-only for CMS)',
       mobile: '9',
     });
   });
+
+  it('batch 5: a $rename from or onto a tg-owned path is stripped and logged; other renames stay', () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    try {
+      const update: Record<string, unknown> = {
+        $rename: { totalCount: 'promoHealthPause', 'promoHealthPause.until': 'x', channels: 'oldChannels' },
+      };
+      stripTgOwnedPaths(update);
+      expect(update).toEqual({ $rename: { channels: 'oldChannels' } });
+      expect(warn.mock.calls.map((c) => String(c[0]))).toContainEqual(
+        'promote-stats kind=tg_path_stripped paths=$rename:totalCount->promoHealthPause,$rename:promoHealthPause.until',
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('batch 5: an update pipeline is refused with a log line (a pipeline can write any path)', () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    try {
+      expect(() => stripTgOwnedPaths([{ $set: { promoHealthPause: null } }])).toThrow(PromoteStatPipelineUpdateError);
+      expect(warn.mock.calls.map((c) => String(c[0]))).toContainEqual('promote-stats kind=pipeline_refused reason=tg_owned_paths');
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });
 
 /**
@@ -120,6 +147,24 @@ describe('PromoteStat model writes against a real MongoDB: promoHealthPause stay
     expect(row?.promoHealthPause).toEqual(cycle);
   });
 
+  it('batch 5: a $rename onto promoHealthPause leaves the stored cycle and the source field as they were', async () => {
+    await Model.updateOne({ client: 'c1' }, { $rename: { lastUpdatedTimeStamp: 'promoHealthPause' }, $set: { isActive: false } });
+    const row = await stored('c1');
+    expect(row?.isActive).toBe(false);
+    expect(row?.lastUpdatedTimeStamp).toBe(1);
+    expect(row?.promoHealthPause).toEqual(cycle);
+  });
+
+  it.each(['updateOne', 'findOneAndUpdate'] as const)('batch 5: %s with an update pipeline (updatePipeline on) is refused; nothing changes', async (op) => {
+    const run = op === 'updateOne'
+      ? () => Model.updateOne({ client: 'c1' }, [{ $set: { promoHealthPause: null, isActive: false } }], { updatePipeline: true } as any)
+      : () => Model.findOneAndUpdate({ client: 'c1' }, [{ $set: { promoHealthPause: null, isActive: false } }], { updatePipeline: true } as any);
+    await expect(run()).rejects.toThrow(/update pipelines are refused/);
+    const row = await stored('c1');
+    expect(row?.isActive).toBe(true);
+    expect(row?.promoHealthPause).toEqual(cycle);
+  });
+
   it('bulkWrite: updateOne/updateMany updates cannot touch the cycle; an insertOne document is inserted without one', async () => {
     await Model.bulkWrite([
       { updateOne: { filter: { client: 'c1' }, update: { $set: { isActive: false, promoHealthPause: cmsCycle } } } },
@@ -155,6 +200,27 @@ describe('PromoteStat model writes against a real MongoDB: promoHealthPause stay
       expect(row).not.toBeNull();
       expect(row).not.toHaveProperty('promoHealthPause');
     }
+  });
+
+  it.each([
+    ['PUT $set', { $set: { resetRunId: 'other', isActive: false } }],
+    ['PUT top-level', { resetRunId: 'other', isActive: false }],
+    ['PUT $unset', { $unset: { resetRunId: 1 }, $set: { isActive: false } }],
+    ['PUT $rename', { $rename: { resetRunId: 'x' }, $set: { isActive: false } }],
+  ])('batch 5 review r1: %s (findOneAndUpdate, the PUT path) cannot change resetRunId', async (_name, update) => {
+    await raw().updateOne({ client: 'c1' }, { $set: { resetRunId: 'daily-promote-stats-reset:2026-11-21' } });
+    await Model.findOneAndUpdate({ client: 'c1' }, update as any, { returnDocument: 'after' });
+    const row = await stored('c1');
+    expect(row?.isActive).toBe(false);
+    expect(row?.resetRunId).toBe('daily-promote-stats-reset:2026-11-21');
+    expect(row).not.toHaveProperty('x');
+  });
+
+  it('batch 5 review r1: POST (create) never stores a resetRunId', async () => {
+    await Model.create(doc('c6', { resetRunId: 'daily-promote-stats-reset:2026-11-21' }));
+    const row = await stored('c6');
+    expect(row).not.toBeNull();
+    expect(row).not.toHaveProperty('resetRunId');
   });
 
   it('save of an existing doc sends its other changes, never a changed cycle', async () => {

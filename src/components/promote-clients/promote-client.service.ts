@@ -41,6 +41,7 @@ import { nameMatchesAssignment, lastNameMatches } from '../../utils/homoglyph-no
 import { BotsService, ChannelCategory } from '../bots';
 import {
     BaseClientUpdate,
+    BaseClientUpdateOptions,
     BaseClientService,
     type WarmupRunContext,
     ClientStatusType,
@@ -307,7 +308,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         return !!(await this.promoteClientModel.findOne({ mobile: canonicalMobile }, { _id: 1 }).lean().exec());
     }
 
-    async update(mobile: string, updateClientDto: BaseClientUpdate): Promise<PromoteClientDocument> {
+    async update(mobile: string, updateClientDto: BaseClientUpdate, opts?: BaseClientUpdateOptions): Promise<PromoteClientDocument> {
         const canonicalMobile = this.canonicalMobile(mobile);
         const updateData: BaseClientUpdate & { mobile?: string } = withoutRetiredFields(updateClientDto);
         // `channels` is a count: never persist a negative or fractional one (a -13 reached prod once).
@@ -328,9 +329,11 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         if (updateData.status === 'active' && !(updateData.session || await this.getStoredActiveSession(canonicalMobile))) {
             throw new BadRequestException('Cannot activate PromoteClient without a session');
         }
-        const updatedUser = await this.promoteClientModel
-            .findOneAndUpdate({ mobile: canonicalMobile }, { $set: updateData }, { returnDocument: 'after' })
-            .exec();
+        const updatedUser = opts?.onBeforeStatus
+            ? await this.findOneAndUpdateCapturingBefore<PromoteClientDocument>(this.promoteClientModel as any, { mobile: canonicalMobile }, updateData, opts.onBeforeStatus)
+            : await this.promoteClientModel
+                .findOneAndUpdate({ mobile: canonicalMobile }, { $set: updateData }, { returnDocument: 'after' })
+                .exec();
         if (!updatedUser) {
             throw new NotFoundException(`PromoteClient with mobile ${mobile} not found`);
         }
