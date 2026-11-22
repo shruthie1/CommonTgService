@@ -1,6 +1,6 @@
-import { BadRequestException } from '@nestjs/common';
-import { accountsOfIds, bankingTag, foldUpiRevenue, knownUpiIds, mainQrIds, maskUpi, nameMatchedId, matchUpi, UPI_PROOF_PROJECTION, UpiProofRow } from '../monitor-upi';
-import { parseUpiWindow } from '../monitor.controller';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { accountsOfIds, bankingTag, foldUpiRevenue, foldUpiRevenueWithCredits, knownUpiIds, mainQrIds, maskUpi, nameMatchedId, matchUpi, UPI_PROOF_PROJECTION, UpiProofRow, upiRowItems, upiRowKey } from '../monitor-upi';
+import { parseUpiRowKey, parseUpiWindow } from '../monitor.controller';
 import { MonitorService } from '../monitor.service';
 
 // Synthetic ids shaped like ours (bharatpe merchant, paytm QR, airtel pair that shares its last 4).
@@ -303,5 +303,120 @@ describe('GET /monitor/upi-revenue', () => {
     expect(res.total.rupees).toBe(70);
     expect(res.nameMatched).toEqual({ rupees: 70, credits: 1 });
     expect(res.rows.find((r: any) => r.id === '****gh9q@paytm')).toMatchObject({ rupees: 70, nameRupees: 70 });
+  });
+});
+
+describe('drill-down: the credits of each row (GET /monitor/upi-revenue/items)', () => {
+  const GC_ONE = 'gcsingle1234@ptys';
+  const docs = [{ _id: 'x', qrId: RL, gp: GC_ONE }];
+  const cl = [{ clientId: 'c1', qrId: RL, gpayId: null }, { clientId: 'c5', qrId: GC_ONE, gpayId: null }];
+  const t = (h: number) => new Date(Date.UTC(2026, 10, 22, h));
+  const proofs: UpiProofRow[] = [
+    p({ chatId: 'a', proofId: 'c1-a-1', telegramMsgId: 1, payeeUpiId: RL, payeeName: 'Mrs RAVVA LAKSHMI', creditAmount: 200, servedAt: t(1), verdict: { outcome: 'credited' } }),
+    p({ chatId: 'b', proofId: 'c1-b-2', telegramMsgId: 2, payeeUpiId: RL, payeeName: 'Ravva Lakshmi', creditAmount: 100, servedAt: t(3), verdict: { outcome: 'credited' } }),
+    p({ chatId: 'c', proofId: 'c1-c-3', payeeUpiId: null, payeeName: 'Ravva Lakshmi', creditAmount: 50, servedAt: t(2) }),
+    p({ chatId: 'd', clientId: 'c5', payeeUpiId: GC_ONE, payeeName: 'Girls Community', creditAmount: 30, servedAt: t(4) }),
+    p({ chatId: 'd2', clientId: 'c5', payeeUpiId: GC_ONE, payeeName: 'Girls Community', creditAmount: 20, servedAt: t(4) }),
+    p({ chatId: 'e', payeeUpiId: 'stranger9876@ybl', payeeName: 'Priya Sharma', creditAmount: 70, servedAt: t(5) }),
+    p({ chatId: 'f', payeeUpiId: null, payeeName: null, creditAmount: 15, servedAt: t(6) }),
+    p({ chatId: 'fake', payeeUpiId: RL, creditAmount: 500, servedAt: t(7) }),
+    p({ chatId: 'big', payeeUpiId: RL, creditAmount: 1000, servedAt: t(7) }),
+    p({ chatId: 'void', payeeUpiId: RL, creditAmount: 99, uncredited: { state: 'done' }, servedAt: t(7) }),
+  ];
+  const { fold, credits } = foldUpiRevenueWithCredits({ proofs, fakeChats: new Set(['fake']), upiDocs: docs, clients: cl });
+
+  it('every row, the other row and name-matched included, is exactly the sum of its items', () => {
+    expect(fold.rows.length).toBeGreaterThanOrEqual(3);
+    for (const row of fold.rows) {
+      const items = upiRowItems(credits, row.key);
+      expect(items.reduce((s, i) => s + i.rupees, 0)).toBe(row.rupees);
+      expect(items.length).toBe(row.credits);
+      expect(new Set(items.map((i) => i.chatId)).size).toBe(row.payers);
+      expect(items.filter((i) => i.match === 'name').reduce((s, i) => s + i.rupees, 0)).toBe(row.nameRupees);
+    }
+    expect(credits.length).toBe(fold.total.credits);
+    expect(credits.reduce((s, c) => s + c.rupees, 0)).toBe(fold.total.rupees);
+  });
+
+  it('RL row: exact-id items plus the name-matched one, newest first; other row holds the foreign and the unread', () => {
+    const rl = fold.rows.find((r) => r.id === '****2345@fbpe')!;
+    expect(rl).toMatchObject({ rupees: 350, credits: 3, nameRupees: 50 });
+    const items = upiRowItems(credits, rl.key, new Map([['c1', 'https://c1.example']]));
+    expect(items.map((i) => [i.chatId, i.match, i.rupees])).toEqual([['b', 'id', 100], ['c', 'name', 50], ['a', 'id', 200]]);
+    expect(items[2]).toMatchObject({ proofId: 'c1-a-1', telegramMsgId: 1, payeeUpi: '****2345@fbpe', payeeTag: 'RL', payeeNameRead: true, legacy: false, clientHost: 'https://c1.example', servedAt: t(1).toISOString() });
+    expect(items[1]).toMatchObject({ payeeUpi: null, legacy: true, telegramMsgId: null });
+    const other = fold.rows.find((r) => r.kind === 'other')!;
+    expect(other.key).toBe('other');
+    const o = upiRowItems(credits, 'other');
+    expect(o.map((i) => [i.chatId, i.match, i.payeeUpi, i.payeeTag, i.payeeNameRead])).toEqual([['f', 'none', null, null, false], ['e', 'none', '****9876@ybl', null, true]]);
+    expect(o.reduce((s, i) => s + i.rupees, 0)).toBe(other.rupees);
+  });
+
+  it('items never carry a full id or a payee name; keys are stable and not the id', () => {
+    const text = JSON.stringify(fold.rows.map((r) => upiRowItems(credits, r.key)));
+    for (const secret of [RL.toLowerCase(), '9000012345', 'stranger', 'priya', 'ravva', 'girls', GC_ONE]) expect(text.toLowerCase()).not.toContain(secret);
+    expect(upiRowKey(RL.toLowerCase())).toMatch(/^u[0-9a-f]{12}$/);
+    expect(upiRowKey(RL.toLowerCase())).toBe(fold.rows.find((r) => r.id === '****2345@fbpe')!.key);
+    expect(upiRowKey(null)).toBe('other');
+    expect(parseUpiRowKey('other')).toBe('other');
+    expect(parseUpiRowKey(upiRowKey('x@y'))).toMatch(/^u/);
+    expect(() => parseUpiRowKey('****2345@fbpe')).toThrow(BadRequestException);
+    expect(() => parseUpiRowKey(undefined)).toThrow(BadRequestException);
+  });
+
+  it('the table response carries keys and no items', () => {
+    expect(foldUpiRevenue({ proofs, fakeChats: new Set(), upiDocs: docs, clients: cl })).not.toHaveProperty('credits');
+  });
+});
+
+describe('GET /monitor/upi-revenue/items (service)', () => {
+  const mk = (data: Record<string, any[]>, reads: any[] = []) => {
+    // userData answers the fake-chat read with nothing (no chat marked fake) and the username read with its rows.
+    const rowsOf = (coll: string, filter: any) => (coll === 'userData' && filter?.fakePaymentAt ? [] : data[coll] ?? []);
+    const connection = { collection: (coll: string) => ({ find: (filter: any, opts: any) => { reads.push({ coll, filter, opts }); return { toArray: async () => rowsOf(coll, filter) }; } }) };
+    const svc = new MonitorService({ query: jest.fn() } as any, connection as any, {} as any);
+    svc.prewarmDelayMs = -1;
+    return svc;
+  };
+  const now = () => new Date();
+  const data = (): Record<string, any[]> => ({
+    paymentProofs: [
+      { chatId: '7712345678', clientId: 'c1', profile: 'p1', proofId: 'c1-7712345678-5', telegramMsgId: 5, payeeUpiId: RL, payeeName: 'Mrs RAVVA LAKSHMI', creditAmount: 150, servedAt: now(), verdict: { outcome: 'credited' } },
+      { chatId: '7700000001', clientId: 'c3', profile: 'p3', payeeUpiId: null, payeeName: 'Girls Community', creditAmount: 40, servedAt: now() },
+      { chatId: '7700000002', clientId: 'c3', profile: 'p3', payeeUpiId: QR_A, payeeName: 'Girls Community', creditAmount: 60, servedAt: now() },
+      { chatId: '7700000003', clientId: 'c3', profile: 'p3', payeeUpiId: QR_A, payeeName: 'Girls Community', creditAmount: 60, servedAt: now() },
+      { chatId: '7700000009', clientId: 'c2', profile: 'p2', payeeUpiId: 'x@ybl', creditAmount: 25, servedAt: now() },
+    ],
+    'upi-ids': upiDocs,
+    clients: clients.map((c) => ({ ...c, repl: `https://${c.clientId}.example` })),
+    userData: [{ chatId: '7712345678', clientId: 'c1', profile: 'p1', username: '@buyer' }],
+  });
+
+  it('items of every row sum to the table row, from the same read; usernames and hosts joined; no image/ocr', async () => {
+    const reads: any[] = [];
+    const svc = mk(data(), reads);
+    const table: any = await svc.upiRevenue('today');
+    expect(table.rows.every((r: any) => typeof r.key === 'string')).toBe(true);
+    expect(table).not.toHaveProperty('credits');
+    for (const row of table.rows) {
+      const res: any = await svc.upiRevenueItems('today', row.key);
+      expect(res.total).toEqual({ rupees: row.rupees, credits: row.credits });
+      expect(res.row).toEqual(row);
+      expect(res.asOf).toBe(table.asOf);
+    }
+    expect(reads.filter((r) => r.coll === 'paymentProofs')).toHaveLength(1);
+    const gc: any = await svc.upiRevenueItems('today', table.rows.find((r: any) => r.id === '****gh9q@paytm').key);
+    expect(gc.items.map((i: any) => i.match).sort()).toEqual(['id', 'id', 'name']);
+    const rl: any = await svc.upiRevenueItems('today', table.rows.find((r: any) => r.id === '****2345@fbpe').key);
+    expect(rl.items[0]).toMatchObject({ chatId: '7712345678', clientId: 'c1', username: '@buyer', clientHost: 'https://c1.example', proofId: 'c1-7712345678-5', match: 'id' });
+    const other: any = await svc.upiRevenueItems('today', 'other');
+    expect(other.items.map((i: any) => i.rupees)).toEqual([25]);
+    for (const r of reads.filter((x) => x.coll === 'paymentProofs')) expect(Object.keys(r.opts.projection).some((k) => /image|ocr/i.test(k))).toBe(false);
+    for (const r of reads) expect(r.opts.readPreference).toBe('secondaryPreferred');
+  });
+
+  it('a key not in the window is 404', async () => {
+    const svc = mk(data());
+    await expect(svc.upiRevenueItems('today', 'u000000000000')).rejects.toThrow(NotFoundException);
   });
 });

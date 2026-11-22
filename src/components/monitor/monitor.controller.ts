@@ -4,7 +4,7 @@ import { addDays, DateRange, daysIn, istDate, MAX_RANGE_DAYS, MONITOR_PERIODS, M
 import { HISTORY_RANGES, parseHistoryRange } from './monitor-history';
 import { PROMO_WINDOWS, PromoWindow } from './monitor-promotions';
 import { REACT_WINDOWS, ReactWindow } from './monitor-reactions';
-import { UPI_WINDOWS, UpiWindow } from './monitor-upi';
+import { UPI_ROW_KEY, UPI_WINDOWS, UpiWindow } from './monitor-upi';
 import { REVENUE_HISTORY_FROM } from './monitor-util';
 import { LIVE_SVCS, LiveSvc, MonitorService, PAID_SEARCH_LIMIT, PAID_SEARCH_MAX_LIMIT, PAID_SEARCH_MAX_Q, PAID_SEARCH_MIN_Q } from './monitor.service';
 
@@ -33,6 +33,13 @@ export function parseUpiWindow(window?: string): UpiWindow {
   if (window === undefined || window === '') return 'today';
   if ((UPI_WINDOWS as readonly string[]).includes(window)) return window as UpiWindow;
   throw new BadRequestException(`window must be one of ${UPI_WINDOWS.join('|')} (paymentProofs keep 7 days)`);
+}
+
+/** A row key of GET /monitor/upi-revenue ('other' or 'u' + 12 hex). 400 otherwise. */
+export function parseUpiRowKey(key?: string): string {
+  const k = String(key ?? '').trim();
+  if (UPI_ROW_KEY.test(k)) return k;
+  throw new BadRequestException('key must be a row key of /monitor/upi-revenue (other, or u + 12 hex)');
 }
 
 export function parseDays(days?: string): 7 | 30 {
@@ -242,6 +249,18 @@ export class MonitorController {
   @ApiQuery({ name: 'window', required: false, enum: UPI_WINDOWS })
   upiRevenue(@Query('window') window?: string) {
     return this.service.upiRevenue(parseUpiWindow(window));
+  }
+
+  /**
+   * The credits that make up one row of /monitor/upi-revenue (same fold, so they sum to the row), newest first:
+   * proof/chat/client ids for the chat and review links, masked payee id, match kind. No image or ocr.
+   * 400 on a bad window or key, 404 on a key not in the window's rows, 503 when Mongo fails.
+   */
+  @Get('upi-revenue/items')
+  @ApiQuery({ name: 'window', required: false, enum: UPI_WINDOWS })
+  @ApiQuery({ name: 'key', required: true, description: "row key from /monitor/upi-revenue ('other' or u + 12 hex)" })
+  upiRevenueItems(@Query('window') window?: string, @Query('key') key?: string) {
+    return this.service.upiRevenueItems(parseUpiWindow(window), parseUpiRowKey(key));
   }
 
   /** Every parkedChats row of one chat with its follow-through. 400 on a bad chat id. Declared before client/:clientId. */

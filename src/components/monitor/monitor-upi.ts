@@ -27,6 +27,8 @@
  * the most frequent name read is noise (owner 2026-11-22), so gpay-only and other ids stay untagged.
  */
 
+import { createHash } from 'crypto';
+
 export const UPI_WINDOWS = ['today', '7d'] as const;
 export type UpiWindow = (typeof UPI_WINDOWS)[number];
 /** Owner rule 2026-10-25: a credit of ₹1,000 or more is never real. */
@@ -47,8 +49,15 @@ const NAME_FORMS = OUR_BANKING_NAMES.map((name) => {
 /** An id belongs to an account only after this many matched receipts read that banking name (and no other). */
 export const UPI_ACCOUNT_MIN_READS = 2;
 
-/** Fields read from paymentProofs (never image / ocr). */
-export const UPI_PROOF_PROJECTION = { chatId: 1, clientId: 1, payeeUpiId: 1, payeeName: 1, creditAmount: 1, amount: 1, servedAt: 1, 'uncredited.state': 1 };
+/**
+ * Fields read from paymentProofs (never image / ocr). The drill-down (GET /monitor/upi-revenue/items) also needs the
+ * proof's ids, persona and times to link the chat and the review and to load the screenshot through the existing
+ * image route; verdict.outcome tells a legacy row (no archived file) apart.
+ */
+export const UPI_PROOF_PROJECTION = {
+  chatId: 1, clientId: 1, payeeUpiId: 1, payeeName: 1, creditAmount: 1, amount: 1, servedAt: 1, 'uncredited.state': 1,
+  proofId: 1, profile: 1, telegramMsgId: 1, createdAt: 1, 'verdict.outcome': 1,
+};
 
 export interface UpiProofRow {
   chatId?: unknown;
@@ -58,6 +67,13 @@ export interface UpiProofRow {
   creditAmount?: number | null;
   amount?: number | null;
   uncredited?: { state?: string } | null;
+  _id?: unknown;
+  proofId?: string | null;
+  profile?: string | null;
+  telegramMsgId?: number | null;
+  servedAt?: Date | string | null;
+  createdAt?: Date | string | null;
+  verdict?: { outcome?: string | null } | null;
 }
 
 export interface UpiClientRow {
@@ -67,6 +83,8 @@ export interface UpiClientRow {
 }
 
 export interface UpiRevenueRow {
+  /** Stable row key for the drill-down: 'other', or 'u' + 12 hex of sha256(normalised id). Never the id itself. */
+  key: string;
   /** Masked id ("****3302@fbpe"); null on the other row. */
   id: string | null;
   /** 'qr' = some client's qrId, 'gpay' = some client's gpayId (and no qrId), 'listed' = upi-ids doc only, 'other'. */
@@ -111,6 +129,13 @@ export function maskUpi(v: unknown): string {
   const handle = at >= 0 ? n.slice(at) : '';
   return `****${local.slice(-4)}${handle}`;
 }
+
+/** Row key of a normalised id (null = the other row). Stable across refreshes and windows; not reversible to the id. */
+export function upiRowKey(id: string | null): string {
+  return id === null ? UPI_OTHER_KEY : `u${createHash('sha256').update(id).digest('hex').slice(0, 12)}`;
+}
+export const UPI_OTHER_KEY = 'other';
+export const UPI_ROW_KEY = /^(other|u[0-9a-f]{12})$/;
 
 const compact = (s: string) => s.replace(/[^a-z0-9]/g, '');
 
@@ -274,14 +299,30 @@ const newAcc = (): Acc => ({ rupees: 0, credits: 0, nameRupees: 0, nameCredits: 
  * (it shows where clients point); gpay / listed ids only when they took a credit. Sorted by ₹ desc, the other
  * row last.
  */
-export function foldUpiRevenue(input: {
+export interface UpiFoldInput {
   proofs: UpiProofRow[];
   /** Receipts the id accounts are read from (the last 7 days); default `proofs`. */
   accountProofs?: UpiProofRow[];
   fakeChats: Set<string>;
   upiDocs: Array<Record<string, unknown>>;
   clients: UpiClientRow[];
-}): UpiRevenueFold {
+}
+
+export function foldUpiRevenue(input: UpiFoldInput): UpiRevenueFold {
+  return foldUpiRevenueWithCredits(input).fold;
+}
+
+/** One counted credit and the row it went to (internal; the drill-down maps it to UpiRevenueItem). */
+export interface UpiCountedCredit {
+  key: string;
+  proof: UpiProofRow;
+  rupees: number;
+  /** 'id' = the payee id read matched one of ours; 'name' = put on the id by the banking name read; 'none' = other row. */
+  match: 'id' | 'name' | 'none';
+}
+
+/** The fold plus every credit it counted, each with its row key: the credits of a row sum to its ₹ and count. */
+export function foldUpiRevenueWithCredits(input: UpiFoldInput): { fold: UpiRevenueFold; credits: UpiCountedCredit[] } {
   const known = knownUpiIds(input.upiDocs, input.clients);
   const qrOf = new Map<string, string[]>();
   const gpayOf = new Map<string, string[]>();
@@ -301,6 +342,7 @@ export function foldUpiRevenue(input: {
   const nameMatched = { rupees: 0, credits: 0 };
   const excluded = { fakeRupees: 0, fakeCredits: 0, bigRupees: 0, bigCredits: 0, voidedCredits: 0 };
   const acc = new Map<string | null, Acc>();
+  const counted: UpiCountedCredit[] = [];
   const allPayers = new Set<string>();
   let rupees = 0;
   let credits = 0;
@@ -320,6 +362,7 @@ export function foldUpiRevenue(input: {
     a.payers.add(chat);
     if (tag) a.tags.set(tag, (a.tags.get(tag) ?? 0) + 1);
     acc.set(key, a);
+    counted.push({ key: upiRowKey(key), proof: r, rupees: amt, match: key === null ? 'none' : byName ? 'name' : 'id' });
     allPayers.add(chat);
     rupees += amt;
     credits++;
@@ -329,6 +372,7 @@ export function foldUpiRevenue(input: {
   const rows: UpiRevenueRow[] = [...acc.entries()].map(([id, a]) => {
     const tag = [...a.tags.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]))[0]?.[0] ?? null;
     return {
+      key: upiRowKey(id),
       id: id === null ? null : maskUpi(id),
       kind: id === null ? 'other' : qrOf.has(id) ? 'qr' : gpayOf.has(id) ? 'gpay' : 'listed',
       tag: id !== null && mainQr.has(id) ? tag : null,
@@ -350,11 +394,73 @@ export function foldUpiRevenue(input: {
     if (id !== null && r.id && (byMask.get(r.id) ?? 0) > 1) r.id = `${r.id} (${id.split('@')[0].length} ch)`;
   }
   rows.sort((x, y) => Number(x.kind === 'other') - Number(y.kind === 'other') || y.rupees - x.rupees || y.credits - x.credits || String(x.id).localeCompare(String(y.id)));
-  return {
+  const fold: UpiRevenueFold = {
     rows,
     total: { rupees, payers: allPayers.size, credits },
     nameMatched,
     excluded,
     idsWithCredits: rows.filter((r) => r.kind !== 'other' && r.credits > 0).length,
   };
+  return { fold, credits: counted };
+}
+
+/** One credit of a row, as GET /monitor/upi-revenue/items sends it. Ids masked; no payee name, no image or ocr. */
+export interface UpiRevenueItem {
+  proofId: string | null;
+  clientId: string;
+  chatId: string;
+  profile: string | null;
+  telegramMsgId: number | null;
+  /** ISO times; servedAt is when the credit was given. */
+  servedAt: string | null;
+  createdAt: string | null;
+  /** The credited ₹ this row counts (creditAmount, else amount). */
+  rupees: number;
+  match: 'id' | 'name' | 'none';
+  /** The payee id read, masked ("****3302@fbpe"); null when none was read. */
+  payeeUpi: string | null;
+  /** Initials of our banking name read (RL, GC…); null when none of ours was read. */
+  payeeTag: string | null;
+  /** A payee name was read at all (ours or not). The name itself is never sent. */
+  payeeNameRead: boolean;
+  /** Row from before tg-aut wrote verdicts (no archived screenshot). */
+  legacy: boolean;
+  /** clients.repl of the proof's client (serves the screenshot); null when unknown. */
+  clientHost: string | null;
+  /** userData username of the chat (filled by the service); null when none. */
+  username: string | null;
+}
+
+const iso = (v: unknown): string | null => {
+  if (v === null || v === undefined || v === '') return null;
+  const t = new Date(v as string).getTime();
+  return Number.isFinite(t) ? new Date(t).toISOString() : null;
+};
+
+/** The credits of one row (by key), newest credit first. Their rupees sum to the row's ₹ and their count to its credits. */
+export function upiRowItems(credits: UpiCountedCredit[], key: string, hosts: Map<string, string> = new Map()): UpiRevenueItem[] {
+  return credits
+    .filter((c) => c.key === key)
+    .map(({ proof: r, rupees, match }) => {
+      const read = normUpi(r.payeeUpiId);
+      const tel = Number(r.telegramMsgId);
+      return {
+        proofId: typeof r.proofId === 'string' && r.proofId ? r.proofId : null,
+        clientId: String(r.clientId ?? ''),
+        chatId: String(r.chatId ?? ''),
+        profile: typeof r.profile === 'string' && r.profile ? r.profile : null,
+        telegramMsgId: Number.isInteger(tel) && tel > 0 ? tel : null,
+        servedAt: iso(r.servedAt),
+        createdAt: iso(r.createdAt),
+        rupees,
+        match,
+        payeeUpi: read ? maskUpi(read) : null,
+        payeeTag: bankingTag(r.payeeName),
+        payeeNameRead: String(r.payeeName ?? '').trim() !== '',
+        legacy: !(typeof r.verdict?.outcome === 'string' && r.verdict.outcome),
+        clientHost: hosts.get(String(r.clientId ?? '')) ?? null,
+        username: null,
+      };
+    })
+    .sort((a, b) => (Date.parse(b.servedAt ?? '') || 0) - (Date.parse(a.servedAt ?? '') || 0) || String(a.proofId).localeCompare(String(b.proofId)));
 }

@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException, OnModuleDestroy, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
 import { AnalyticsPgError, AnalyticsPgReader } from '../daily-analytics/analytics-pg.reader';
@@ -126,7 +126,7 @@ import {
   SqlQuery,
 } from './monitor-sql';
 import { chatRows, coverageNotes, coverageOf, foldParked, loadParked, PARKED_CHAT_CHUNK, ParkedIO, ParkedLoaded } from './monitor-parked';
-import { foldUpiRevenue, UPI_PROOF_PROJECTION, UpiRevenueFold, UpiWindow } from './monitor-upi';
+import { foldUpiRevenueWithCredits, UPI_PROOF_PROJECTION, UpiCountedCredit, UpiRevenueFold, UpiWindow, upiRowItems } from './monitor-upi';
 import {
   addDays,
   clientDaysRange,
@@ -299,6 +299,9 @@ export interface ClientDay {
 
 /** Paid chats: closed days are fixed once written (late sink rows aside), so up to 30 days are kept. */
 export const PAID_HIST_KEYS = 30;
+/** One window's UPI fold, the credits it counted (row key each) and clientId -> clients.repl, cached together. */
+interface UpiRevenueSnapshot { fold: UpiRevenueFold; credits: UpiCountedCredit[]; hosts: Map<string, string> }
+
 /** Max chat ids sent to the one userData username lookup per request. */
 export const PAID_ENRICH_MAX = 1000;
 
@@ -712,7 +715,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
   /** GET /monitor/parked/chat/:chatId responses, 30 s per chat. */
   private readonly parkedChatCache = new TtlCache<{ chatId: string; asOf: number; rows: ReturnType<typeof chatRows>; notes: string[] }>(PARKED_CHAT_TTL_MS, 200);
   /** Revenue by receiving UPI id per window (both windows include today): 60 s fresh, served stale up to 15 min. */
-  private readonly upiRevenueCache = new SwrCache<Loaded<UpiRevenueFold>>({ freshMs: TODAY_FRESH_MS, maxStaleMs: TODAY_MAX_STALE_MS, maxKeys: 4 });
+  private readonly upiRevenueCache = new SwrCache<Loaded<UpiRevenueSnapshot>>({ freshMs: TODAY_FRESH_MS, maxStaleMs: TODAY_MAX_STALE_MS, maxKeys: 4 });
   /** Chat route Postgres cap (queue + query). */
   parkedChatPgTimeoutMs = PARKED_CHAT_PG_TIMEOUT_MS;
 
@@ -2103,7 +2106,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     return { q, tz: 'Asia/Kolkata', from: REVENUE_HISTORY_FROM, asOf, source: 'payment_event', chats, truncated, notes };
   }
 
-  private async addUsernames(chats: PaidChat[], notes: string[]): Promise<void> {
+  private async addUsernames(chats: Array<{ clientId: string; chatId: string; profile: string | null; username: string | null }>, notes: string[]): Promise<void> {
     if (!chats.length) return;
     const ids = [...new Set(chats.map((c) => c.chatId))].slice(0, PAID_ENRICH_MAX);
     let docs: Array<{ chatId?: string; profile?: string; clientId?: string; username?: string }>;
@@ -3078,6 +3081,41 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
    * ocr never read), userData fakePaymentAt, upi-ids, clients qrId/gpayId. Ids are masked here. Mongo failure = 503.
    */
   async upiRevenue(window: UpiWindow) {
+    const { meta, snap } = await this.upiRevenueSnapshot(window);
+    return {
+      ...meta,
+      ...snap.fold,
+      notes: [
+        'Excludes proofs voided by Uncredit, every credit of chats marked fake, and any credit of ₹1,000 or more.',
+        "Name-matched: no UPI id read, so the banking name read picks the id (the client's qrId, else gpayId, on that account; else the account's one id).",
+      ],
+    };
+  }
+
+  /**
+   * The credits that make up one row of GET /monitor/upi-revenue (row `key`), from the SAME cached fold, so they sum
+   * to the row's ₹ and credits. Masked payee id, banking-name initials only, no image / ocr. 404 on a key not in the
+   * window's rows. Usernames from userData (Mongo failure = usernames null + note).
+   */
+  async upiRevenueItems(window: UpiWindow, key: string) {
+    const { meta, snap } = await this.upiRevenueSnapshot(window);
+    const row = snap.fold.rows.find((r) => r.key === key);
+    if (!row) throw new NotFoundException(`no row ${key} in the ${window} window`);
+    const items = upiRowItems(snap.credits, key, snap.hosts);
+    const notes: string[] = [];
+    await this.addUsernames(items, notes);
+    return {
+      ...meta,
+      key,
+      row,
+      items,
+      total: { rupees: items.reduce((s, i) => s + i.rupees, 0), credits: items.length },
+      notes,
+    };
+  }
+
+  /** One fold per window (60 s fresh, stale up to 15 min), shared by the table and its drill-down. Mongo failure = 503. */
+  private async upiRevenueSnapshot(window: UpiWindow) {
     const now = Date.now();
     const today = istDate(now);
     const from = window === 'today' ? today : addDays(today, -6);
@@ -3094,7 +3132,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
           const [proofs7, upiDocs, clients] = await Promise.all([
             this.mongoFind('paymentProofs', { servedAt: { $gte: new Date(istDayStart(from7)), $lt: end } }, UPI_PROOF_PROJECTION, 'mongo.paymentProofs_upi', timings),
             this.mongoFind('upi-ids', {}, {}, 'mongo.upiIds', timings),
-            this.mongoFind('clients', {}, { clientId: 1, qrId: 1, gpayId: 1 }, 'mongo.clients_upi', timings),
+            this.mongoFind('clients', {}, { clientId: 1, qrId: 1, gpayId: 1, repl: 1 }, 'mongo.clients_upi', timings),
           ]);
           const proofs = proofs7.filter((p: any) => new Date(p.servedAt).getTime() >= start);
           const chats = [...new Set(proofs.map((p: any) => String(p.chatId ?? '')).filter(Boolean))];
@@ -3103,23 +3141,15 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
             const docs = await this.mongoFind('userData', { chatId: { $in: chats.slice(i, i + PARKED_CHAT_CHUNK) }, fakePaymentAt: { $ne: null } }, { chatId: 1 }, 'mongo.userData_fake_upi', timings);
             for (const d of docs) fakeChats.add(String(d.chatId));
           }
-          return { value: foldUpiRevenue({ proofs, accountProofs: proofs7, fakeChats, upiDocs, clients }), asOf, timings };
+          const hosts = new Map<string, string>();
+          for (const c of clients) if (typeof c.clientId === 'string' && typeof c.repl === 'string' && c.repl) hosts.set(c.clientId, c.repl);
+          const { fold, credits } = foldUpiRevenueWithCredits({ proofs, accountProofs: proofs7, fakeChats, upiDocs, clients });
+          return { value: { fold, credits, hosts }, asOf, timings };
         },
         istDayStart(addDays(today, 1)),
       );
       const v = res.value;
-      return {
-        window,
-        from,
-        to: today,
-        tz: 'Asia/Kolkata',
-        asOf: v.asOf,
-        ...v.value,
-        notes: [
-          'Excludes proofs voided by Uncredit, every credit of chats marked fake, and any credit of ₹1,000 or more.',
-          "Name-matched: no UPI id read, so the banking name read picks the id (the client's qrId, else gpayId, on that account; else the account's one id).",
-        ],
-      };
+      return { meta: { window, from, to: today, tz: 'Asia/Kolkata', asOf: v.asOf }, snap: v.value };
     } catch (err) {
       const msg = String((err as Error)?.message ?? err).slice(0, 200);
       this.logger.warn(`monitor upi-revenue ${window} failed: ${msg}`);
