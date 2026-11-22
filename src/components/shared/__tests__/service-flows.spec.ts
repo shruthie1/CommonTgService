@@ -340,7 +340,7 @@ describe('Service flow reliability', () => {
         const rotated = await service.rotateSession('919990090002');
 
         expect(rotated).toBe(true);
-        expect(createDistinctSpy).toHaveBeenCalledWith('919990090002', ['active-session', 'dead-backup-session']);
+        expect(createDistinctSpy).toHaveBeenCalledWith('919990090002', ['active-session', 'dead-backup-session'], 2, 'rotate_session');
         expect(service.usersServiceMock.replaceSessionOfRow).toHaveBeenCalledWith('919990090002', 'dead-backup-session', 'fresh-backup-session', 'tg-rotate-2');
         expect(service.updateMock).toHaveBeenCalledWith(
             '919990090002',
@@ -364,7 +364,7 @@ describe('Service flow reliability', () => {
         const rotated = await service.rotateSession('919990090004');
 
         expect(rotated).toBe(true);
-        expect(createDistinctSpy).toHaveBeenCalledWith('919990090004', ['active-session', 'active-session']);
+        expect(createDistinctSpy).toHaveBeenCalledWith('919990090004', ['active-session', 'active-session'], 2, 'rotate_session');
         expect(service.usersServiceMock.replaceSessionOfRow).toHaveBeenCalledWith('919990090004', 'active-session', 'fresh-duplicate-replacement', 'tg-rotate-dup');
     });
 

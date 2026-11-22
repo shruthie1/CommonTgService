@@ -23,6 +23,7 @@ import { TelegramClient } from 'telegram';
 import { computeCheck } from 'telegram/Password';
 import { StringSession } from 'telegram/sessions';
 import isPermanentError from '../../utils/isPermanentError';
+import { isForeign2faError } from '../../utils/isForeign2faError';
 import isDeadChannelError from '../../utils/isDeadChannelError';
 import { hasTelegramErrorCode, isFloodWaitError } from '../../utils/telegram-error-code';
 import type { JoinRequestDocument } from '../join-requests/join-request.schema';
@@ -1847,6 +1848,40 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         return true;
     }
 
+    /**
+     * Owner rule: a mobile whose 2FA password is not ours is dropped at once, in every path.
+     * Only call this on a definite foreign verdict (isForeign2faError / verifyOurPassword 'foreign').
+     * Reuses the permanent retirement: pool doc inactive ([UNSAFE] tag, `retired` role event) and the
+     * expireAccount cascade (users doc expired, sibling pool inactive). When this pool holds no doc for
+     * the mobile (e.g. an old main on its way back), the cascade still runs so it is never picked again.
+     */
+    protected async dropForeign2fa(mobile: string, path: string): Promise<boolean> {
+        this.logger.warn(`mobile-drop reason=foreign_2fa mobile=${maskMobile(mobile)} pool=${this.clientType} path=${path}`);
+        // No row in this pool (e.g. an old main on its way back): skip the status write, which would only raise
+        // false "Status failed" / "inactivate FAILED" alerts, and retire through the users cascade alone.
+        // A failed lookup (undefined) falls through to the normal deactivation.
+        const poolDoc = await this.findOne(mobile, false).catch(() => undefined);
+        let result: string;
+        let dropped: boolean;
+        if (poolDoc === null) {
+            // expireUserByMobile logs its own failure (expireUserByMobile: failed to expire ...).
+            await this.expireUserByMobile(mobile);
+            result = `no ${this.clientType} row; retired via users cascade`;
+            dropped = true;
+        } else {
+            dropped = await this.deactivateClient(mobile, 'foreign_2fa: Foreign 2FA password, not ours. Account unrecoverable if session dies', { permanent: true });
+            if (!dropped) await this.expireUserByMobile(mobile);
+            result = dropped ? 'inactivated' : 'inactivate FAILED';
+        }
+        this.sendAccountNotice(
+            this.warmupNotice('critical', 'Foreign 2FA', mobile, [
+                { label: 'Result', value: result, code: false },
+                { label: 'Path', value: path, code: false },
+            ], 'Unrecoverable: the account is not safely controlled by us'),
+        );
+        return dropped;
+    }
+
     protected async updateUser2FAStatus(tgId: string, mobile: string): Promise<void> {
         try {
             await this.usersService.update(tgId, { twoFA: true });
@@ -2417,7 +2452,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             return 'ours';
         } catch (error: unknown) {
             const msg = this.getErrorText(error).toLowerCase();
-            if (msg.includes('password_hash_invalid')) {
+            if (isForeign2faError(error)) {
                 // Password is wrong — this is a foreign password
                 this.logger.warn(`${maskMobile(mobile)}: 2FA password verification failed — foreign password`);
                 return 'foreign';
@@ -2452,10 +2487,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 } else if (verificationStatus === 'foreign') {
                     // Foreign password — account is NOT safely controlled by us
                     this.logger.error(`${maskMobile(doc.mobile)} has FOREIGN 2FA password — cannot control this account safely`);
-                    const deactivated = await this.deactivateClient(doc.mobile, 'Foreign 2FA password — account unrecoverable if session dies', { permanent: true });
-                    this.sendAccountNotice(
-                        this.warmupNotice('critical', 'Foreign 2FA', doc.mobile, [{ label: 'Result', value: deactivated ? 'inactivated' : 'inactivate FAILED', code: false }], 'Unrecoverable: the account is not safely controlled by us')
-                    );
+                    await this.dropForeign2fa(doc.mobile, 'warmup_set2fa');
                     return 0;
                 }
 
@@ -3567,7 +3599,12 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         }
     }
 
-    protected async createDistinctSessionString(mobile: string, forbiddenSessions: Array<string | null | undefined>, maxAttempts: number = 2): Promise<string | null> {
+    protected async createDistinctSessionString(
+        mobile: string,
+        forbiddenSessions: Array<string | null | undefined>,
+        maxAttempts: number = 2,
+        path: string = 'new_session',
+    ): Promise<string | null> {
         const forbidden = new Set(
             forbiddenSessions
                 .map((session) => session?.trim())
@@ -3575,7 +3612,14 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         );
 
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
-            const newSession = (await this.telegramService.createNewSession(mobile))?.trim();
+            let newSession: string | undefined;
+            try {
+                newSession = (await this.telegramService.createNewSession(mobile))?.trim();
+            } catch (error) {
+                // createNewSession logs in with OUR password; PASSWORD_HASH_INVALID means the 2FA is foreign.
+                if (isForeign2faError(error)) await this.dropForeign2fa(mobile, path);
+                throw error;
+            }
             if (newSession && !forbidden.has(newSession)) {
                 return newSession;
             }
@@ -3637,7 +3681,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             return user;
         }
 
-        const distinctBackup = await this.createDistinctSessionString(mobile, [active, currentBackup]);
+        const distinctBackup = await this.createDistinctSessionString(mobile, [active, currentBackup], 2, 'backup_session');
         if (!distinctBackup) {
             return null;
         }
@@ -4180,7 +4224,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         }
 
         this.logger.log(`Creating fresh backup session for ${maskMobile(mobile)}`);
-        const backupSession = await this.createDistinctSessionString(mobile, [activeSession, existingBackup]);
+        const backupSession = await this.createDistinctSessionString(mobile, [activeSession, existingBackup], 2, 'rotate_session');
         if (!backupSession) {
             return { backupSession: null, reusedExisting: false };
         }

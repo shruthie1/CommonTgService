@@ -894,6 +894,8 @@ describe('set2fa branches', () => {
         const updateStatusSpy = jest.spyOn(service, 'updateStatus');
 
         const doc = makeDoc({ warmupPhase: WarmupPhase.SETTLING, tgId: 'tg-1' });
+        // Warm-up works on a pool row, so the row exists (the stub findOne returns null by default).
+        jest.spyOn(service, 'findOne').mockResolvedValue(doc as any);
         const result = await (service as any).set2fa(doc, 0);
         expect(result).toBe(0);
         expect(updateStatusSpy).toHaveBeenCalledWith(

@@ -2970,3 +2970,130 @@ describe('P4 re-review: heal and orphan backfill around the parked guard', () =>
         expect(service.usersServiceMock.backfillFromPool).toHaveBeenCalledWith({ mobile: '919000000016', tgId: '43', session: 'pool-key' });
     });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// Owner rule: a foreign 2FA password drops the mobile in every path
+// ════════════════════════════════════════════════════════════════════════════
+describe('foreign 2FA drops the mobile (owner rule)', () => {
+    const DROP = /^mobile-drop reason=foreign_2fa mobile=••••\d{4} pool=buffer path=/;
+    const dropLines = (warn: jest.SpyInstance) => warn.mock.calls.map((c) => String(c[0])).filter((l) => DROP.test(l));
+    const rpc = (errorMessage: string) => Object.assign(new Error(errorMessage), { errorMessage });
+
+    function tgWithVerify(secondInvoke: () => Promise<unknown>) {
+        let call = 0;
+        return makeTgManager({
+            hasPassword: jest.fn(async () => true),
+            client: {
+                ...makeTgManager().client,
+                invoke: jest.fn(async () => {
+                    call++;
+                    if (call === 1) return { hasPassword: true }; // account.GetPassword
+                    return secondInvoke(); // account.GetPasswordSettings with OUR password (SRP)
+                }),
+            },
+        });
+    }
+
+    test('warmup set2fa: foreign verdict retires with reason foreign_2fa, cascades, logs one drop line', async () => {
+        const service = new TestBaseService();
+        const warn = jest.spyOn((service as any).logger, 'warn');
+        jest.spyOn(connectionManager, 'getClient').mockResolvedValue(tgWithVerify(async () => { throw rpc('PASSWORD_HASH_INVALID'); }) as any);
+        jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+        const n = await service.pub.set2fa({ mobile: '919990000501', tgId: 'tg-501', warmupPhase: WarmupPhase.SETTLING }, 0);
+        expect(n).toBe(0);
+        expect(service.updateStatusMock).toHaveBeenCalledWith('919990000501', 'inactive', expect.stringMatching(/^\[UNSAFE\] foreign_2fa: Foreign 2FA/));
+        expect(service.usersServiceMock.expireAccount).toHaveBeenCalledWith('919990000501', expect.any(String));
+        expect(dropLines(warn)).toEqual(['mobile-drop reason=foreign_2fa mobile=••••0501 pool=buffer path=warmup_set2fa']);
+    });
+
+    test("warmup set2fa: our half-set password (after CODE_INVALID) verifies as 'ours' and is NOT dropped", async () => {
+        // A prior set2fa hit CODE_INVALID; Telegram now reports a password. The SRP check with OUR
+        // password succeeds, so the verdict is 'ours': no drop, step recorded as done.
+        const service = new TestBaseService();
+        const warn = jest.spyOn((service as any).logger, 'warn');
+        jest.spyOn(connectionManager, 'getClient').mockResolvedValue(tgWithVerify(async () => ({ email: 'pending' })) as any);
+        jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+        const n = await service.pub.set2fa({ mobile: '919990000502', tgId: 'tg-502', warmupPhase: WarmupPhase.SETTLING }, 1);
+        expect(n).toBe(1);
+        expect(service.updateStatusMock).not.toHaveBeenCalled();
+        expect(service.usersServiceMock.expireAccount).not.toHaveBeenCalled();
+        expect(dropLines(warn)).toEqual([]);
+    });
+
+    test.each(['FLOOD_WAIT_30', 'SRP_ID_INVALID', 'PASSWORD_HASH_INVALIDATED_X', 'Request timed out'])(
+        'warmup set2fa: verification error %s is not a foreign verdict (no drop)',
+        async (err) => {
+            const service = new TestBaseService();
+            const warn = jest.spyOn((service as any).logger, 'warn');
+            jest.spyOn(connectionManager, 'getClient').mockResolvedValue(tgWithVerify(async () => { throw rpc(err); }) as any);
+            jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+            const n = await service.pub.set2fa({ mobile: '919990000503', tgId: 'tg-503', warmupPhase: WarmupPhase.SETTLING }, 0);
+            expect(n).toBe(0);
+            expect(service.updateStatusMock).not.toHaveBeenCalled();
+            expect(dropLines(warn)).toEqual([]);
+        },
+    );
+
+    test('new session login rejected with PASSWORD_HASH_INVALID drops the mobile and rethrows', async () => {
+        const service = new TestBaseService();
+        const warn = jest.spyOn((service as any).logger, 'warn');
+        service.telegramServiceMock.createNewSession.mockRejectedValueOnce(rpc('PASSWORD_HASH_INVALID'));
+        await expect(service.pub.createDistinctSessionString('919990000504', ['old'])).rejects.toThrow('PASSWORD_HASH_INVALID');
+        expect(service.updateStatusMock).toHaveBeenCalledWith('919990000504', 'inactive', expect.stringContaining('foreign_2fa'));
+        expect(service.usersServiceMock.expireAccount).toHaveBeenCalledWith('919990000504', expect.any(String));
+        expect(dropLines(warn)).toEqual(['mobile-drop reason=foreign_2fa mobile=••••0504 pool=buffer path=new_session']);
+    });
+
+    test('session rotation backup: foreign password drops with path=rotate_session', async () => {
+        const service = new TestBaseService();
+        const warn = jest.spyOn((service as any).logger, 'warn');
+        service.telegramServiceMock.createNewSession.mockRejectedValueOnce(rpc('PASSWORD_HASH_INVALID'));
+        await expect(service.pub.resolveRotationBackupSession('919990000505', 'active', { session: 'active', tgId: 't' })).rejects.toThrow();
+        expect(dropLines(warn)).toEqual(['mobile-drop reason=foreign_2fa mobile=••••0505 pool=buffer path=rotate_session']);
+    });
+
+    test('swap / return-to-pool backup session: foreign password drops with path=backup_session', async () => {
+        const service = new TestBaseService();
+        const warn = jest.spyOn((service as any).logger, 'warn');
+        service.usersServiceMock.findByMobileAnyStatus.mockResolvedValueOnce([{ tgId: 't', mobile: '919990000506', session: 'active' }]);
+        service.telegramServiceMock.createNewSession.mockRejectedValueOnce(rpc('PASSWORD_HASH_INVALID'));
+        await expect(service.pub.getOrEnsureDistinctUsersBackupSession('919990000506', 'active')).rejects.toThrow();
+        expect(service.updateStatusMock).toHaveBeenCalledWith('919990000506', 'inactive', expect.stringContaining('foreign_2fa'));
+        expect(dropLines(warn)).toEqual(['mobile-drop reason=foreign_2fa mobile=••••0506 pool=buffer path=backup_session']);
+    });
+
+    test.each(['FLOOD_WAIT_120', 'Session creation timed out after 1 minute', 'AUTH_KEY_UNREGISTERED'])(
+        'new session failure %s is not a foreign verdict (no foreign drop)',
+        async (err) => {
+            const service = new TestBaseService();
+            const warn = jest.spyOn((service as any).logger, 'warn');
+            service.telegramServiceMock.createNewSession.mockRejectedValueOnce(rpc(err));
+            await expect(service.pub.createDistinctSessionString('919990000507', ['old'])).rejects.toThrow();
+            expect(service.updateStatusMock).not.toHaveBeenCalled();
+            expect(dropLines(warn)).toEqual([]);
+        },
+    );
+
+    test('no row in this pool: no status write, no false failure alert, one correct notice, cascade runs', async () => {
+        const service = new TestBaseService();
+        service.findOneMock.mockResolvedValueOnce(null);
+        const notice = jest.spyOn(service as any, 'sendAccountNotice').mockResolvedValue(true);
+        service.telegramServiceMock.createNewSession.mockRejectedValueOnce(rpc('PASSWORD_HASH_INVALID'));
+        await expect(service.pub.createDistinctSessionString('919990000509', ['old'])).rejects.toThrow();
+        expect(service.updateStatusMock).not.toHaveBeenCalled();
+        expect(service.usersServiceMock.expireAccount).toHaveBeenCalledWith('919990000509', expect.any(String));
+        const text = JSON.stringify(notice.mock.calls);
+        expect(notice).toHaveBeenCalledTimes(1);
+        expect(text).toContain('retired via users cascade');
+        expect(text).not.toMatch(/FAILED|Status failed/);
+        expect(JSON.stringify(service.botsServiceMock.sendMessageByCategory.mock.calls)).not.toContain('Status failed');
+    });
+
+    test('status write fails although a row was found: the users cascade still runs so the mobile is never picked again', async () => {
+        const service = new TestBaseService();
+        service.updateStatusMock.mockRejectedValueOnce(new Error('not found'));
+        service.telegramServiceMock.createNewSession.mockRejectedValueOnce(rpc('PASSWORD_HASH_INVALID'));
+        await expect(service.pub.createDistinctSessionString('919990000508', ['old'])).rejects.toThrow();
+        expect(service.usersServiceMock.expireAccount).toHaveBeenCalledWith('919990000508', expect.any(String));
+    });
+});

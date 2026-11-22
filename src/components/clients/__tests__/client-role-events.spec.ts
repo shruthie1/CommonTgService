@@ -332,3 +332,36 @@ describe('accountRoleEvents: pool return writes only returned', () => {
     expect(events(insertOne).map((e) => e.event)).toEqual(['returned']);
   });
 });
+
+describe('old main pool return: foreign 2FA stays dropped (owner rule)', () => {
+  beforeEach(() => jest.clearAllMocks());
+  const rpc = (errorMessage: string) => Object.assign(new Error(errorMessage), { errorMessage });
+
+  function withRealBackupCheck(err: Error) {
+    const ctx = makeService();
+    // Go through the real assertDistinctUserBackupSession: the backup login (bufferClientService) fails.
+    (ctx.service.assertDistinctUserBackupSession as jest.Mock).mockRestore();
+    (ctx.bufferClientService as any).getOrEnsureDistinctUsersBackupSession = jest.fn().mockRejectedValue(err);
+    return ctx;
+  }
+
+  it('PASSWORD_HASH_INVALID on the backup login: retired, never re-activated, no returned event', async () => {
+    const { service, insertOne, bufferClientService, usersService } = withRealBackupCheck(rpc('PASSWORD_HASH_INVALID'));
+    const back = await service.returnOldClientToBufferPool(existingClient, existingUser, OLD, 5, 'POOL_REFILL');
+    await flush();
+    expect(back).toBe(false);
+    expect(bufferClientService.update).not.toHaveBeenCalledWith(OLD, expect.objectContaining({ status: 'active' }));
+    expect(bufferClientService.update).not.toHaveBeenCalled();
+    expect(events(insertOne).filter((e) => e.event === 'returned')).toEqual([]);
+    expect(usersService.expireAccount).toHaveBeenCalledWith(OLD, expect.stringContaining('PASSWORD_HASH_INVALID'));
+  });
+
+  it('a transient backup-login error (FLOOD_WAIT) still releases the old main for a retry', async () => {
+    const { service, insertOne, bufferClientService, usersService } = withRealBackupCheck(rpc('FLOOD_WAIT_60'));
+    await service.returnOldClientToBufferPool(existingClient, existingUser, OLD, 5, 'POOL_REFILL');
+    await flush();
+    expect(bufferClientService.update).toHaveBeenCalledWith(OLD, expect.objectContaining({ status: 'active', inUse: false }));
+    expect(events(insertOne)).toEqual([expect.objectContaining({ event: 'returned', by: 'cms:pool-return-retry' })]);
+    expect(usersService.expireAccount).not.toHaveBeenCalled();
+  });
+});

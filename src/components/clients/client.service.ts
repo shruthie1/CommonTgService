@@ -40,6 +40,7 @@ import * as os from 'os';
 import { randomUUID } from 'crypto';
 import { Api } from 'telegram/tl';
 import isPermanentError from '../../utils/isPermanentError';
+import { isForeign2faError } from '../../utils/isForeign2faError';
 import { TelegramService } from '../Telegram/Telegram.service';
 import TelegramManager from '../Telegram/TelegramManager';
 import { User } from '../users';
@@ -1946,7 +1947,8 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     } catch (error) {
       const errorDetails = parseError(error, `Error returning old client to buffer pool: ${existingMobile}`, true);
       await this.notify({ severity: 'error', title: 'Return error', fields: [{ label: 'Mobile', value: existingMobile }], details: errorDetails.message?.substring(0, 500), detailsTitle: 'Error message' });
-      if (isPermanentError(errorDetails)) {
+      // Foreign 2FA (owner rule): the backup login already dropped the mobile. Retire, never release it back.
+      if (isPermanentError(errorDetails) || isForeign2faError(error) || isForeign2faError(errorDetails.message)) {
         this.logger.log('Marking replaced buffer inactive:', maskMobile(existingMobile));
         await this.retireReplacedMobile(existingMobile, errorDetails.message, roleOpId);
         // await this.bufferClientService.remove(existingClientUser.mobile, 'Deactivated user');
