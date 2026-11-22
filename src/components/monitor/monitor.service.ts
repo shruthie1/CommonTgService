@@ -125,7 +125,8 @@ import {
   sendsLiveSql,
   SqlQuery,
 } from './monitor-sql';
-import { chatRows, coverageNotes, coverageOf, foldParked, loadParked, ParkedIO, ParkedLoaded } from './monitor-parked';
+import { chatRows, coverageNotes, coverageOf, foldParked, loadParked, PARKED_CHAT_CHUNK, ParkedIO, ParkedLoaded } from './monitor-parked';
+import { foldUpiRevenue, UPI_PROOF_PROJECTION, UpiRevenueFold, UpiWindow } from './monitor-upi';
 import {
   addDays,
   clientDaysRange,
@@ -710,6 +711,8 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
   private readonly parkedClosedCache = new SwrCache<Loaded<ParkedLoaded>>({ freshMs: HISTORY_FRESH_MS, maxKeys: 20 });
   /** GET /monitor/parked/chat/:chatId responses, 30 s per chat. */
   private readonly parkedChatCache = new TtlCache<{ chatId: string; asOf: number; rows: ReturnType<typeof chatRows>; notes: string[] }>(PARKED_CHAT_TTL_MS, 200);
+  /** Revenue by receiving UPI id per window (both windows include today): 60 s fresh, served stale up to 15 min. */
+  private readonly upiRevenueCache = new SwrCache<Loaded<UpiRevenueFold>>({ freshMs: TODAY_FRESH_MS, maxStaleMs: TODAY_MAX_STALE_MS, maxKeys: 4 });
   /** Chat route Postgres cap (queue + query). */
   parkedChatPgTimeoutMs = PARKED_CHAT_PG_TIMEOUT_MS;
 
@@ -3064,6 +3067,57 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     } catch (err) {
       const msg = String((err as Error)?.message ?? err).slice(0, 200);
       throw new ServiceUnavailableException(`parked chat unavailable: ${msg}`);
+    }
+  }
+
+  // ---------------------------------------------------------------- revenue by receiving UPI id (read-only)
+
+  /**
+   * Credited revenue of today (IST) or the last 7 IST days incl. today, one row per receiving UPI id (logic and
+   * owner rules: monitor-upi.ts). Mongo only: paymentProofs (7-day TTL, so 7 days is the longest window; image and
+   * ocr never read), userData fakePaymentAt, upi-ids, clients qrId/gpayId. Ids are masked here. Mongo failure = 503.
+   */
+  async upiRevenue(window: UpiWindow) {
+    const now = Date.now();
+    const today = istDate(now);
+    const from = window === 'today' ? today : addDays(today, -6);
+    try {
+      const res = await this.upiRevenueCache.get(
+        window,
+        async () => {
+          const asOf = Date.now();
+          const timings: Record<string, number> = {};
+          const start = new Date(istDayStart(from));
+          const end = new Date(istDayStart(addDays(today, 1)));
+          const [proofs, upiDocs, clients] = await Promise.all([
+            this.mongoFind('paymentProofs', { servedAt: { $gte: start, $lt: end } }, UPI_PROOF_PROJECTION, 'mongo.paymentProofs_upi', timings),
+            this.mongoFind('upi-ids', {}, {}, 'mongo.upiIds', timings),
+            this.mongoFind('clients', {}, { clientId: 1, qrId: 1, gpayId: 1 }, 'mongo.clients_upi', timings),
+          ]);
+          const chats = [...new Set(proofs.map((p: any) => String(p.chatId ?? '')).filter(Boolean))];
+          const fakeChats = new Set<string>();
+          for (let i = 0; i < chats.length; i += PARKED_CHAT_CHUNK) {
+            const docs = await this.mongoFind('userData', { chatId: { $in: chats.slice(i, i + PARKED_CHAT_CHUNK) }, fakePaymentAt: { $ne: null } }, { chatId: 1 }, 'mongo.userData_fake_upi', timings);
+            for (const d of docs) fakeChats.add(String(d.chatId));
+          }
+          return { value: foldUpiRevenue({ proofs, fakeChats, upiDocs, clients }), asOf, timings };
+        },
+        istDayStart(addDays(today, 1)),
+      );
+      const v = res.value;
+      return {
+        window,
+        from,
+        to: today,
+        tz: 'Asia/Kolkata',
+        asOf: v.asOf,
+        ...v.value,
+        notes: ['Excludes proofs voided by Uncredit, every credit of chats marked fake, and any credit of ₹1,000 or more.'],
+      };
+    } catch (err) {
+      const msg = String((err as Error)?.message ?? err).slice(0, 200);
+      this.logger.warn(`monitor upi-revenue ${window} failed: ${msg}`);
+      throw new ServiceUnavailableException(`upi revenue unavailable: ${msg}`);
     }
   }
 

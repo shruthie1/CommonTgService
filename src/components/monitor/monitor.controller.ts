@@ -4,6 +4,7 @@ import { addDays, DateRange, daysIn, istDate, MAX_RANGE_DAYS, MONITOR_PERIODS, M
 import { HISTORY_RANGES, parseHistoryRange } from './monitor-history';
 import { PROMO_WINDOWS, PromoWindow } from './monitor-promotions';
 import { REACT_WINDOWS, ReactWindow } from './monitor-reactions';
+import { UPI_WINDOWS, UpiWindow } from './monitor-upi';
 import { REVENUE_HISTORY_FROM } from './monitor-util';
 import { LIVE_SVCS, LiveSvc, MonitorService, PAID_SEARCH_LIMIT, PAID_SEARCH_MAX_LIMIT, PAID_SEARCH_MAX_Q, PAID_SEARCH_MIN_Q } from './monitor.service';
 
@@ -26,6 +27,12 @@ export function parseReactWindow(window?: string): ReactWindow {
   if (window === undefined || window === '') return 'today';
   if ((REACT_WINDOWS as string[]).includes(window)) return window as ReactWindow;
   throw new BadRequestException(`window must be one of ${REACT_WINDOWS.join('|')} (reactions are daily counters; no 24h)`);
+}
+
+export function parseUpiWindow(window?: string): UpiWindow {
+  if (window === undefined || window === '') return 'today';
+  if ((UPI_WINDOWS as readonly string[]).includes(window)) return window as UpiWindow;
+  throw new BadRequestException(`window must be one of ${UPI_WINDOWS.join('|')} (paymentProofs keep 7 days)`);
 }
 
 export function parseDays(days?: string): 7 | 30 {
@@ -225,6 +232,16 @@ export class MonitorController {
     const now = Date.now();
     const r = parseRange(from, to, now) ?? { from: istDate(now), to: istDate(now) };
     return this.service.parked(r, parseOptionalClientId(client));
+  }
+
+  /**
+   * Credited revenue by receiving UPI id, one row per id (masked), today IST or the last 7 IST days. Owner revenue
+   * rules applied (no fake-marked chats, no credit of ₹1,000+). 400 on a bad window, 503 when Mongo fails.
+   */
+  @Get('upi-revenue')
+  @ApiQuery({ name: 'window', required: false, enum: UPI_WINDOWS })
+  upiRevenue(@Query('window') window?: string) {
+    return this.service.upiRevenue(parseUpiWindow(window));
   }
 
   /** Every parkedChats row of one chat with its follow-through. 400 on a bad chat id. Declared before client/:clientId. */
