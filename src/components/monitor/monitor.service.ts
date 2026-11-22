@@ -3081,26 +3081,29 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     const now = Date.now();
     const today = istDate(now);
     const from = window === 'today' ? today : addDays(today, -6);
+    const from7 = addDays(today, -6);
     try {
       const res = await this.upiRevenueCache.get(
         window,
         async () => {
           const asOf = Date.now();
           const timings: Record<string, number> = {};
-          const start = new Date(istDayStart(from));
+          // 7 days are read for both windows: the id accounts for the name match come from the last 7 days.
+          const start = istDayStart(from);
           const end = new Date(istDayStart(addDays(today, 1)));
-          const [proofs, upiDocs, clients] = await Promise.all([
-            this.mongoFind('paymentProofs', { servedAt: { $gte: start, $lt: end } }, UPI_PROOF_PROJECTION, 'mongo.paymentProofs_upi', timings),
+          const [proofs7, upiDocs, clients] = await Promise.all([
+            this.mongoFind('paymentProofs', { servedAt: { $gte: new Date(istDayStart(from7)), $lt: end } }, UPI_PROOF_PROJECTION, 'mongo.paymentProofs_upi', timings),
             this.mongoFind('upi-ids', {}, {}, 'mongo.upiIds', timings),
             this.mongoFind('clients', {}, { clientId: 1, qrId: 1, gpayId: 1 }, 'mongo.clients_upi', timings),
           ]);
+          const proofs = proofs7.filter((p: any) => new Date(p.servedAt).getTime() >= start);
           const chats = [...new Set(proofs.map((p: any) => String(p.chatId ?? '')).filter(Boolean))];
           const fakeChats = new Set<string>();
           for (let i = 0; i < chats.length; i += PARKED_CHAT_CHUNK) {
             const docs = await this.mongoFind('userData', { chatId: { $in: chats.slice(i, i + PARKED_CHAT_CHUNK) }, fakePaymentAt: { $ne: null } }, { chatId: 1 }, 'mongo.userData_fake_upi', timings);
             for (const d of docs) fakeChats.add(String(d.chatId));
           }
-          return { value: foldUpiRevenue({ proofs, fakeChats, upiDocs, clients }), asOf, timings };
+          return { value: foldUpiRevenue({ proofs, accountProofs: proofs7, fakeChats, upiDocs, clients }), asOf, timings };
         },
         istDayStart(addDays(today, 1)),
       );
@@ -3112,7 +3115,10 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
         tz: 'Asia/Kolkata',
         asOf: v.asOf,
         ...v.value,
-        notes: ['Excludes proofs voided by Uncredit, every credit of chats marked fake, and any credit of ₹1,000 or more.'],
+        notes: [
+          'Excludes proofs voided by Uncredit, every credit of chats marked fake, and any credit of ₹1,000 or more.',
+          "Name-matched: no UPI id read, so the banking name read picks the id (the client's qrId, else gpayId, on that account; else the account's one id).",
+        ],
       };
     } catch (err) {
       const msg = String((err as Error)?.message ?? err).slice(0, 200);

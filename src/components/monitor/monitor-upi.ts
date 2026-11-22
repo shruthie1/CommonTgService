@@ -6,8 +6,17 @@
  * an account with two ids shows two rows; the account tag is a label only. A receipt id is mapped to one of our
  * configured ids (Mongo `upi-ids` doc + every client's qrId/gpayId): exact, else a unique id that contains the
  * read piece (receipts cut ids: "8000073302@fbpe", "paytmqr…0101rgcf…"), else a unique id within 2 edits (OCR
- * typos: "sx40" for "sx4o"). Anything else (no id read, or no unique match) goes to the "other" row, so the
- * total is the credited total under the owner's revenue rules.
+ * typos: "sx40" for "sx4o").
+ *
+ * Name match (owner 2026-11-22): a credit with no id matched but one of our banking names read goes to an id of that
+ * account: the chat's client's current qrId if that id is on the account, else its gpayId if on the account, else the
+ * account's one id when it has exactly one. Several ids and the client on none of them, or no name read: the "other"
+ * row. No config maps names to ids (the upi-ids doc holds ids only), so an id's account is read from receipts: the
+ * one banking name read on that id's matched receipts in the last 7 days, when every name read agrees and it was
+ * read UPI_ACCOUNT_MIN_READS+ times. Rows show the name-matched part (nameRupees / nameCredits). The total is the
+ * credited total under the owner's revenue rules either way.
+ * Caveat: the current qrId / gpayId is used for every day, so a client that moved ids in the window (divya2, kavya2,
+ * sowmya2 on 2026-11-21) has its earlier name-only credits judged against its new ids.
  *
  * Owner revenue rules (skill user-stats): proofs voided by CMS Uncredit (uncredited.state 'done') are out; every
  * credit of a chat with fakePaymentAt on any userData row is out; any credit of ₹1,000 or more is out.
@@ -34,6 +43,9 @@ const NAME_FORMS = OUR_BANKING_NAMES.map((name) => {
   const words = name.toLowerCase().split(' ');
   return { tag: words.map((w) => w[0].toUpperCase()).join(''), forms: [words.join(''), [...words].reverse().join('')] };
 });
+
+/** An id belongs to an account only after this many matched receipts read that banking name (and no other). */
+export const UPI_ACCOUNT_MIN_READS = 2;
 
 /** Fields read from paymentProofs (never image / ocr). */
 export const UPI_PROOF_PROJECTION = { chatId: 1, clientId: 1, payeeUpiId: 1, payeeName: 1, creditAmount: 1, amount: 1, servedAt: 1, 'uncredited.state': 1 };
@@ -65,6 +77,9 @@ export interface UpiRevenueRow {
   rupees: number;
   payers: number;
   credits: number;
+  /** Part of rupees / credits put on this id by the banking name read (no id read or matched); 0 on the other row. */
+  nameRupees: number;
+  nameCredits: number;
   /** rupees ÷ total rupees, 0-1 (4 dp); 0 when the total is 0. */
   share: number;
   /** Clients whose qrId is this id now. */
@@ -76,6 +91,8 @@ export interface UpiRevenueRow {
 export interface UpiRevenueFold {
   rows: UpiRevenueRow[];
   total: { rupees: number; payers: number; credits: number };
+  /** Credits put on an id by the banking name read (sum of the rows' nameRupees / nameCredits). */
+  nameMatched: { rupees: number; credits: number };
   excluded: { fakeRupees: number; fakeCredits: number; bigRupees: number; bigCredits: number; voidedCredits: number };
   /** Distinct ids (not the other row) with at least one counted credit. */
   idsWithCredits: number;
@@ -198,9 +215,50 @@ export function mainQrIds(upiDocs: Array<Record<string, unknown>>, clients: UpiC
 
 /** Initials of the banking name in a payee name read ("Mrs RAVVA LAKSHMI" → "RL"), or null. */
 export function bankingTag(name: unknown): string | null {
-  const n = compact(String(name ?? '').toLowerCase());
+  const lower = String(name ?? '').toLowerCase().replace(/\s+/g, '');
+  const n = compact(lower);
   if (!n) return null;
-  return NAME_FORMS.find((f) => f.forms.some((form) => n.includes(form)))?.tag ?? null;
+  const hit = NAME_FORMS.find((f) => f.forms.some((form) => n.includes(form)))?.tag;
+  if (hit) return hit;
+  // Seen cut-off form (tg-aut paid-to-us.ts SEEN_CUT_OFF_NAMES): counts only right before "..." / "…".
+  return /ravvalaksh(\.\.\.|…)/.test(lower) ? 'RL' : null;
+}
+
+/**
+ * Account (banking-name tag) of each known id, read from its matched receipts: the one name read on them, when every
+ * name read agrees and it was read UPI_ACCOUNT_MIN_READS+ times. Ids with no such name have no account.
+ */
+export function accountsOfIds(proofs: UpiProofRow[], known: KnownUpi[]): Map<string, string> {
+  const reads = new Map<string, Map<string, number>>();
+  for (const r of proofs) {
+    const tag = bankingTag(r.payeeName);
+    if (!tag) continue;
+    const id = matchUpi(r.payeeUpiId, known);
+    if (id === null) continue;
+    const m = reads.get(id) ?? new Map<string, number>();
+    m.set(tag, (m.get(tag) ?? 0) + 1);
+    reads.set(id, m);
+  }
+  const out = new Map<string, string>();
+  for (const [id, m] of reads) {
+    const [only] = [...m.entries()];
+    if (m.size === 1 && only[1] >= UPI_ACCOUNT_MIN_READS) out.set(id, only[0]);
+  }
+  return out;
+}
+
+/**
+ * The id a name-only credit goes to: the client's current qrId if on the account, else its gpayId if on the account,
+ * else the account's one id. null when the account has several ids and the client is on none, or has none.
+ */
+export function nameMatchedId(tag: string, client: UpiClientRow | undefined, accounts: Map<string, string>): string | null {
+  for (const v of [client?.qrId, client?.gpayId]) {
+    if (typeof v !== 'string' || !v.includes('@')) continue;
+    const id = normUpi(v);
+    if (accounts.get(id) === tag) return id;
+  }
+  const ids = [...accounts.entries()].filter(([, t]) => t === tag).map(([id]) => id);
+  return ids.length === 1 ? ids[0] : null;
 }
 
 export function creditOf(r: UpiProofRow): number {
@@ -208,7 +266,8 @@ export function creditOf(r: UpiProofRow): number {
   return Number.isFinite(v) ? v : 0;
 }
 
-interface Acc { rupees: number; credits: number; payers: Set<string>; tags: Map<string, number> }
+interface Acc { rupees: number; credits: number; nameRupees: number; nameCredits: number; payers: Set<string>; tags: Map<string, number> }
+const newAcc = (): Acc => ({ rupees: 0, credits: 0, nameRupees: 0, nameCredits: 0, payers: new Set<string>(), tags: new Map<string, number>() });
 
 /**
  * Folds credited proof rows into one row per id. Every id that is some client's qrId now is listed even at ₹0
@@ -217,6 +276,8 @@ interface Acc { rupees: number; credits: number; payers: Set<string>; tags: Map<
  */
 export function foldUpiRevenue(input: {
   proofs: UpiProofRow[];
+  /** Receipts the id accounts are read from (the last 7 days); default `proofs`. */
+  accountProofs?: UpiProofRow[];
   fakeChats: Set<string>;
   upiDocs: Array<Record<string, unknown>>;
   clients: UpiClientRow[];
@@ -234,6 +295,10 @@ export function foldUpiRevenue(input: {
     }
   }
   const mainQr = mainQrIds(input.upiDocs, input.clients);
+  const accounts = accountsOfIds(input.accountProofs ?? input.proofs, known);
+  const clientById = new Map<string, UpiClientRow>();
+  for (const c of input.clients) if (c.clientId) clientById.set(c.clientId, c);
+  const nameMatched = { rupees: 0, credits: 0 };
   const excluded = { fakeRupees: 0, fakeCredits: 0, bigRupees: 0, bigCredits: 0, voidedCredits: 0 };
   const acc = new Map<string | null, Acc>();
   const allPayers = new Set<string>();
@@ -245,19 +310,21 @@ export function foldUpiRevenue(input: {
     const chat = String(r.chatId ?? '');
     if (input.fakeChats.has(chat)) { excluded.fakeRupees += amt; excluded.fakeCredits++; continue; }
     if (amt >= UPI_BIG_CREDIT) { excluded.bigRupees += amt; excluded.bigCredits++; continue; }
-    const key = matchUpi(r.payeeUpiId, known);
-    const a = acc.get(key) ?? { rupees: 0, credits: 0, payers: new Set<string>(), tags: new Map<string, number>() };
+    const tag = bankingTag(r.payeeName);
+    let key = matchUpi(r.payeeUpiId, known);
+    const byName = key === null && tag !== null && (key = nameMatchedId(tag, clientById.get(String(r.clientId ?? '')), accounts)) !== null;
+    const a = acc.get(key) ?? newAcc();
     a.rupees += amt;
     a.credits++;
+    if (byName) { a.nameRupees += amt; a.nameCredits++; nameMatched.rupees += amt; nameMatched.credits++; }
     a.payers.add(chat);
-    const tag = bankingTag(r.payeeName);
     if (tag) a.tags.set(tag, (a.tags.get(tag) ?? 0) + 1);
     acc.set(key, a);
     allPayers.add(chat);
     rupees += amt;
     credits++;
   }
-  for (const id of qrOf.keys()) if (!acc.has(id)) acc.set(id, { rupees: 0, credits: 0, payers: new Set(), tags: new Map() });
+  for (const id of qrOf.keys()) if (!acc.has(id)) acc.set(id, newAcc());
   const share = (v: number) => (rupees > 0 ? Math.round((v / rupees) * 10_000) / 10_000 : 0);
   const rows: UpiRevenueRow[] = [...acc.entries()].map(([id, a]) => {
     const tag = [...a.tags.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]))[0]?.[0] ?? null;
@@ -268,6 +335,8 @@ export function foldUpiRevenue(input: {
       rupees: a.rupees,
       payers: a.payers.size,
       credits: a.credits,
+      nameRupees: a.nameRupees,
+      nameCredits: a.nameCredits,
       share: share(a.rupees),
       qrClients: id === null ? [] : [...(qrOf.get(id) ?? [])].sort(),
       gpayClients: id === null ? [] : [...(gpayOf.get(id) ?? [])].sort(),
@@ -284,6 +353,7 @@ export function foldUpiRevenue(input: {
   return {
     rows,
     total: { rupees, payers: allPayers.size, credits },
+    nameMatched,
     excluded,
     idsWithCredits: rows.filter((r) => r.kind !== 'other' && r.credits > 0).length,
   };

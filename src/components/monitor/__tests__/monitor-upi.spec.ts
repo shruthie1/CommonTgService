@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { bankingTag, foldUpiRevenue, knownUpiIds, mainQrIds, maskUpi, matchUpi, UPI_PROOF_PROJECTION, UpiProofRow } from '../monitor-upi';
+import { accountsOfIds, bankingTag, foldUpiRevenue, knownUpiIds, mainQrIds, maskUpi, nameMatchedId, matchUpi, UPI_PROOF_PROJECTION, UpiProofRow } from '../monitor-upi';
 import { parseUpiWindow } from '../monitor.controller';
 import { MonitorService } from '../monitor.service';
 
@@ -163,6 +163,80 @@ describe('foldUpiRevenue', () => {
   });
 });
 
+describe('name match: credits with no id read go to an id of the banking name read', () => {
+  // Two GC ids (like ****68em@ptys and ****sx4o@paytm), one RG id, two LS ids; accounts come from matched receipts.
+  const GC1 = 'paytmqr281005050101gcone68em@ptys';
+  const GC2 = 'paytmqr281005050101gctwosx4o@paytm';
+  const RG1 = 'paytmqr281005050101rgonet4m9@paytm';
+  const LS1 = 'paytmqr281005050101lsone9jv0@paytm';
+  const LS2 = 'lakshmi.3365-10@waaxis';
+  const MIX = 'mixedname@jio';
+  const docs = [{ qrId: GC1, qrId1: GC2, qrId2: RG1, qrId3: LS1, gpay: LS2, gpay1: MIX }];
+  const cl = [
+    { clientId: 'onGc1', qrId: GC1, gpayId: LS2 },
+    { clientId: 'onGc2', qrId: GC2, gpayId: LS2 },
+    { clientId: 'gpayGc2', qrId: RG1, gpayId: GC2 },
+    { clientId: 'onRg', qrId: RG1, gpayId: MIX },
+  ];
+  const seen = (id: string, name: string, n: number) => Array.from({ length: n }, (_, i) => p({ chatId: `s-${id}-${i}`, payeeUpiId: id, payeeName: name, creditAmount: 10 }));
+  const history: UpiProofRow[] = [
+    ...seen(GC1, 'Girls Community', 3), ...seen(GC2, 'GIRLS COMMUNITY', 2), ...seen(RG1, 'Reddy Girl', 2),
+    ...seen(LS1, 'Lakshmi Stores', 2), ...seen(LS2, 'LAKSHMI STORES', 2),
+    p({ chatId: 'm1', payeeUpiId: MIX, payeeName: 'Ravva Lakshmi' }), p({ chatId: 'm2', payeeUpiId: MIX, payeeName: 'Reddy Girl' }),
+  ];
+  const knownIds = knownUpiIds(docs, cl);
+  const accounts = accountsOfIds(history, knownIds);
+
+  it('an id belongs to the one name read on its receipts, 2+ reads, every read agreeing', () => {
+    expect(accounts.get(GC1)).toBe('GC');
+    expect(accounts.get(GC2)).toBe('GC');
+    expect(accounts.get(RG1)).toBe('RG');
+    expect(accounts.has(MIX)).toBe(false); // RL once and RG once: no account
+    expect(accountsOfIds(seen(RG1, 'Reddy Girl', 1), knownIds).has(RG1)).toBe(false); // one read is not enough
+  });
+
+  it("picks the client's qrId, else its gpayId, on the account; else the account's only id; else null", () => {
+    expect(nameMatchedId('GC', cl[0], accounts)).toBe(GC1);
+    expect(nameMatchedId('GC', cl[1], accounts)).toBe(GC2);
+    expect(nameMatchedId('GC', cl[2], accounts)).toBe(GC2); // qrId is RG, gpayId is GC
+    expect(nameMatchedId('RG', cl[0], accounts)).toBe(RG1); // RG has one id
+    expect(nameMatchedId('GC', cl[3], accounts)).toBeNull(); // two GC ids, client on neither
+    expect(nameMatchedId('LS', undefined, accounts)).toBeNull();
+    expect(nameMatchedId('RL', cl[3], accounts)).toBeNull(); // RL has no id with an account
+  });
+
+  const today: UpiProofRow[] = [
+    p({ chatId: 't1', clientId: 'onGc1', payeeUpiId: null, payeeName: 'Girls Community', creditAmount: 100 }),
+    p({ chatId: 't2', clientId: 'onGc2', payeeUpiId: undefined, payeeName: 'Girls Community', creditAmount: 50 }),
+    p({ chatId: 't3', clientId: 'onRg', payeeUpiId: null, payeeName: 'Girls Community', creditAmount: 40 }),
+    p({ chatId: 't4', clientId: 'onGc1', payeeUpiId: null, payeeName: null, creditAmount: 30 }),
+    p({ chatId: 't5', clientId: 'onGc1', payeeUpiId: 'someone@ybl', payeeName: 'Reddy Girl', creditAmount: 20 }),
+    p({ chatId: 't6', clientId: 'onGc1', payeeUpiId: GC1, payeeName: 'Girls Community', creditAmount: 200 }),
+  ];
+  const out = foldUpiRevenue({ proofs: today, accountProofs: [...history, ...today], fakeChats: new Set(), upiDocs: docs, clients: cl });
+  const row = (id: string | null) => out.rows.find((r) => r.id === id)!;
+
+  it('GC client on 68em -> 68em, GC client on sx4o -> sx4o, ambiguous and no name stay Other; total unchanged', () => {
+    expect(row(maskUpi(GC1))).toMatchObject({ rupees: 300, credits: 2, nameRupees: 100, nameCredits: 1 });
+    expect(row(maskUpi(GC2))).toMatchObject({ rupees: 50, credits: 1, nameRupees: 50, nameCredits: 1 });
+    expect(row(maskUpi(RG1))).toMatchObject({ rupees: 20, nameRupees: 20, nameCredits: 1 }); // foreign id read, RG name
+    expect(row(null)).toMatchObject({ kind: 'other', rupees: 70, credits: 2, nameRupees: 0, nameCredits: 0 });
+    expect(out.nameMatched).toEqual({ rupees: 170, credits: 3 });
+    expect(out.total.rupees).toBe(440);
+    expect(out.rows.reduce((a, r) => a + r.rupees, 0)).toBe(out.total.rupees);
+  });
+
+  it('accounts default to the window rows when no history is passed', () => {
+    const solo = foldUpiRevenue({ proofs: today, fakeChats: new Set(), upiDocs: docs, clients: cl });
+    expect(solo.nameMatched).toEqual({ rupees: 0, credits: 0 }); // GC1 read once in the window: no account yet
+  });
+
+  it('the seen cut-off "Ravva Laksh..." counts as RL', () => {
+    expect(bankingTag('Mrs Ravva Laksh...')).toBe('RL');
+    expect(bankingTag('Ravva Laksh')).toBeNull();
+  });
+});
+
 describe('GET /monitor/upi-revenue', () => {
   it('window is today|7d, default today', () => {
     expect(parseUpiWindow(undefined)).toBe('today');
@@ -204,5 +278,30 @@ describe('GET /monitor/upi-revenue', () => {
     expect(JSON.stringify(res)).not.toContain('7712345678');
     expect(res.window).toBe('today');
     expect(res.from).toBe(res.to);
+    expect(res.nameMatched).toEqual({ rupees: 0, credits: 0 });
+  });
+
+  it('reads 7 days of proofs for the account history but counts only the window', async () => {
+    const reads: any[] = [];
+    const old = new Date(Date.now() - 3 * 86_400_000);
+    const data: Record<string, any[]> = {
+      paymentProofs: [
+        { chatId: 'h1', clientId: 'c3', payeeUpiId: QR_A, payeeName: 'Girls Community', creditAmount: 10, servedAt: old },
+        { chatId: 'h2', clientId: 'c3', payeeUpiId: QR_A, payeeName: 'Girls Community', creditAmount: 10, servedAt: old },
+        { chatId: 'n1', clientId: 'c3', payeeUpiId: null, payeeName: 'Girls Community', creditAmount: 70, servedAt: new Date() },
+      ],
+      'upi-ids': upiDocs,
+      clients,
+      userData: [],
+    };
+    const connection = { collection: (coll: string) => ({ find: (filter: any, opts: any) => { reads.push({ coll, filter, opts }); return { toArray: async () => data[coll] ?? [] }; } }) };
+    const svc = new MonitorService({ query: jest.fn() } as any, connection as any, {} as any);
+    svc.prewarmDelayMs = -1;
+    const res: any = await svc.upiRevenue('today');
+    const proofRead = reads.find((r) => r.coll === 'paymentProofs');
+    expect(Date.now() - proofRead.filter.servedAt.$gte.getTime()).toBeGreaterThan(6 * 86_400_000);
+    expect(res.total.rupees).toBe(70);
+    expect(res.nameMatched).toEqual({ rupees: 70, credits: 1 });
+    expect(res.rows.find((r: any) => r.id === '****gh9q@paytm')).toMatchObject({ rupees: 70, nameRupees: 70 });
   });
 });
