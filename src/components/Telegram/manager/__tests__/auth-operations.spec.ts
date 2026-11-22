@@ -143,10 +143,66 @@ describe('set2fa', () => {
         expect(fakeMailReader.disconnectFromMail).toHaveBeenCalledTimes(1);
     });
 
-    test('onEmailCodeError ABORTS instead of submitting a literal bad code', async () => {
-        // GramJS submits whatever onEmailCodeError resolves to as the verification code.
-        // Returning a non-empty string ('error') would submit garbage and burn a 2FA attempt
-        // (risking too-many-attempts/FLOOD on a precious account). It must reject/abort instead.
+    test('CODE_INVALID inside the gramjs email loop rejects set2fa and leaves no unhandled rejection', async () => {
+        // Live 11-21/11-22: "Got email code" -> RPCError 400 CODE_INVALID (account.ConfirmPasswordEmail)
+        // -> [SHUTDOWN] unhandledRejection. gramjs 2.26 client/2fa.js calls onEmailCodeError(err)
+        // synchronously inside `while (true)` and ignores its return. This fake mirrors that loop
+        // (capped so old code cannot spin forever in the test).
+        const fakeMailReader = {
+            runExclusive: jest.fn(async (operation: () => Promise<unknown>) => operation()),
+            connectToMail: jest.fn().mockResolvedValue(undefined),
+            isMailReady: jest.fn().mockResolvedValue(true),
+            getCode: jest.fn().mockResolvedValue('12345'),
+            disconnectFromMail: jest.fn().mockResolvedValue(undefined),
+        };
+        jest.spyOn(MailReader, 'getInstance').mockReturnValue(fakeMailReader as any);
+
+        const codeInvalid = Object.assign(new Error('400: CODE_INVALID (caused by account.ConfirmPasswordEmail)'), {
+            errorMessage: 'CODE_INVALID',
+        });
+        const confirmPasswordEmail = jest.fn().mockRejectedValue(codeInvalid);
+        let loopIterations = 0;
+        const updateTwoFaSettings = jest.fn(async ({ emailCodeCallback, onEmailCodeError }: any) => {
+            // eslint-disable-next-line no-constant-condition
+            while (true) {
+                if (++loopIterations > 3) throw new Error('gramjs email loop never ended');
+                try {
+                    const code = await emailCodeCallback(5);
+                    if (!code) throw new Error('Code is empty');
+                    await confirmPasswordEmail(code);
+                    break;
+                } catch (err) {
+                    onEmailCodeError(err);
+                }
+            }
+        });
+        const ctx = {
+            client: { invoke: jest.fn().mockResolvedValue({ hasPassword: false }), updateTwoFaSettings },
+            phoneNumber: '9990001236',
+            logger: { info: jest.fn(), error: jest.fn() },
+        } as any;
+
+        const unhandled = jest.fn();
+        process.on('unhandledRejection', unhandled);
+        try {
+            const settled = set2fa(ctx).then(() => 'resolved', (e: unknown) => e);
+            await jest.runAllTimersAsync();
+            const outcome = await settled;
+            const realSetImmediate = jest.requireActual('timers').setImmediate as typeof setImmediate;
+            await new Promise((r) => realSetImmediate(r));
+            await new Promise((r) => realSetImmediate(r));
+
+            expect(outcome).toBe(codeInvalid);
+            expect(loopIterations).toBe(1);
+            expect(confirmPasswordEmail).toHaveBeenCalledTimes(1);
+            expect(unhandled).not.toHaveBeenCalled();
+            expect(fakeMailReader.disconnectFromMail).toHaveBeenCalledTimes(1);
+        } finally {
+            process.off('unhandledRejection', unhandled);
+        }
+    });
+
+    test('onEmailCodeError throws synchronously and never returns a code or a promise', async () => {
         const fakeMailReader = {
             runExclusive: jest.fn(async (operation: () => Promise<unknown>) => operation()),
             connectToMail: jest.fn().mockResolvedValue(undefined),
@@ -156,7 +212,7 @@ describe('set2fa', () => {
         };
         jest.spyOn(MailReader, 'getInstance').mockReturnValue(fakeMailReader as any);
 
-        let capturedOnError: (e: Error) => Promise<string>;
+        let capturedOnError: (e: Error) => unknown;
         const updateTwoFaSettings = jest.fn(async (options: any) => {
             capturedOnError = options.onEmailCodeError;
         });
@@ -170,8 +226,7 @@ describe('set2fa', () => {
         await jest.runAllTimersAsync();
         await resultPromise;
 
-        // The callback must NOT resolve to a usable code string; it should reject (abort).
-        await expect(capturedOnError!(new Error('PHONE_CODE_INVALID'))).rejects.toBeDefined();
+        expect(() => capturedOnError!(new Error('CODE_INVALID'))).toThrow('CODE_INVALID');
     });
 
     test('does nothing when password already set', async () => {

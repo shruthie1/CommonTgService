@@ -2477,6 +2477,9 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             return 1;
         } catch (error: unknown) {
             const errorDetails = this.handleError(error, 'Error setting 2FA', doc.mobile);
+            const rawReason = (error as { errorMessage?: unknown })?.errorMessage ?? (error instanceof Error ? error.message : undefined) ?? 'unknown';
+            const reason = String(rawReason).replace(/\s+/g, '_').slice(0, 80);
+            this.logger.warn(`warmup-step kind=set2fa result=failed reason=${reason} mobile=${maskMobile(doc.mobile)} fails=${failedAttempts + 1}`);
             await this.update(doc.mobile, {
                 lastUpdateAttempt: new Date(),
                 failedUpdateAttempts: failedAttempts + 1,

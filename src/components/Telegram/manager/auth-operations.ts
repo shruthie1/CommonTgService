@@ -206,13 +206,14 @@ export async function set2fa(ctx: TgContext): Promise<{ email: string; hint: str
                         }
                         throw new Error(`Failed to retrieve email code after ${maxRetries} attempts`);
                     },
-                    onEmailCodeError: (e: Error) => {
-                        // Do NOT resolve to a code string here — GramJS submits whatever this
-                        // returns as the verification code. Returning 'error' would submit garbage
-                        // and burn a 2FA attempt (too-many-attempts / FLOOD risk on a precious
-                        // account). Reject so the 2FA flow aborts cleanly and can be retried.
+                    onEmailCodeError: (e: Error): never => {
+                        // gramjs 2.26 (client/2fa.js) calls this SYNCHRONOUSLY inside a
+                        // `while (true)` catch block and ignores the return value. A returned
+                        // rejected promise floats (unhandledRejection -> process exit) and the
+                        // loop asks for another code. A synchronous throw leaves the catch block,
+                        // ends the loop, and rejects updateTwoFaSettings for the set2fa caller.
                         ctx.logger.error(ctx.phoneNumber, 'Email code error:', parseError(e));
-                        return Promise.reject(e);
+                        throw e;
                     },
                 });
             } finally {

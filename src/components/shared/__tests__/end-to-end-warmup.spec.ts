@@ -948,6 +948,37 @@ describe('set2fa branches', () => {
         expect(result).toBe(1);
         expect(set2faMock).toHaveBeenCalled();
     });
+
+    test('hasPassword=false + CODE_INVALID → normal step failure, backoff count, one warmup-step line, no deactivation', async () => {
+        const service = new TestBaseService();
+        const codeInvalid = Object.assign(new Error('400: CODE_INVALID (caused by account.ConfirmPasswordEmail)'), {
+            errorMessage: 'CODE_INVALID',
+        });
+        jest.spyOn(connectionManager, 'getClient').mockResolvedValue({
+            hasPassword: jest.fn().mockResolvedValue(false),
+            set2fa: jest.fn().mockRejectedValue(codeInvalid),
+            getDialogs: jest.fn().mockResolvedValue([]),
+            getContacts: jest.fn().mockResolvedValue([]),
+            client: { invoke: jest.fn() },
+        } as any);
+        jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+        const warn = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => undefined);
+        const deactivate = jest.spyOn(service as any, 'deactivateClient');
+
+        const doc = makeDoc({ warmupPhase: WarmupPhase.SETTLING, tgId: 'tg-1' });
+        const result = await (service as any).set2fa(doc, 1);
+
+        expect(result).toBe(0);
+        expect(deactivate).not.toHaveBeenCalled();
+        expect(service.updateMock).toHaveBeenCalledWith(
+            doc.mobile,
+            expect.objectContaining({ failedUpdateAttempts: 2, lastUpdateFailure: expect.any(Date) }),
+        );
+        const lines = warn.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith('warmup-step kind=set2fa'));
+        expect(lines).toEqual([
+            `warmup-step kind=set2fa result=failed reason=CODE_INVALID mobile=••••${String(doc.mobile).slice(-4)} fails=2`,
+        ]);
+    });
 });
 
 describe('removeExternalLoginSessions branches', () => {
