@@ -14,7 +14,8 @@ describe('sendBotNotice', () => {
     jest.clearAllMocks();
     process.env = { ...ORIGINAL_ENV, BOT_TOKENS: 'tok1,tok2' };
     delete process.env.accountsChannel;
-    delete process.env.updatesChannel;
+    process.env.updatesChannel = '-100999'; // no hard-coded updates chat since 2026-11-23
+    delete process.env.TELEGRAM_CHANNEL_CONFIG_CLIENT_UPDATES;
     errSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
     sendBotNotice = require('../bot-notice').sendBotNotice;
   });
@@ -38,8 +39,10 @@ describe('sendBotNotice', () => {
   test('pppl uses the updates chat; explicit chat and token override both', async () => {
     const ax = require('axios') as jest.Mocked<typeof axios>;
     ax.post.mockResolvedValue({ data: { ok: true } });
+    process.env.updatesChannel = '-1003980548286';
+    jest.spyOn(console, 'log').mockImplementation(() => undefined);
     await sendBotNotice('pppl', { title: 'x' });
-    expect((ax.post.mock.calls[0] as any[])[1].chat_id).toBe('-1001972065816');
+    expect((ax.post.mock.calls[0] as any[])[1].chat_id).toBe('-1003980548286');
     await sendBotNotice('pppl', { title: 'x' }, { chatId: '-5', token: 'mine' });
     expect((ax.post.mock.calls[1] as any[])[0]).toContain('botmine/sendRichMessage');
     expect((ax.post.mock.calls[1] as any[])[1].chat_id).toBe('-5');

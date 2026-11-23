@@ -1095,6 +1095,42 @@ describe('BotsService - validateAndReplaceBots + min-healthy top-up', () => {
     return { telegramService, usersService };
   }
 
+  test('2026-11-23 CLIENT_UPDATES moved channel: top-up mints into the live bots\' channel, not the oldest retired row\'s', async () => {
+    process.env.channelManagerPrimary = MANAGER.mobile;
+    const { telegramService } = wireHealthyDeps();
+    // Oldest doc: a retired bot on the old channel (frozen, kept as a record).
+    await seedBot({ category: ChannelCategory.CLIENT_UPDATES, channelId: '-100old', status: 'inactive', lifecycle: 'manual_attention' } as any);
+    await seedBot({ category: ChannelCategory.CLIENT_UPDATES, channelId: '-100new', status: 'active' });
+
+    const res = await service.validateAndReplaceBots();
+
+    expect(res.toppedUp).toBeGreaterThanOrEqual(1);
+    const created = await model.find({ category: ChannelCategory.CLIENT_UPDATES, createdByMobile: CREATOR.mobile }).lean();
+    expect(created.length).toBeGreaterThanOrEqual(1);
+    expect(created.every(b => b.channelId === '-100new')).toBe(true);
+    expect(telegramService.createBot).toHaveBeenCalled();
+    delete process.env.channelManagerPrimary;
+  });
+
+  test('categoryTopUpChannelId: live bot wins; with none live, the newest doc wins over the oldest', () => {
+    const pick = (list: any[]) => (service as any).categoryTopUpChannelId(list);
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    expect(pick([
+      { category: 'CLIENT_UPDATES', channelId: '-100old', lifecycle: 'manual_attention', status: 'inactive', createdAt: new Date('2025-01-01') },
+      { category: 'CLIENT_UPDATES', channelId: '-100new', lifecycle: 'active_verified', status: 'active', createdAt: new Date('2026-11-23') },
+    ])).toBe('-100new');
+    expect(pick([
+      { category: 'CLIENT_UPDATES', channelId: '-100old', lifecycle: 'manual_attention', status: 'inactive', createdAt: new Date('2025-01-01') },
+      { category: 'CLIENT_UPDATES', channelId: '-100new', lifecycle: 'pending_admin', status: 'inactive', createdAt: new Date('2026-11-23') },
+    ])).toBe('-100new');
+    expect(pick([])).toBeUndefined();
+    expect(logSpy.mock.calls.map(c => String(c[0])).filter(l => l.includes('kind=topup_channel'))).toEqual([
+      '[BotHealth] kind=topup_channel category=CLIENT_UPDATES channel=-100new source=live',
+      '[BotHealth] kind=topup_channel category=CLIENT_UPDATES channel=-100new source=newest',
+    ]);
+    logSpy.mockRestore();
+  });
+
   test('category below floor (1 live) → tops up to 2 by provisioning a new bot', async () => {
     // Use configured channel-manager so resolveChannelAdminMobile finds an admin.
     process.env.channelManagerPrimary = MANAGER.mobile;

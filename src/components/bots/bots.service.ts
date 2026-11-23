@@ -1782,9 +1782,10 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             const liveCount = list.filter(b => this.isSelectable(b)).length;
             const deficit = this.minHealthyBotsPerCategory - liveCount;
             if (deficit <= 0) continue;
-            // channelId to use for the new bot(s): take it from any existing doc in the category
-            // (all bots of a category share the same channel).
-            const channelId = list[0]?.channelId;
+            // channelId for the new bot(s): the channel the category's live bots post to. A category moved to a new
+            // channel (CLIENT_UPDATES 2026-11-23) keeps its retired rows on the old one, so list[0] (the oldest doc)
+            // would mint bots into the dead channel. Fall back to the newest doc when no bot is live.
+            const channelId = this.categoryTopUpChannelId(list);
             if (!channelId) {
                 topUpFailures.push(`${category}: below floor (${liveCount}/${this.minHealthyBotsPerCategory}) but no channelId known — skipped`);
                 continue;
@@ -1860,6 +1861,24 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             }
         }
         return { toppedUp, creationAttempts, topUpFailures, proposedActions, stopPrivilegedWork };
+    }
+
+    /** Channel for a category's new bots: a live bot's channel, else the newest doc's (never the oldest retired row's). */
+    private categoryTopUpChannelId(list: Array<Partial<Bot> & { createdAt?: Date | string; _id?: any }>): string | undefined {
+        const live = list.find(b => this.isSelectable(b) && b.channelId);
+        if (live) {
+            console.log(`[BotHealth] kind=topup_channel category=${live.category} channel=${live.channelId} source=live`);
+            return live.channelId;
+        }
+        const time = (b: { createdAt?: Date | string; _id?: any }) => {
+            const t = b.createdAt ? new Date(b.createdAt).getTime() : NaN;
+            if (Number.isFinite(t)) return t;
+            const ts = typeof b._id?.getTimestamp === 'function' ? b._id.getTimestamp().getTime() : NaN;
+            return Number.isFinite(ts) ? ts : 0;
+        };
+        const newest = list.filter(b => b.channelId).sort((a, b) => time(b) - time(a))[0];
+        if (newest) console.log(`[BotHealth] kind=topup_channel category=${newest.category} channel=${newest.channelId} source=newest`);
+        return newest?.channelId;
     }
 
     /**
