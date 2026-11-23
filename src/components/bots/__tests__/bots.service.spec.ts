@@ -1336,6 +1336,55 @@ describe('BotsService - validateAndReplaceBots + min-healthy top-up', () => {
     delete process.env.channelManagerPrimary;
   });
 
+  test('2026-11-23 review: a dead bot is replaced into the category\'s current channel, not its own old one', async () => {
+    process.env.channelManagerPrimary = MANAGER.mobile;
+    wireHealthyDeps();
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    mockedAxios.get.mockImplementation(async (url: string) => {
+      if (url.includes('cu_dead_old')) throw { response: { status: 401 } };
+      return { status: 200, data: { ok: true, result: { username: 'gm_bot' } } } as any;
+    });
+    await seedBot({ token: 'cu_dead_old', username: 'old_cu_bot', category: ChannelCategory.CLIENT_UPDATES, channelId: '-100old', status: 'active', lifecycle: 'active_verified' } as any);
+    await seedBot({ category: ChannelCategory.CLIENT_UPDATES, channelId: '-100new', status: 'active', lifecycle: 'active_verified' } as any);
+
+    const res = await service.validateAndReplaceBots();
+
+    expect(res.replaced).toBe(1);
+    const created = await model.find({ category: ChannelCategory.CLIENT_UPDATES, createdByMobile: CREATOR.mobile }).lean();
+    expect(created.length).toBeGreaterThanOrEqual(1);
+    expect(created.every(b => b.channelId === '-100new')).toBe(true);
+    const lines = logSpy.mock.calls.map(c => String(c[0]));
+    expect(lines).toContain('[BotHealth] kind=replace_channel category=CLIENT_UPDATES bot=@old_cu_bot from=-100old to=-100new');
+    logSpy.mockRestore();
+    delete process.env.channelManagerPrimary;
+  });
+
+  test('2026-11-23 review: retired manual_attention / pending_admin rows that die are never replaced', async () => {
+    process.env.channelManagerPrimary = MANAGER.mobile;
+    const { telegramService } = wireHealthyDeps();
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    mockedAxios.get.mockImplementation(async (url: string) => {
+      if (url.includes('retired_dead')) throw { response: { status: 401 } };
+      return { status: 200, data: { ok: true, result: { username: 'gm_bot' } } } as any;
+    });
+    // Category already at its floor on the new channel, so the top-up mints nothing either.
+    await seedBot({ token: 'retired_dead_1', username: 'ma_bot', category: ChannelCategory.CLIENT_UPDATES, channelId: '-100old', status: 'inactive', lifecycle: 'manual_attention' } as any);
+    await seedBot({ token: 'retired_dead_2', username: 'pa_bot', category: ChannelCategory.CLIENT_UPDATES, channelId: '-100old', status: 'inactive', lifecycle: 'pending_admin' } as any);
+    await seedBot({ category: ChannelCategory.CLIENT_UPDATES, channelId: '-100new', status: 'active', lifecycle: 'active_verified' } as any);
+    await seedBot({ category: ChannelCategory.CLIENT_UPDATES, channelId: '-100new', status: 'active', lifecycle: 'active_verified' } as any);
+
+    const res = await service.validateAndReplaceBots();
+
+    expect(res.replaced).toBe(0);
+    expect(telegramService.createBot).not.toHaveBeenCalled();
+    expect(await model.countDocuments({ channelId: '-100old' })).toBe(2);
+    const lines = logSpy.mock.calls.map(c => String(c[0]));
+    expect(lines).toContain('[BotHealth] kind=replace_skipped reason=retired lifecycle=manual_attention category=CLIENT_UPDATES bot=@ma_bot channel=-100old');
+    expect(lines).toContain('[BotHealth] kind=replace_skipped reason=retired lifecycle=pending_admin category=CLIENT_UPDATES bot=@pa_bot channel=-100old');
+    logSpy.mockRestore();
+    delete process.env.channelManagerPrimary;
+  });
+
   test('REUSE-FIRST: a live-token pending_admin bot is re-added instead of creating a new one', async () => {
     process.env.channelManagerPrimary = MANAGER.mobile;
     wireHealthyDeps();

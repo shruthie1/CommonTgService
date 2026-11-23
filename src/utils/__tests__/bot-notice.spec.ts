@@ -80,6 +80,52 @@ describe('sendBotNotice', () => {
     expect(ax.post).toHaveBeenCalledTimes(2); // one attempt each, no classic resend
   });
 
+  const rejection = (status: number, description: string) => Object.assign(new Error('x'), { response: { status, data: { ok: false, description } } });
+
+  test('2026-11-23 review: a token/chat rejection (PEER_ID_INVALID) tries the next token of the same rotation once', async () => {
+    const ax = require('axios') as jest.Mocked<typeof axios>;
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    ax.post.mockRejectedValueOnce(rejection(400, 'Bad Request: PEER_ID_INVALID')).mockResolvedValueOnce({ data: { ok: true } });
+    const res = await sendBotNotice('notif', { title: 'x' });
+    expect(res.sent).toBe(true);
+    expect(ax.post.mock.calls.map((c: any[]) => c[0])).toEqual([
+      'https://api.telegram.org/bottok1/sendRichMessage',
+      'https://api.telegram.org/bottok2/sendRichMessage',
+    ]);
+    expect(warn.mock.calls.map((c) => String(c[0]))).toEqual([expect.stringContaining('[bot-notice] kind=retry_next_token target=notif')]);
+    warn.mockRestore();
+  });
+
+  test('2026-11-23 review: pppl to the CLIENT_UPDATES channel retries with its next CLIENT_UPDATES bot; both rejected logs all_tokens_failed', async () => {
+    const ax = require('axios') as jest.Mocked<typeof axios>;
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    process.env.TELEGRAM_CHANNEL_CONFIG_CLIENT_UPDATES = '-100777::CLIENT_UPDATES::11:cuA,22:cuB';
+    delete process.env.updatesChannel;
+    ax.post.mockRejectedValue(rejection(403, 'Forbidden: bot is not a member of the channel chat'));
+    const res = await sendBotNotice('pppl', { title: 'x' });
+    expect(res.sent).toBe(false);
+    expect(ax.post.mock.calls.map((c: any[]) => c[0])).toEqual([
+      'https://api.telegram.org/bot11:cuA/sendRichMessage',
+      'https://api.telegram.org/bot22:cuB/sendRichMessage',
+    ]);
+    const lines = warn.mock.calls.map((c) => String(c[0]));
+    expect(lines[0]).toContain('kind=retry_next_token target=pppl chat=-100777 failed_bot=11 next_bot=22');
+    expect(lines[1]).toContain('kind=all_tokens_failed reason=rejected');
+    expect(lines.join(' ')).not.toMatch(/cuA|cuB/);
+    warn.mockRestore();
+  });
+
+  test('2026-11-23 review: an explicit token is never swapped; a payload 400 still falls back with the same token', async () => {
+    const ax = require('axios') as jest.Mocked<typeof axios>;
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    ax.post.mockRejectedValueOnce(rejection(401, 'Unauthorized'));
+    expect((await sendBotNotice('notif', { title: 'x' }, { token: 'mine' })).sent).toBe(false);
+    expect(ax.post).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toContain('kind=all_tokens_failed reason=explicit_token');
+    warn.mockRestore();
+  });
+
   test('missing BOT_TOKENS: skipped without throwing', async () => {
     delete process.env.BOT_TOKENS;
     jest.resetModules();

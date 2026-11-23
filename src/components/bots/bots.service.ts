@@ -24,7 +24,12 @@ export interface DeadBotInfo {
     category: ChannelCategory;
     channelId: string;
     token: string;
+    /** Lifecycle before this run's getMe: a retired row (manual_attention / pending_admin) is never replaced. */
+    lifecycle?: string;
 }
+
+/** Rows that were not sending before they died: replacing them would mint bots for records, not for live slots. */
+const NEVER_REPLACED_LIFECYCLES = new Set(['manual_attention', 'pending_admin']);
 
 interface TokenCheckResult {
     verdict: 'alive' | 'dead' | 'unknown';
@@ -1290,7 +1295,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                         }
                         console.warn(`[BotHealth] marked dead: @${bot.username} (${bot.category})`);
                     }
-                    deadBots.push({ username: bot.username, category: bot.category, channelId: bot.channelId, token: bot.token });
+                    deadBots.push({ username: bot.username, category: bot.category, channelId: bot.channelId, token: bot.token, lifecycle });
                 } else {
                     unknown++;
                     const attempts = (bot.repairAttempts || 0) + 1;
@@ -1319,10 +1324,27 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             for (const deadBot of deadBots) {
                 if (creationBudget <= 0 || stopPrivilegedWork) break;
                 try {
+                    // A retired row (e.g. the 4 manual_attention CLIENT_UPDATES rows left on the old channel) is a
+                    // record, not a live slot: never replaced. The top-up keeps the category at its floor.
+                    if (deadBot.lifecycle && NEVER_REPLACED_LIFECYCLES.has(deadBot.lifecycle)) {
+                        console.log(`[BotHealth] kind=replace_skipped reason=retired lifecycle=${deadBot.lifecycle} category=${deadBot.category} bot=@${deadBot.username} channel=${deadBot.channelId}`);
+                        continue;
+                    }
+                    // Mint into the category's current channel (same source as the top-up), never blindly into the
+                    // dead bot's: a category that moved channel keeps old rows on the old one.
+                    const categoryBots = await this.botModel.find({ category: deadBot.category }).lean().exec();
+                    const channelId = this.categoryTopUpChannelId(categoryBots);
+                    if (!channelId) {
+                        console.log(`[BotHealth] kind=replace_skipped reason=no_channel category=${deadBot.category} bot=@${deadBot.username}`);
+                        continue;
+                    }
+                    if (channelId !== deadBot.channelId) {
+                        console.log(`[BotHealth] kind=replace_channel category=${deadBot.category} bot=@${deadBot.username} from=${deadBot.channelId} to=${channelId}`);
+                    }
                     proposedActions.push(`replace dead @${deadBot.username} in ${deadBot.category}`);
                     creationBudget--;
                     if (!options.dryRun) {
-                        const newBot = await this.replaceDeadBot(deadBot);
+                        const newBot = await this.replaceDeadBot({ ...deadBot, channelId });
                         if (newBot) replaced++;
                     }
                 } catch (err: any) {
