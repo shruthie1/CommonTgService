@@ -4,7 +4,7 @@
  * Pure rules over rows already run through classify + buildReviewModel; fixtures are small realistic chats.
  */
 import { DEFAULT_REVIEW_OPTIONS, buildReviewModel, classify, stampOf } from '../payment-proofs.classify';
-import { ChatUser, buildViews, isHiddenEntry, isRealFakeReason } from '../payment-proofs.views';
+import { ASK_UNANSWERED_MS, ChatUser, buildViews, isHiddenEntry, isRealFakeReason } from '../payment-proofs.views';
 
 const T0 = Date.parse('2026-11-06T06:00:00Z'); // 11:30 IST
 let n = 0;
@@ -294,5 +294,132 @@ describe('review stamp (owner 2026-11-07)', () => {
         const v = views([], [user('Z', 'ramya', { fakePaymentAt: new Date(T0), canReply: 0 })]);
         expect(v.muted[0]).toMatchObject({ chatId: 'Z', stamp: null, noProofs: true });
         expect(isHiddenEntry(v.muted[0])).toBe(true);
+    });
+});
+
+/**
+ * Details page asked, not sent (owner 2026-11-23): the proof gate asked the chat for the transaction details page (an
+ * open `old_time` ask, e.g. NO_UTR_VELOCITY on a ₹350 / ₹600 no-UTR receipt) and it is still unanswered ASK_UNANSWERED_MS
+ * after it opened. The chat's earlier credited screenshots (every persona) go to "Check these" for a second look.
+ */
+describe('view check: details page asked, not sent', () => {
+    const asked = (reason: string, openedAt: number, over: Record<string, unknown> = {}) =>
+        row({ amount: 350, utr: undefined, createdAt: new Date(openedAt), verdict: { outcome: 'old_time', reasons: ['NO_REAL_REFERENCE', reason], payee: 'ours', fakeScore: 0, fakeSignals: [] }, ask: { kind: 'old_time', state: 'open', openedAt: new Date(openedAt), reasons: [reason] }, ...over });
+    const NOW = T0 + 6 * 3_600_000;
+    const ago = (min: number) => NOW - min * 60_000;
+    const viewsAt = (rows: any[], users: ChatUser[] = [], now = NOW) => {
+        const items = rows.map((r) => ({ row: r, c: classify(r) }));
+        const byChat = new Map<string, ChatUser[]>();
+        for (const u of users) byChat.set(u.chatId, [...(byChat.get(u.chatId) ?? []), u]);
+        buildReviewModel(items, (chat) => (byChat.get(chat) ?? []).some((u) => !!u.fakePaymentAt), DEFAULT_REVIEW_OPTIONS);
+        return buildViews(items, byChat, DEFAULT_REVIEW_OPTIONS, now);
+    };
+    const decision = (v: ReturnType<typeof viewsAt>, chat: string) => v.asks.find((a) => a.chatId === chat);
+
+    it('waits 60 min: measured 2026-11-23, 14/14 answered asks came within 55 min (p50 1.9 min)', () => {
+        expect(ASK_UNANSWERED_MS).toBe(60 * 60_000);
+    });
+
+    it('an unanswered ask past 60 min sends the earlier credits of every persona to check, labelled, unreviewed', () => {
+        const c1 = credited(50, { chatId: 'Q', createdAt: new Date(ago(300)) });
+        const c2 = credited(25, { chatId: 'Q', profile: 'kavya', clientId: 'kavya1', createdAt: new Date(ago(200)) });
+        const a = asked('NO_UTR_VELOCITY', ago(61), { chatId: 'Q' });
+        const v = viewsAt([c1, c2, a]);
+        expect(v.check).toHaveLength(1);
+        const e = v.check[0];
+        expect(e.chatId).toBe('Q');
+        expect(e.reasons).toEqual([{ kind: 'asked', label: 'Details page asked, not sent: NO_UTR_VELOCITY', proofId: a.proofId }]);
+        expect(e.fakeSignal).toBe(false);
+        expect(e.personas).toEqual(['kavya', 'ramya']);
+        expect(e.pendingProofIds.sort()).toEqual([c1.proofId, c2.proofId].sort());
+        expect(e.history.map((h) => h.proofId)).toEqual([c1.proofId, c2.proofId, a.proofId]);
+        expect(e.stamp).toBeNull();
+        expect(decision(v, 'Q')).toMatchObject({ decision: 'flagged', askProofIds: [a.proofId], earlier: 2, earlierAmount: 75 });
+    });
+
+    it('not yet 60 min: no entry (waiting)', () => {
+        const v = viewsAt([credited(50, { chatId: 'W', createdAt: new Date(ago(300)) }), asked('NO_UTR_VELOCITY', ago(59), { chatId: 'W' })]);
+        expect(v.check).toHaveLength(0);
+        expect(decision(v, 'W')?.decision).toBe('waiting');
+    });
+
+    it('the details page was sent and credited (ask resolved): the chat leaves check (answered)', () => {
+        const c1 = credited(50, { chatId: 'R2', createdAt: new Date(ago(300)) });
+        const a = asked('NO_UTR_VELOCITY', ago(120), { chatId: 'R2', ask: { kind: 'old_time', state: 'resolved', openedAt: new Date(ago(120)), resolvedAt: new Date(ago(118)), reasons: ['NO_UTR_VELOCITY'] } });
+        const answer = credited(350, { chatId: 'R2', createdAt: new Date(ago(118)), verdict: { outcome: 'credited', reasons: ['CONFIRMS_ASK'], payee: 'ours', fakeScore: 0, fakeSignals: [] } });
+        const v = viewsAt([c1, a, answer]);
+        // ₹350 is over the ₹200 line: the chat is in check for that only, never for the ask.
+        expect(v.check.flatMap((e) => e.reasons.map((r) => r.kind))).toEqual(['high']);
+        expect(decision(v, 'R2')?.decision).toBe('answered');
+    });
+
+    it('no credit before the ask: nothing to look at (no_credits)', () => {
+        const v = viewsAt([asked('STATUS_UNKNOWN', ago(120), { chatId: 'N' })]);
+        expect(v.check).toHaveLength(0);
+        expect(decision(v, 'N')).toMatchObject({ decision: 'no_credits', earlier: 0 });
+    });
+
+    it('a fresh receipt credited after the ask (any persona) answers it, though tg-aut leaves the ask open (answered)', () => {
+        const v = viewsAt([
+            credited(50, { chatId: 'F', createdAt: new Date(ago(300)) }),
+            asked('NO_UTR_VELOCITY', ago(120), { chatId: 'F' }),
+            credited(25, { chatId: 'F', profile: 'kavya', clientId: 'kavya1', createdAt: new Date(ago(100)) }),
+        ]);
+        expect(v.check).toHaveLength(0);
+        expect(decision(v, 'F')?.decision).toBe('answered');
+    });
+
+    it('two open asks, one details page credited (it closes only one ask): the other is answered by that credit too', () => {
+        const a1 = asked('NO_UTR_VELOCITY', ago(130), { chatId: 'T' });
+        const a2 = asked('NO_UTR_VELOCITY', ago(125), { chatId: 'T' });
+        a1.ask = { ...a1.ask, state: 'resolved', resolvedAt: new Date(ago(119)) };
+        const v = viewsAt([
+            credited(50, { chatId: 'T', createdAt: new Date(ago(300)) }), a1, a2,
+            credited(350, { chatId: 'T', createdAt: new Date(ago(119)), amount: 150, creditAmount: 150, verdict: { outcome: 'credited', reasons: ['CONFIRMS_ASK'], payee: 'ours', fakeScore: 0, fakeSignals: [] } }),
+        ]);
+        expect(v.check.flatMap((e) => e.reasons.map((r) => r.kind))).not.toContain('asked');
+        expect(decision(v, 'T')?.decision).toBe('answered');
+    });
+
+    it('overdue at exactly 60:00, waiting 1 ms before', () => {
+        const rows = [credited(50, { chatId: 'E', createdAt: new Date(ago(300)) }), asked('NO_UTR_VELOCITY', ago(60), { chatId: 'E' })];
+        expect(decision(viewsAt(rows), 'E')?.decision).toBe('flagged');
+        expect(decision(viewsAt(rows, [], NOW - 1), 'E')?.decision).toBe('waiting');
+    });
+
+    it('a stamp after the ask opened but before it was overdue does not count (flagged)', () => {
+        const mid = { review: { decision: 'fine', at: new Date(ago(100)) } };
+        const v = viewsAt([credited(50, { chatId: 'P', createdAt: new Date(ago(300)), ...mid }), asked('NO_UTR_VELOCITY', ago(120), { chatId: 'P', ...mid })]);
+        expect(v.check[0].stamp).toBeNull();
+        expect(isHiddenEntry(v.check[0])).toBe(false);
+        expect(decision(v, 'P')?.decision).toBe('flagged');
+    });
+
+    it('a muted chat stays in the muted view only (muted)', () => {
+        const v = viewsAt([credited(50, { chatId: 'M', createdAt: new Date(ago(300)) }), asked('NO_UTR_VELOCITY', ago(120), { chatId: 'M' })], [user('M', 'ramya', { canReply: 0 })]);
+        expect(v.check).toHaveLength(0);
+        expect(v.muted.map((e) => e.chatId)).toEqual(['M']);
+        expect(decision(v, 'M')?.decision).toBe('muted');
+    });
+
+    it('a stamp from before the ask went unanswered does not count; "Genuine" after it hides the chat (stamped)', () => {
+        const before = { review: { decision: 'fine', at: new Date(ago(200)) } };
+        const v1 = viewsAt([credited(50, { chatId: 'S', createdAt: new Date(ago(300)), ...before }), asked('NO_UTR_VELOCITY', ago(120), { chatId: 'S' })]);
+        expect(v1.check[0].stamp).toBeNull();
+        expect(isHiddenEntry(v1.check[0])).toBe(false);
+        expect(v1.check[0].pendingProofIds).toHaveLength(1);
+        expect(decision(v1, 'S')?.decision).toBe('flagged');
+
+        const after = { review: { decision: 'fine', at: new Date(ago(10)) } };
+        const v2 = viewsAt([credited(50, { chatId: 'S', createdAt: new Date(ago(300)), ...after }), asked('NO_UTR_VELOCITY', ago(120), { chatId: 'S', ...after })]);
+        expect(v2.check[0].stamp).toEqual({ decision: 'fine', at: new Date(ago(10)).toISOString() });
+        expect(isHiddenEntry(v2.check[0])).toBe(true);
+        expect(decision(v2, 'S')?.decision).toBe('stamped');
+    });
+
+    it('a held request (not finished, failed, ...) is not a details-page ask', () => {
+        const v = viewsAt([credited(50, { chatId: 'H', createdAt: new Date(ago(300)) }), asked('NOT_FINISHED', ago(120), { chatId: 'H', ask: { kind: 'held', state: 'open', openedAt: new Date(ago(120)), reasons: ['NOT_FINISHED'] } })]);
+        expect(v.check).toHaveLength(0);
+        expect(v.asks).toEqual([]);
     });
 });

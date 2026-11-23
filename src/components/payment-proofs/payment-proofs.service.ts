@@ -8,7 +8,7 @@ import {
     decodeCursor, emptyCounts, encodeCursor, isAfterCursor, parseProofId, proofIdOf, reviewOptionsFromEnv,
 } from './payment-proofs.classify';
 import { DOUBLE_CREDIT_PROJECTION, DOUBLE_CREDIT_WINDOW_MS, DoubleCreditRow, doubleCreditIndex, findDoubleCredits } from './payment-proofs.double-credit';
-import { ChatUser, REVIEW_VIEWS, ReviewView, ReviewViews, buildViews, isHiddenEntry } from './payment-proofs.views';
+import { AskDecision, ChatUser, REVIEW_VIEWS, ReviewView, ReviewViews, buildViews, isHiddenEntry } from './payment-proofs.views';
 
 export const DEFAULT_LIMIT = 50;
 export const MAX_LIMIT = 100;
@@ -152,6 +152,8 @@ export class PaymentProofsService {
     private readonly loading = new Map<string, { gen: number; promise: Promise<WindowData> }>();
     /** Bumped by every write; a load started before a write is neither joined nor stored after it. */
     private gen = 0;
+    /** chatId -> the last logged details-page ask decision (logAskDecisions logs only changes). */
+    private readonly askDecisions = new Map<string, string>();
 
     constructor(
         @InjectModel(PAYMENT_PROOF_MODEL) private readonly proofModel: Model<any>,
@@ -345,7 +347,29 @@ export class PaymentProofsService {
         const options = reviewOptionsFromEnv();
         buildReviewModel(everything, (chatId) => !!d.chats.get(chatId)?.marked, options);
         const users = new Map([...d.chats].map(([chatId, e]) => [chatId, [...e.rows.values()]]));
-        return { ...d, everything, views: buildViews(everything, users, options) };
+        const views = buildViews(everything, users, options, d.loadedAt);
+        this.logAskDecisions(views.asks);
+        return { ...d, everything, views };
+    }
+
+    /**
+     * One `[review-ask]` line per details-page ask decision that changed since the last derive (every window shares the
+     * map, so a reload with the same decisions logs nothing), plus decision=gone when the chat's asks left the window.
+     */
+    private logAskDecisions(asks: AskDecision[]): void {
+        const seen = new Set<string>();
+        for (const a of asks) {
+            seen.add(a.chatId);
+            const sig = `${a.decision}|${a.askProofIds.join(',')}|${a.earlier}`;
+            if (this.askDecisions.get(a.chatId) === sig) continue;
+            this.askDecisions.set(a.chatId, sig);
+            this.logger.log(`[review-ask] decision=${a.decision} chat=${a.chatId} asks=${a.askProofIds.join(',')} reasons=${a.reasons.join(',') || '-'} earlier=${a.earlier} earlierAmount=${a.earlierAmount}`);
+        }
+        for (const chatId of [...this.askDecisions.keys()]) {
+            if (seen.has(chatId)) continue;
+            this.askDecisions.delete(chatId);
+            this.logger.log(`[review-ask] decision=gone chat=${chatId}`);
+        }
     }
 
     /**

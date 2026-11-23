@@ -160,4 +160,55 @@ describe('PaymentProofsService views', () => {
             await expect(service.stampChat('100', { decision: 'fine', proofIds: ['ramya1-100-99'] })).rejects.toBeInstanceOf(NotFoundException);
         });
     });
+    it('details page asked, not sent: the chat enters check, and every ask decision logs one [review-ask] line on change', async () => {
+        const prev = process.env.PAYMENT_PROOFS_LIST_CACHE_MS;
+        process.env.PAYMENT_PROOFS_LIST_CACHE_MS = '0';
+        try {
+            const ask = (chatId: string, minAgo: number, state = 'open') => proof(chatId, {
+                createdAt: at(minAgo), amount: 600, utr: undefined,
+                verdict: { outcome: 'old_time', reasons: ['NO_REAL_REFERENCE', 'NO_UTR_VELOCITY'], payee: 'ours', fakeScore: 0 },
+                ask: { kind: 'old_time', state, openedAt: at(minAgo), reasons: ['NO_UTR_VELOCITY'], ...(state === 'resolved' ? { resolvedAt: at(minAgo - 2) } : {}) },
+            });
+            await proofs.collection.insertMany([
+                credited('510', 50, { createdAt: at(300) }), ask('510', 120),
+                credited('520', 50, { createdAt: at(300) }), ask('520', 30),
+                ask('530', 120),
+                credited('540', 50, { createdAt: at(300) }), ask('540', 120),
+                credited('550', 50, { createdAt: at(300) }), ask('550', 120, 'resolved'),
+            ]);
+            await userData.collection.insertOne(ud('540', 'ramya', { canReply: 0 }));
+            const log = jest.spyOn((service as any).logger, 'log').mockImplementation(() => undefined);
+            const lines = () => log.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith('[review-ask]'));
+
+            const r = await service.views({ view: 'check' }, NOW);
+            const e = (r.entries as any[]).find((x) => x.chatId === '510');
+            expect(e.reasons).toEqual([{ kind: 'asked', label: 'Details page asked, not sent: NO_UTR_VELOCITY', proofId: 'ramya1-510-8' }]);
+            expect((r.entries as any[]).map((x) => x.chatId)).not.toEqual(expect.arrayContaining(['520', '530', '540', '550']));
+            expect(lines().sort()).toEqual([
+                '[review-ask] decision=answered chat=550 asks=ramya1-550-15 reasons=NO_UTR_VELOCITY earlier=0 earlierAmount=0',
+                '[review-ask] decision=flagged chat=510 asks=ramya1-510-8 reasons=NO_UTR_VELOCITY earlier=1 earlierAmount=50',
+                '[review-ask] decision=muted chat=540 asks=ramya1-540-13 reasons=NO_UTR_VELOCITY earlier=1 earlierAmount=50',
+                '[review-ask] decision=no_credits chat=530 asks=ramya1-530-11 reasons=NO_UTR_VELOCITY earlier=0 earlierAmount=0',
+                '[review-ask] decision=waiting chat=520 asks=ramya1-520-10 reasons=NO_UTR_VELOCITY earlier=0 earlierAmount=0',
+            ]);
+
+            // Same data again: nothing changed, nothing logged.
+            log.mockClear();
+            await service.views({ view: 'check' }, NOW);
+            expect(lines()).toEqual([]);
+
+            // The operator stamps 510 Genuine: it leaves the list (stamped); 520's ask left the window: gone.
+            await service.stampChat('510', { decision: 'fine', proofIds: ['ramya1-510-7', 'ramya1-510-8'] });
+            await proofs.collection.deleteMany({ chatId: '520' });
+            log.mockClear();
+            const after = await service.views({ view: 'check' }, NOW);
+            expect((after.entries as any[]).map((x) => x.chatId)).not.toContain('510');
+            expect(lines().sort()).toEqual([
+                '[review-ask] decision=gone chat=520',
+                '[review-ask] decision=stamped chat=510 asks=ramya1-510-8 reasons=NO_UTR_VELOCITY earlier=1 earlierAmount=50',
+            ]);
+        } finally {
+            if (prev === undefined) delete process.env.PAYMENT_PROOFS_LIST_CACHE_MS; else process.env.PAYMENT_PROOFS_LIST_CACHE_MS = prev;
+        }
+    });
 });

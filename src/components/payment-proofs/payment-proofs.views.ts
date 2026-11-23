@@ -15,6 +15,11 @@ import { REVIEW_FAKE_SCORE, ReviewItem, ReviewOptions, ReviewStamp, istDay } fro
  *           blockedAt) or unknown (abuse cheatCount bans and ops blocks record nothing; cheatCount is reset to 0).
  *  - refused ("Refused but looks genuine"): one entry per uncredited proof that passes every genuine check and was
  *           not credited later in the chat within 24 h.
+ *  - check also takes a chat whose details-page ask (`ask.kind` 'old_time': proof-gate holdAsk / MODEL_DOUBT / re-send
+ *           ask, e.g. NO_UTR_VELOCITY on a ₹350 / ₹600 no-UTR receipt) is still open ASK_UNANSWERED_MS after it
+ *           opened, when the chat had credits before the ask (owner 2026-11-23): those earlier credits get a second
+ *           look. A stamp older than the overdue time does not count for such a chat. The ask counts as answered when
+ *           tg-aut resolved it or the chat (any persona) was credited after it opened, and the reason goes. `asks` reports each asked chat's decision (logged).
  *
  * A chat is in one view only: muted, else check, else refused. Every entry carries `stamp`: the operator's latest
  * stamp when every proof its card shows is stamped (check: history, muted: evidence or else all its proofs, refused:
@@ -81,7 +86,8 @@ export interface ProofCard {
     clientHost?: string | null;
 }
 
-export interface CheckReason { kind: 'fake' | 'high'; label: string; proofId: string }
+/** `asked`: a details-page ask of the chat is unanswered (proofId = the asked screenshot). */
+export interface CheckReason { kind: 'fake' | 'high' | 'asked'; label: string; proofId: string }
 
 export interface CheckEntry {
     chatId: string;
@@ -144,12 +150,40 @@ export function isHiddenEntry(e: { stamp: ReviewStamp | null; noProofs?: boolean
     return e.stamp !== null || e.noProofs === true;
 }
 
-export interface ReviewViews { check: CheckEntry[]; muted: MutedEntry[]; refused: RefusedEntry[] }
+/**
+ * One chat with a details-page ask in the window and what the check view did with it: flagged (in check, to review),
+ * stamped (in check, reviewed after the ask went unanswered), waiting (open, not yet ASK_UNANSWERED_MS old), no_credits
+ * (overdue but nothing credited before it), muted (the muted view shows the chat), answered (every ask resolved, or a
+ * credit of the chat came after it).
+ */
+export type AskDecisionKind = 'flagged' | 'stamped' | 'waiting' | 'no_credits' | 'muted' | 'answered';
+export interface AskDecision {
+    chatId: string;
+    decision: AskDecisionKind;
+    /** The overdue open asks (flagged / stamped / no_credits / muted), else the open (waiting) or all (answered) ones. */
+    askProofIds: string[];
+    reasons: string[];
+    /** Credited proofs before the first overdue ask, and their ₹. */
+    earlier: number;
+    earlierAmount: number;
+}
+
+export interface ReviewViews { check: CheckEntry[]; muted: MutedEntry[]; refused: RefusedEntry[]; asks: AskDecision[] }
 export const REVIEW_VIEWS = ['check', 'muted', 'refused'] as const;
 export type ReviewView = (typeof REVIEW_VIEWS)[number];
 
 const MIN_MS = 60_000;
 const DAY_MS = 24 * 60 * MIN_MS;
+/**
+ * A details-page ask still open this long after it opened is "not sent". Measured 2026-11-23 over the 7-day window: the
+ * 14 answered old_time asks came 0.2 to 54.5 min after the ask (p50 1.9, p90 20.1); the 47 open ones were all 587+ min old.
+ */
+export const ASK_UNANSWERED_MS = 60 * MIN_MS;
+const isDetailsAsk = (x: ReviewItem) => x.row.ask?.kind === 'old_time';
+const askOpenedMs = (x: ReviewItem) => {
+    const t = x.row.ask?.openedAt ? new Date(x.row.ask.openedAt).getTime() : NaN;
+    return Number.isFinite(t) ? t : msOf(x.row);
+};
 /** A refused receipt printed more than this before it arrived is not "looks genuine". */
 const FRESH_MS = 30 * MIN_MS;
 /** Printed a little after arrival is clock skew, not a future-dated fake (tg-aut excuses neighbour time zones). */
@@ -194,7 +228,7 @@ export function proofCard({ row, c }: ReviewItem): ProofCard {
     };
 }
 
-export function buildViews(items: ReviewItem[], users: Map<string, ChatUser[]>, options: ReviewOptions): ReviewViews {
+export function buildViews(items: ReviewItem[], users: Map<string, ChatUser[]>, options: ReviewOptions, now: number = Date.now()): ReviewViews {
     const asc = [...items].sort((a, b) => msOf(a.row) - msOf(b.row) || (String(a.row._id) < String(b.row._id) ? -1 : 1));
     const byChat = new Map<string, ReviewItem[]>();
     const shaFirstChat = new Map<string, string>();
@@ -271,11 +305,44 @@ export function buildViews(items: ReviewItem[], users: Map<string, ChatUser[]>, 
             .forEach((x) => topN.add(x));
     }
 
+    // Details page asked, not sent: per chat with an old_time ask in the window.
+    const asks: AskDecision[] = [];
+    /** chat -> the overdue open asks and the time they became overdue (the latest). Only chats with earlier credits. */
+    const overdue = new Map<string, { rows: ReviewItem[]; dueMs: number }>();
+    for (const [chat, list] of byChat) {
+        const asked = list.filter(isDetailsAsk);
+        if (!asked.length) continue;
+        // tg-aut closes only the one ask a details page answers, and a plain credit closes no old_time ask: an ask is
+        // answered when the chat (any persona) was credited after it opened (review 2026-11-23).
+        const creditedAfter = (t: number) => list.some((y) => y.c.credited && msOf(y.row) > t);
+        const open = asked.filter((x) => x.row.ask?.state === 'open' && !creditedAfter(askOpenedMs(x)));
+        const late = open.filter((x) => now - askOpenedMs(x) >= ASK_UNANSWERED_MS);
+        const firstLate = late.length ? Math.min(...late.map((x) => msOf(x.row))) : null;
+        const earlier = firstLate === null ? [] : list.filter((x) => x.c.credited && msOf(x.row) < firstLate);
+        const shown = late.length ? late : open.length ? open : asked;
+        const decisionOf = (): AskDecisionKind => {
+            if (!open.length) return 'answered';
+            if (!late.length) return 'waiting';
+            if (inMuted(chat)) return 'muted';
+            return earlier.length ? 'flagged' : 'no_credits';
+        };
+        const decision = decisionOf();
+        if (decision === 'flagged') overdue.set(chat, { rows: late, dueMs: Math.max(...late.map((x) => askOpenedMs(x) + ASK_UNANSWERED_MS)) });
+        asks.push({
+            chatId: chat, decision, askProofIds: shown.map((x) => x.c.proofId),
+            reasons: uniqSorted(shown.flatMap((x) => x.row.ask?.reasons ?? [])),
+            earlier: earlier.length, earlierAmount: earlier.reduce((s, x) => s + (x.c.amount ?? 0), 0),
+        });
+    }
+
     const check: CheckEntry[] = [];
     for (const [chat, list] of byChat) {
         if (inMuted(chat)) continue;
+        const asked = overdue.get(chat);
+        /** Reviewed for this entry: stamped, and for an unanswered ask only by a stamp from after it went overdue. */
+        const reviewedHere = (x: ReviewItem) => x.c.reviewed && (!asked || new Date(x.c.stamp!.at).getTime() >= asked.dueMs);
         const creditedRows = list.filter((x) => x.c.credited);
-        const pending = creditedRows.filter((x) => !x.c.reviewed);
+        const pending = creditedRows.filter((x) => !reviewedHere(x));
         const reasons: CheckReason[] = [];
         // Every credited proof, stamped or not: a stamped chat is still an entry (hidden by default), and a new
         // unstamped screenshot in it brings it back.
@@ -284,9 +351,13 @@ export function buildViews(items: ReviewItem[], users: Map<string, ChatUser[]>, 
             if (over.has(x)) reasons.push({ kind: 'high', label: `High value: ₹${x.c.amount} (over ₹${options.alwaysAmount})`, proofId: x.c.proofId });
             else if (topN.has(x)) reasons.push({ kind: 'high', label: `Top risk today: ${x.c.baseReasons.join('; ')}`, proofId: x.c.proofId });
         }
+        for (const x of asked?.rows ?? []) {
+            const why = (x.row.ask?.reasons ?? []).filter((r) => typeof r === 'string' && r).join(', ');
+            reasons.push({ kind: 'asked', label: why ? `Details page asked, not sent: ${why}` : 'Details page asked, not sent', proofId: x.c.proofId });
+        }
         if (!reasons.length) continue;
         const sum = (xs: ReviewItem[]) => xs.reduce((s, x) => s + x.c.atRiskAmount, 0);
-        const reviewedCount = creditedRows.filter((x) => x.c.reviewed).length;
+        const reviewedCount = creditedRows.filter(reviewedHere).length;
         const history = list.filter((x) => x.c.credited || !x.c.repeat);
         check.push({
             chatId: chat,
@@ -305,8 +376,12 @@ export function buildViews(items: ReviewItem[], users: Map<string, ChatUser[]>, 
             reviewed: reviewedCount > 0,
             muted: muted(chat),
             marked: false,
-            stamp: stampOfAll(history),
+            stamp: history.every(reviewedHere) ? stampOfAll(history) : null,
         });
+        if (asked && history.every(reviewedHere)) {
+            const d = asks.find((a) => a.chatId === chat);
+            if (d) d.decision = 'stamped';
+        }
     }
     check.sort((a, b) => Number(b.fakeSignal) - Number(a.fakeSignal) || b.unreviewedCredited - a.unreviewedCredited || (a.chatId < b.chatId ? -1 : 1));
 
@@ -382,7 +457,7 @@ export function buildViews(items: ReviewItem[], users: Map<string, ChatUser[]>, 
         }
     }
     refused.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-    return { check, muted: mutedEntries, refused };
+    return { check, muted: mutedEntries, refused, asks };
 }
 
 /** A refusal that doubts authenticity, payee ours, printed at most FRESH_MS before arrival, fake score under the line, no real fake code, not a reuse copy. */
