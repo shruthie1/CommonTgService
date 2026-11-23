@@ -14,7 +14,10 @@ jest.mock('imap', () => {
     });
 });
 
-import { MailReader, extractTelegramCode, isMailFreshEnough } from '../IMap';
+import { MailReader, htmlToText, parseTelegram2faEmail } from '../IMap';
+import { InMemoryMailboxLock, MAILBOX_LOCK_KEY, RedisMailboxLock } from '../mailbox-lock';
+import { Logger } from '../../utils/logger';
+import { FakeImap, FakeMailbox, recoveryBody, twoFaBody } from './fake-mailbox';
 
 class FakeFetch extends EventEmitter {
     constructor(private readonly messages: Array<{ seqno: number; body: string; date?: Date }>) {
@@ -39,136 +42,6 @@ class FakeFetch extends EventEmitter {
     }
 }
 
-class FakeImap extends EventEmitter {
-    public searchResults: number[] = [];
-    public messages = new Map<number, { body: string; date?: Date }>();
-    public deletedSeqNos: number[] = [];
-    public seq = {
-        addFlags: (ids: number[], _flag: string, callback: (err?: Error | null) => void) => {
-            this.deletedSeqNos.push(...ids);
-            callback(null);
-        },
-    };
-
-    connect(): void {
-        queueMicrotask(() => this.emit('ready'));
-    }
-
-    end(): void {
-        queueMicrotask(() => this.emit('end'));
-    }
-
-    openBox(_mailbox: string, _readOnly: boolean, callback: (err: Error | null) => void): void {
-        callback(null);
-    }
-
-    search(_criteria: unknown, callback: (err: Error | null, results: number[]) => void): void {
-        callback(null, this.searchResults);
-    }
-
-    fetch(ids: number[]): FakeFetch {
-        return new FakeFetch(
-            ids.map((id) => ({
-                seqno: id,
-                body: this.messages.get(id)?.body || '',
-                date: this.messages.get(id)?.date,
-            })),
-        );
-    }
-
-    expunge(callback: (err: Error | null) => void): void {
-        callback(null);
-    }
-}
-
-describe('MailReader', () => {
-    test('runExclusive serializes mailbox access', async () => {
-        const reader = MailReader.createForTest(() => new FakeImap() as any);
-        const order: string[] = [];
-
-        const first = reader.runExclusive(async () => {
-            order.push('first:start');
-            await new Promise((resolve) => setTimeout(resolve, 5));
-            order.push('first:end');
-        });
-        const second = reader.runExclusive(async () => {
-            order.push('second:start');
-            order.push('second:end');
-        });
-
-        await Promise.all([first, second]);
-
-        expect(order).toEqual(['first:start', 'first:end', 'second:start', 'second:end']);
-    });
-
-    test('getCode returns null when no matching mail exists instead of reusing old state', async () => {
-        const imap = new FakeImap();
-        const reader = MailReader.createForTest(() => imap as any);
-        const now = new Date('2026-04-11T10:00:00.000Z');
-
-        imap.searchResults = [1];
-        imap.messages.set(1, {
-            body: 'Telegram code: 12345.',
-            date: new Date('2026-04-11T10:01:00.000Z'),
-        });
-
-        await reader.connectToMail();
-        const firstCode = await reader.getCode({ expectedLength: 5, minReceivedAt: now });
-        expect(firstCode).toBe('12345');
-
-        imap.searchResults = [];
-        const secondCode = await reader.getCode({ expectedLength: 5, minReceivedAt: new Date('2026-04-11T10:02:00.000Z') });
-        expect(secondCode).toBeNull();
-    });
-
-    test('getCode picks the newest fresh code with the requested length and deletes only that message', async () => {
-        const imap = new FakeImap();
-        const reader = MailReader.createForTest(() => imap as any);
-        const startedAt = new Date('2026-04-11T10:00:00.000Z');
-
-        imap.searchResults = [1, 2, 3];
-        imap.messages.set(1, {
-            body: 'Telegram verification code 999999.',
-            date: new Date('2026-04-11T10:05:00.000Z'),
-        });
-        imap.messages.set(2, {
-            body: 'Telegram verification code 12345.',
-            date: new Date('2026-04-11T09:30:00.000Z'),
-        });
-        imap.messages.set(3, {
-            body: 'Telegram verification code 54321.',
-            date: new Date('2026-04-11T10:06:00.000Z'),
-        });
-
-        await reader.connectToMail();
-        const code = await reader.getCode({ expectedLength: 5, minReceivedAt: startedAt });
-
-        expect(code).toBe('54321');
-        expect(imap.deletedSeqNos).toEqual([3]);
-    });
-
-    test('picks the newest code by DATE even when the newest email has a lower seqno', async () => {
-        // Real scenario: a re-sent / re-delivered Telegram email can arrive with a LOWER
-        // sequence number than an older one (seqno tracks insertion, not the Date header).
-        // The freshest OTP by date must win — selecting by seqno would submit a stale code
-        // and delete the wrong (newer) message.
-        const imap = new FakeImap();
-        const reader = MailReader.createForTest(() => imap as any);
-        const startedAt = new Date('2026-04-11T10:00:00.000Z');
-
-        imap.searchResults = [1, 2, 3];
-        // seqno 3 is OLDER; seqno 1 is the NEWEST by date.
-        imap.messages.set(1, { body: 'Telegram verification code 11111.', date: new Date('2026-04-11T10:09:00.000Z') });
-        imap.messages.set(2, { body: 'Telegram verification code 22222.', date: new Date('2026-04-11T10:04:00.000Z') });
-        imap.messages.set(3, { body: 'Telegram verification code 33333.', date: new Date('2026-04-11T10:02:00.000Z') });
-
-        await reader.connectToMail();
-        const code = await reader.getCode({ expectedLength: 5, minReceivedAt: startedAt });
-
-        expect(code).toBe('11111');             // newest by date, not highest seqno
-        expect(imap.deletedSeqNos).toEqual([1]); // deletes the newest, not seqno 3
-    });
-});
 
 /**
  * A configurable fake Imap that can simulate error / end / timeout behaviour on
@@ -463,144 +336,624 @@ describe('MailReader — disconnectFromMail', () => {
     });
 });
 
-describe('MailReader — getCode error branches', () => {
-    test('throws when the reader is not ready', async () => {
-        const reader = MailReader.createForTest(() => new ConfigurableImap() as any);
-        await expect(reader.getCode()).rejects.toThrow(/Mail server is not ready/);
+// ---------------------------------------------------------------------------------------------
+// 2FA email code: snapshot, parse, pick (fake Gmail mailbox, real Telegram mail format)
+// ---------------------------------------------------------------------------------------------
+
+async function readerOn(mailbox: FakeMailbox, lock = new InMemoryMailboxLock()) {
+    const imap = new FakeImap(mailbox);
+    const reader = MailReader.createForTest(() => imap as any, lock);
+    await reader.connectToMail();
+    return { imap, reader };
+}
+
+describe('parseTelegram2faEmail (real Telegram formats)', () => {
+    test('the 2FA verify mail gives its code', () => {
+        expect(parseTelegram2faEmail('Your Code - 482913', twoFaBody('482913'), 6)).toEqual({ code: '482913' });
     });
 
-    test('rejects and flips isReady when openBox fails', async () => {
+    test('a password-RECOVERY mail from the same sender is never a 2FA code', () => {
+        expect(parseTelegram2faEmail('Your Recovery Code - 771234', recoveryBody('771234'), 6)).toEqual({ reason: 'recovery_email' });
+        // body alone is enough, even with a misleading subject
+        expect(parseTelegram2faEmail('Your Code - 771234', recoveryBody('771234'), 6)).toEqual({ reason: 'recovery_email' });
+    });
+
+    test('the delete-account mail (names a phone, has digits) is not a 2FA mail', () => {
+        const body = 'Dear Swathi,\r\nWe have received a request to delete your Telegram account from your number +919876543210. If this wasn\'t you ... https://t.me/confirmphone?phone=919876543210&hash=abc123\r\nYou have 7 days to cancel.';
+        expect(parseTelegram2faEmail('IMPORTANT: Request to delete your account', body, 6)).toEqual({ reason: 'not_2fa_email' });
+    });
+
+    test('other numbers and HTML colour codes around the code line do not change the code', () => {
+        const body = `<div style="color:#333333">123456</div>\r\nRef 987654\r\n${twoFaBody('482913')}`;
+        expect(parseTelegram2faEmail('Your Code - 482913', body, 6)).toEqual({ code: '482913' });
+    });
+
+    test('two different codes in one mail, or subject vs body mismatch, is ambiguous', () => {
+        expect(parseTelegram2faEmail('Your Code - 482913', twoFaBody('482913') + twoFaBody('111222'), 6)).toEqual({ reason: 'ambiguous' });
+        expect(parseTelegram2faEmail('Your Code - 999999', twoFaBody('482913'), 6)).toEqual({ reason: 'ambiguous' });
+    });
+
+    test('the same code repeated is not ambiguous', () => {
+        expect(parseTelegram2faEmail('Your Code - 482913', twoFaBody('482913') + twoFaBody('482913'), 6)).toEqual({ code: '482913' });
+    });
+
+    test('"2-Step Verification" and "two step" wording variants are accepted', () => {
+        const body = (wording: string) => `Your code is: 482913. Use it to verify your email and activate ${wording} in Telegram Messenger.`;
+        for (const wording of ['2-Step Verification', 'Two-Step Verification', 'two step verification', '2 step verification', '2step verification', 'TWO-STEP VERIFICATION']) {
+            expect(parseTelegram2faEmail('Your Code - 482913', body(wording), 6)).toEqual({ code: '482913' });
+        }
+        // the recovery mail is still rejected whatever the wording
+        expect(parseTelegram2faEmail('Your Recovery Code - 771234', recoveryBody('771234') + ' 2-Step Verification', 6)).toEqual({ reason: 'recovery_email' });
+    });
+
+    test('HTML stripping stays linear on hostile input (each case under 100 ms)', () => {
+        const cases = [
+            '<'.repeat(65_536),
+            '<a'.repeat(32_768),
+            '<style>'.repeat(9_362),
+            '<style>' + '</sty'.repeat(13_000),
+            '&#'.repeat(32_768),
+            ' \t'.repeat(32_768) + 'x',
+        ];
+        for (const input of cases) {
+            const started = process.hrtime.bigint();
+            htmlToText(input);
+            const ms = Number(process.hrtime.bigint() - started) / 1e6;
+            expect(ms).toBeLessThan(100);
+        }
+    });
+
+    test('htmlToText keeps visible text, drops blocks/tags, stops at an unterminated tag', () => {
+        expect(htmlToText('<head><style>p{color:#333333}</style></head><p>Your code is:&nbsp;<b>482913</b>.</p>x<br/>y'))
+            .toBe(' Your code is: 482913 .\nx\ny');
+        expect(htmlToText('ok <b unterminated 123456')).toBe('ok ');
+        expect(htmlToText('<script>var a=123456;')).toBe('');
+        expect(htmlToText('a &lt;b&gt; &amp; &#39;c&#39; &#x41;')).toBe("a <b> & 'c' A");
+    });
+
+    test('wrong length and missing code are rejected, never guessed', () => {
+        expect(parseTelegram2faEmail('Your Code - 482913', twoFaBody('482913'), 5)).toEqual({ reason: 'length_mismatch' });
+        expect(parseTelegram2faEmail('Your Code', twoFaBody('').replace('Your code is: .', 'Your code is coming.'), 6)).toEqual({ reason: 'no_code' });
+        expect(parseTelegram2faEmail('Your Code', twoFaBody('123'), undefined)).toEqual({ reason: 'no_code' });
+        expect(parseTelegram2faEmail('', '', 6)).toEqual({ reason: 'not_2fa_email' });
+    });
+});
+
+describe('MailReader.snapshotMailbox', () => {
+    test('uses UIDNEXT from the selected inbox', async () => {
+        const mailbox = new FakeMailbox();
+        mailbox.addTwoFa('111111');
+        const { reader } = await readerOn(mailbox);
+        expect(await reader.snapshotMailbox('••••1234')).toEqual({ sinceUid: mailbox.uidNext, uidValidity: 1 });
+    });
+
+    test('falls back to one past the highest Telegram UID when the server sends no UIDNEXT', async () => {
+        const mailbox = new FakeMailbox();
+        const last = mailbox.addTwoFa('111111');
+        const imap = new FakeImap(mailbox);
+        imap.openBox = (_n: string, _r: boolean, cb: any) => cb(null, { name: 'INBOX' });
+        const reader = MailReader.createForTest(() => imap as any);
+        await reader.connectToMail();
+        expect((await reader.snapshotMailbox()).sinceUid).toBe(last.uid + 1);
+    });
+
+    test('fallback on an inbox with no Telegram mail starts at UID 1', async () => {
+        const imap = new ConfigurableImap();
+        const reader = MailReader.createForTest(() => imap as any);
+        await reader.connectToMail();
+        expect((await reader.snapshotMailbox()).sinceUid).toBe(1);
+    });
+
+    test('throws when not connected, and EMAIL_SNAPSHOT_FAILED when the inbox cannot be opened', async () => {
+        const notReady = MailReader.createForTest(() => new ConfigurableImap() as any);
+        await expect(notReady.snapshotMailbox()).rejects.toThrow(/Mail server is not ready/);
+
         const imap = new ConfigurableImap();
         imap.openBoxError = new Error('open box failed');
         const reader = MailReader.createForTest(() => imap as any);
         await reader.connectToMail();
-        await expect(reader.getCode()).rejects.toThrow('open box failed');
+        await expect(reader.snapshotMailbox()).rejects.toThrow(/EMAIL_SNAPSHOT_FAILED: open box failed/);
         expect(await reader.isMailReady()).toBe(false);
     });
+});
 
-    test('rejects when search fails', async () => {
-        const imap = new ConfigurableImap();
-        imap.searchError = new Error('search failed');
-        const reader = MailReader.createForTest(() => imap as any);
-        await reader.connectToMail();
-        await expect(reader.getCode()).rejects.toThrow('search failed');
+describe('MailReader.getCode (UID snapshot)', () => {
+    test('a stale 2FA mail from an earlier attempt seconds ago is NOT picked', async () => {
+        const mailbox = new FakeMailbox();
+        mailbox.addTwoFa('111111', { sentAt: new Date(Date.now() - 20_000), receivedAt: new Date(Date.now() - 10_000) });
+        const { reader } = await readerOn(mailbox);
+        const snapshot = await reader.snapshotMailbox();
+
+        expect(await reader.getCode({ snapshot, expectedLength: 6, requestStartedAt: new Date() })).toBeNull();
+        expect(mailbox.present()).toHaveLength(1); // never deleted
     });
 
-    test('returns null when search finds no messages', async () => {
-        const imap = new ConfigurableImap();
-        imap.searchResults = [];
-        const reader = MailReader.createForTest(() => imap as any);
-        await reader.connectToMail();
-        expect(await reader.getCode()).toBeNull();
+    test('IMAP "n:*" returning the highest older UID is filtered out client-side', async () => {
+        const mailbox = new FakeMailbox();
+        const old = mailbox.addTwoFa('111111');
+        const { reader, imap } = await readerOn(mailbox);
+        const snapshot = await reader.snapshotMailbox();
+
+        expect(await reader.getCode({ snapshot, expectedLength: 6 })).toBeNull();
+        expect(imap.searchCriteria[imap.searchCriteria.length - 1]).toEqual([['FROM', 'noreply@telegram.org'], ['UID', `${snapshot.sinceUid}:*`]]);
+        expect(mailbox.byUid(old.uid)).toBeDefined();
     });
 
-    test('returns null when messages exist but contain no matching code', async () => {
-        const imap = new ConfigurableImap();
-        imap.searchResults = [1];
-        imap.messages.set(1, { body: 'no digits here' });
-        const reader = MailReader.createForTest(() => imap as any);
-        await reader.connectToMail();
-        expect(await reader.getCode({ expectedLength: 5 })).toBeNull();
+    test('a fresh mail after the snapshot IS picked, read with PEEK, and only it is deleted (UID EXPUNGE)', async () => {
+        const mailbox = new FakeMailbox();
+        const old = mailbox.addTwoFa('111111');
+        const { reader, imap } = await readerOn(mailbox);
+        const snapshot = await reader.snapshotMailbox();
+        const fresh = mailbox.addTwoFa('482913');
+
+        expect(await reader.getCode({ snapshot, expectedLength: 6, requestStartedAt: new Date() })).toBe('482913');
+        expect(imap.markSeenRequested).toBe(false);
+        expect(imap.fetchBodies).toEqual([['HEADER.FIELDS (FROM SUBJECT DATE)'], ['1']]); // structure first, then the text part
+        expect(mailbox.byUid(fresh.uid)).toBeUndefined();
+        expect(mailbox.byUid(old.uid)).toBeDefined();
+        expect(mailbox.expungeCalls).toEqual([[fresh.uid]]);
     });
 
-    test('rejects when fetch emits an error', async () => {
-        const imap = new ConfigurableImap();
-        imap.searchResults = [1];
-        imap.fetch = (() => new ErrorFetch()) as any;
-        const reader = MailReader.createForTest(() => imap as any);
-        await reader.connectToMail();
-        await expect(reader.getCode()).rejects.toThrow('fetch error');
+    test('falls back to a plain EXPUNGE when the server has no UIDPLUS', async () => {
+        const mailbox = new FakeMailbox();
+        const { reader, imap } = await readerOn(mailbox);
+        (imap as any).serverSupports = () => false;
+        const snapshot = await reader.snapshotMailbox();
+        mailbox.addTwoFa('482913');
+        expect(await reader.getCode({ snapshot, expectedLength: 6 })).toBe('482913');
+        expect(mailbox.expungeCalls).toEqual(['all']);
     });
 
-    test('rejects when addFlags fails during delete', async () => {
-        const imap = new ConfigurableImap();
-        imap.searchResults = [1];
-        imap.messages.set(1, { body: 'Telegram code 12345' });
-        imap.addFlagsError = new Error('addFlags failed');
-        const reader = MailReader.createForTest(() => imap as any);
-        await reader.connectToMail();
-        await expect(reader.getCode({ expectedLength: 5 })).rejects.toThrow('addFlags failed');
+    test('a recovery-code mail after the snapshot is rejected; the 2FA mail is picked', async () => {
+        const mailbox = new FakeMailbox();
+        const { reader } = await readerOn(mailbox);
+        const snapshot = await reader.snapshotMailbox();
+        mailbox.addTwoFa('482913');
+        const recovery = mailbox.addRecovery('771234');
+
+        expect(await reader.getCode({ snapshot, expectedLength: 6 })).toBe('482913');
+        expect(mailbox.byUid(recovery.uid)).toBeDefined();
     });
 
-    test('rejects when expunge fails during delete', async () => {
-        const imap = new ConfigurableImap();
-        imap.searchResults = [1];
-        imap.messages.set(1, { body: 'Telegram code 12345' });
-        imap.expungeError = new Error('expunge failed');
-        const reader = MailReader.createForTest(() => imap as any);
-        await reader.connectToMail();
-        await expect(reader.getCode({ expectedLength: 5 })).rejects.toThrow('expunge failed');
+    test('only recovery mails after the snapshot → no code', async () => {
+        const mailbox = new FakeMailbox();
+        const { reader } = await readerOn(mailbox);
+        const snapshot = await reader.snapshotMailbox();
+        mailbox.addRecovery('771234');
+        expect(await reader.getCode({ snapshot, expectedLength: 6 })).toBeNull();
     });
 
-    test('parses a string mail date into a Date when filtering by freshness', async () => {
-        // Some IMAP servers/libraries deliver the message date as an ISO string
-        // rather than a Date object. getCode must coerce it so freshness filtering
-        // still works (string-date branch of the attributes handler).
-        const imap = new ConfigurableImap();
-        imap.searchResults = [1];
-        imap.messages.set(1, {
-            body: 'Telegram code 24680',
-            // intentionally a string to exercise the `new Date(attrs.date)` branch
-            date: '2026-04-11T10:05:00.000Z' as unknown as Date,
+    test('two fresh mails with the same code: the newest is picked', async () => {
+        const mailbox = new FakeMailbox();
+        const { reader } = await readerOn(mailbox);
+        const snapshot = await reader.snapshotMailbox();
+        const first = mailbox.addTwoFa('482913');
+        const second = mailbox.addTwoFa('482913');
+        expect(await reader.getCode({ snapshot, expectedLength: 6 })).toBe('482913');
+        expect(mailbox.byUid(second.uid)).toBeUndefined();
+        expect(mailbox.byUid(first.uid)).toBeDefined();
+    });
+
+    test('two fresh mails with DIFFERENT codes: EMAIL_CODE_AMBIGUOUS, nothing deleted', async () => {
+        const mailbox = new FakeMailbox();
+        const { reader } = await readerOn(mailbox);
+        const snapshot = await reader.snapshotMailbox();
+        mailbox.addTwoFa('482913');
+        mailbox.addTwoFa('555666');
+        await expect(reader.getCode({ snapshot, expectedLength: 6 })).rejects.toThrow(/EMAIL_CODE_AMBIGUOUS/);
+        expect(mailbox.present()).toHaveLength(2);
+        expect(await reader.isMailReady()).toBe(true); // a decision, not a broken connection
+    });
+
+    test('a mail Telegram SENT before this request (delivered late, after the snapshot) is rejected', async () => {
+        const mailbox = new FakeMailbox();
+        const { reader } = await readerOn(mailbox);
+        const snapshot = await reader.snapshotMailbox();
+        const requestStartedAt = new Date();
+        mailbox.addTwoFa('333333', { sentAt: new Date(requestStartedAt.getTime() - 70_000) });
+        expect(await reader.getCode({ snapshot, expectedLength: 6, requestStartedAt })).toBeNull();
+
+        mailbox.addTwoFa('482913', { sentAt: new Date(requestStartedAt.getTime() - 30_000) }); // within clock skew
+        expect(await reader.getCode({ snapshot, expectedLength: 6, requestStartedAt })).toBe('482913');
+    });
+
+    test('multipart: text/plain part 1 is read; colour codes and digits in the HTML part are ignored', async () => {
+        const mailbox = new FakeMailbox();
+        const { reader } = await readerOn(mailbox);
+        const snapshot = await reader.snapshotMailbox();
+        const html = '<html><body style="color:#333333"><b>123456</b> Your code is: 999999</body></html>';
+        mailbox.add({
+            subject: 'Your Code - 482913',
+            text: `--b1\r\nContent-Type: text/html\r\n\r\n${html}\r\n--b1\r\nContent-Type: text/plain\r\n\r\n${twoFaBody('482913')}\r\n--b1--`,
+            part1: twoFaBody('482913'),
+            struct: [
+                { type: 'alternative', params: { boundary: 'b1' } },
+                [{ partID: '1', type: 'text', subtype: 'plain', encoding: '7BIT' }],
+                [{ partID: '2', type: 'text', subtype: 'html', encoding: '7BIT' }],
+            ],
         });
-        const reader = MailReader.createForTest(() => imap as any);
-        await reader.connectToMail();
-
-        const code = await reader.getCode({
-            expectedLength: 5,
-            minReceivedAt: new Date('2026-04-11T10:00:00.000Z'),
-        });
-        expect(code).toBe('24680');
+        expect(await reader.getCode({ snapshot, expectedLength: 6 })).toBe('482913');
     });
 
-    test('extracts the first code with no expectedLength filter', async () => {
-        const imap = new ConfigurableImap();
-        imap.searchResults = [1];
-        imap.messages.set(1, { body: 'Your code is 4321 thanks' });
-        const reader = MailReader.createForTest(() => imap as any);
-        await reader.connectToMail();
-        expect(await reader.getCode()).toBe('4321');
-        expect(imap.deletedSeqNos).toEqual([1]);
+    test('multipart with the HTML part FIRST: the text/plain part (2) is read', async () => {
+        const mailbox = new FakeMailbox();
+        const { reader, imap } = await readerOn(mailbox);
+        const snapshot = await reader.snapshotMailbox();
+        mailbox.add({
+            subject: 'Your Code - 482913',
+            text: '(raw mime)',
+            part1: '<html><body style="color:#333333"><b>123456</b> Your code is: 999999</body></html>',
+            parts: { '2': twoFaBody('482913') },
+            struct: [
+                { type: 'alternative' },
+                [{ partID: '1', type: 'text', subtype: 'html', encoding: '7BIT' }],
+                [{ partID: '2', type: 'text', subtype: 'plain', encoding: '7BIT' }],
+            ],
+        });
+        expect(await reader.getCode({ snapshot, expectedLength: 6 })).toBe('482913');
+        expect(imap.fetchBodies[imap.fetchBodies.length - 1]).toEqual(['2']);
+    });
+
+    test('an HTML-only mail: tags, style colour codes and entities are stripped, then the strict rule applies', async () => {
+        const mailbox = new FakeMailbox();
+        const { reader } = await readerOn(mailbox);
+        const snapshot = await reader.snapshotMailbox();
+        const html =
+            '<html><head><style>.c{color:#333333} .d{color:#123456}</style></head>' +
+            '<body><div style="color:#654321">Your code is:&nbsp;<b>482913</b>. Use it to verify your email and activate ' +
+            'two-step verification in Telegram&nbsp;Messenger.</div><p>Yours,<br>The Telegram Team</p></body></html>';
+        mailbox.add({
+            subject: 'Your Code - 482913',
+            text: html,
+            part1: html,
+            struct: [{ partID: '1', type: 'text', subtype: 'html', encoding: '7BIT' }],
+        });
+        expect(await reader.getCode({ snapshot, expectedLength: 6 })).toBe('482913');
+    });
+
+    test('an HTML-only recovery mail is still rejected', async () => {
+        const mailbox = new FakeMailbox();
+        const { reader } = await readerOn(mailbox);
+        const snapshot = await reader.snapshotMailbox();
+        const html = `<p>${recoveryBody('771234').replace(/\r\n/g, '<br>')}</p>`;
+        mailbox.add({ subject: 'Your Recovery Code - 771234', text: html, part1: html, struct: [{ partID: '1', type: 'text', subtype: 'html' }] });
+        expect(await reader.getCode({ snapshot, expectedLength: 6 })).toBeNull();
+    });
+
+    test('a mail with no text part at all is rejected (no_text_part)', async () => {
+        const mailbox = new FakeMailbox();
+        const { reader } = await readerOn(mailbox);
+        const snapshot = await reader.snapshotMailbox();
+        mailbox.add({ subject: 'Your Code - 482913', text: '', part1: '', struct: [{ partID: '1', type: 'image', subtype: 'png' }] });
+        expect(await reader.getCode({ snapshot, expectedLength: 6 })).toBeNull();
+    });
+
+    test('base64 and quoted-printable plain parts are decoded', async () => {
+        const mailbox = new FakeMailbox();
+        const { reader } = await readerOn(mailbox);
+        let snapshot = await reader.snapshotMailbox();
+        mailbox.add({
+            subject: 'Your Code - 482913',
+            text: '',
+            part1: Buffer.from(twoFaBody('482913')).toString('base64').replace(/(.{76})/g, '$1\r\n'),
+            struct: [{ partID: '1', type: 'text', subtype: 'plain', encoding: 'BASE64' }],
+        });
+        expect(await reader.getCode({ snapshot, expectedLength: 6 })).toBe('482913');
+
+        snapshot = await reader.snapshotMailbox();
+        mailbox.add({
+            subject: 'Your Code - 246802',
+            text: '',
+            part1: 'Your code is: 246802. Use it to verify your email and activate two-step verif=\r\nication in Telegram Messenger. Don=E2=80=99t share it.',
+            struct: [{ partID: '1', type: 'text', subtype: 'plain', encoding: 'QUOTED-PRINTABLE' }],
+        });
+        expect(await reader.getCode({ snapshot, expectedLength: 6 })).toBe('246802');
+    });
+
+    test('a mail not from Telegram is rejected even if search returned it', async () => {
+        const mailbox = new FakeMailbox();
+        const { reader, imap } = await readerOn(mailbox);
+        const snapshot = await reader.snapshotMailbox();
+        const spoof = mailbox.addTwoFa('482913', { from: 'Someone <x@example.com>' });
+        imap.search = (_c: any, cb: any) => cb(null, [spoof.uid]);
+        expect(await reader.getCode({ snapshot, expectedLength: 6 })).toBeNull();
+    });
+
+    test('UIDVALIDITY change since the snapshot fails the lookup', async () => {
+        const mailbox = new FakeMailbox();
+        const { reader } = await readerOn(mailbox);
+        const snapshot = await reader.snapshotMailbox();
+        mailbox.uidValidity = 2;
+        mailbox.addTwoFa('482913');
+        await expect(reader.getCode({ snapshot, expectedLength: 6 })).rejects.toThrow(/EMAIL_UIDVALIDITY_CHANGED/);
+    });
+
+    test('a lookup without a snapshot is refused', async () => {
+        const { reader } = await readerOn(new FakeMailbox());
+        await expect(reader.getCode({} as any)).rejects.toThrow(/needs a mailbox snapshot/);
+        await expect(reader.getCode({ snapshot: { sinceUid: 0, uidValidity: 1 } })).rejects.toThrow(/needs a mailbox snapshot/);
+    });
+
+    test('decision log lines are greppable and never contain the code', async () => {
+        const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+        const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+        try {
+            const mailbox = new FakeMailbox();
+            const { reader } = await readerOn(mailbox);
+            const snapshot = await reader.snapshotMailbox('••••1234');
+            const recovery = mailbox.addRecovery('771234');
+            const fresh = mailbox.addTwoFa('482913');
+            expect(await reader.getCode({ snapshot, expectedLength: 6, logTag: '••••1234' })).toBe('482913');
+
+            const lines = [...warn.mock.calls, ...log.mock.calls].map((c) => String(c[0])).filter((l) => l.startsWith('email-code '));
+            expect(lines).toEqual(expect.arrayContaining([
+                `email-code kind=snapshot mobile=••••1234 uid=${snapshot.sinceUid}`,
+                `email-code kind=rejected reason=recovery_email mobile=••••1234 uid=${recovery.uid} subject=Your_Recovery_Code_-_NNNNNN`,
+                `email-code kind=picked mobile=••••1234 uid=${fresh.uid}`,
+            ]));
+            expect(lines.join('\n')).not.toMatch(/482913|771234/);
+
+            const snap2 = await reader.snapshotMailbox('••••1234');
+            const odd = mailbox.add({ subject: 'Telegram code 246802 for you', text: 'Your code is: 246802. Thanks.' });
+            expect(await reader.getCode({ snapshot: snap2, expectedLength: 6, logTag: '••••1234' })).toBeNull();
+            expect(warn.mock.calls.map((c) => String(c[0]))).toContain(
+                `email-code kind=rejected reason=not_2fa_email mobile=••••1234 uid=${odd.uid} subject=Telegram_code_NNNNNN_for_you`,
+            );
+        } finally {
+            warn.mockRestore();
+            log.mockRestore();
+        }
     });
 });
 
-describe('runExclusive — error propagation', () => {
-    test('propagates the rejection but still releases the lock for the next op', async () => {
+describe('MailReader.getCode error branches', () => {
+    test('throws when the reader is not ready', async () => {
         const reader = MailReader.createForTest(() => new ConfigurableImap() as any);
-        await expect(
-            reader.runExclusive(async () => {
-                throw new Error('op failed');
-            }),
-        ).rejects.toThrow('op failed');
+        await expect(reader.getCode({ snapshot: { sinceUid: 1, uidValidity: 1 } })).rejects.toThrow(/Mail server is not ready/);
+    });
 
-        // lock released -> a subsequent operation runs normally
-        const result = await reader.runExclusive(async () => 'ok');
-        expect(result).toBe('ok');
+    test('openBox / search / fetch failures reject and mark the connection not ready', async () => {
+        for (const breakIt of [
+            (imap: FakeImap) => { imap.openBox = (_n: string, _r: boolean, cb: any) => cb(new Error('open box failed')); },
+            (imap: FakeImap) => { imap.search = (_c: any, cb: any) => cb(new Error('search failed'), []); },
+            (imap: FakeImap) => { imap.failFetch = new Error('fetch error'); },
+        ]) {
+            const mailbox = new FakeMailbox();
+            const { reader, imap } = await readerOn(mailbox);
+            const snapshot = await reader.snapshotMailbox();
+            mailbox.addTwoFa('482913');
+            breakIt(imap);
+            await expect(reader.getCode({ snapshot, expectedLength: 6 })).rejects.toThrow(/open box failed|search failed|fetch error/);
+            expect(await reader.isMailReady()).toBe(false);
+        }
+    });
+
+    test('a failed delete (flag or expunge) still returns the valid code and logs delete_failed', async () => {
+        for (const breakIt of [
+            (imap: FakeImap) => { imap.addFlags = (_u: number[], _f: string, cb: any) => cb(new Error('addFlags failed')); },
+            (imap: FakeImap) => { imap.expunge = ((_u: any, cb: any) => cb(new Error('expunge failed'))) as any; },
+        ]) {
+            const mailbox = new FakeMailbox();
+            const { reader, imap } = await readerOn(mailbox);
+            const snapshot = await reader.snapshotMailbox();
+            mailbox.addTwoFa('482913');
+            breakIt(imap);
+            const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+            try {
+                expect(await reader.getCode({ snapshot, expectedLength: 6 })).toBe('482913');
+                expect(warn.mock.calls.map((c) => String(c[0])).some((l) => /^email-code kind=delete_failed uid=\d+ error=(addFlags|expunge)_failed$/.test(l))).toBe(true);
+            } finally {
+                warn.mockRestore();
+            }
+            // the snapshot still stops reuse: a later attempt never sees this mail
+            const next = await reader.snapshotMailbox();
+            expect(await reader.getCode({ snapshot: next, expectedLength: 6 })).toBeNull();
+        }
     });
 });
 
-describe('extractTelegramCode / isMailFreshEnough edge cases', () => {
-    test('extractTelegramCode returns null when there is no match', () => {
-        expect(extractTelegramCode('no codes', 5)).toBeNull();
-        expect(extractTelegramCode('')).toBeNull();
+describe('runExclusive', () => {
+    test('serializes mailbox access within one process', async () => {
+        const reader = MailReader.createForTest(() => new ConfigurableImap() as any);
+        const order: string[] = [];
+        const first = reader.runExclusive(async () => {
+            order.push('first:start');
+            await new Promise((resolve) => setTimeout(resolve, 5));
+            order.push('first:end');
+        });
+        const second = reader.runExclusive(async () => {
+            order.push('second:start');
+            order.push('second:end');
+        });
+        await Promise.all([first, second]);
+        expect(order).toEqual(['first:start', 'first:end', 'second:start', 'second:end']);
     });
 
-    test('isMailFreshEnough returns true when minReceivedAt or receivedAt is missing', () => {
-        expect(isMailFreshEnough(null)).toBe(true);
-        expect(isMailFreshEnough(null, new Date())).toBe(true);
-        expect(isMailFreshEnough(new Date())).toBe(true);
+    test('serializes across processes through the shared lock (two readers, one lock key)', async () => {
+        jest.useFakeTimers();
+        try {
+            const lock = new InMemoryMailboxLock();
+            const cms = MailReader.createForTest(() => new ConfigurableImap() as any, lock);
+            const ums = MailReader.createForTest(() => new ConfigurableImap() as any, lock);
+            const order: string[] = [];
+            const a = cms.runExclusive(async () => {
+                order.push('cms:start');
+                await new Promise((r) => setTimeout(r, 30_000));
+                order.push('cms:end');
+            });
+            const b = ums.runExclusive(async () => {
+                order.push('ums:start');
+            });
+            await jest.advanceTimersByTimeAsync(40_000);
+            await Promise.all([a, b]);
+            expect(order).toEqual(['cms:start', 'cms:end', 'ums:start']);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    test('propagates the rejection but still releases both locks', async () => {
+        const lock = new InMemoryMailboxLock();
+        const reader = MailReader.createForTest(() => new ConfigurableImap() as any, lock);
+        await expect(reader.runExclusive(async () => { throw new Error('op failed'); })).rejects.toThrow('op failed');
+        expect(await reader.runExclusive(async () => 'ok')).toBe('ok');
+        const other = MailReader.createForTest(() => new ConfigurableImap() as any, lock);
+        expect(await other.runExclusive(async () => 'ok2')).toBe('ok2');
+    });
+
+    test('shared lock unreachable → proceeds WITHOUT the cross-process lock and logs redis_unavailable_proceed', async () => {
+        const lock = { tryAcquire: jest.fn().mockRejectedValue(new Error('redis not ready (status=reconnecting)')), release: jest.fn() };
+        const reader = MailReader.createForTest(() => new ConfigurableImap() as any, lock);
+        const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+        try {
+            expect(await reader.runExclusive(async () => 'ran', '••••1234')).toBe('ran');
+            expect(warn.mock.calls.map((c) => String(c[0]))).toContain(
+                'email-code kind=lock reason=redis_unavailable_proceed mobile=••••1234 error=redis_not_ready_(status=reconnecting)',
+            );
+            expect(lock.release).not.toHaveBeenCalled(); // nothing held, nothing to release
+        } finally {
+            warn.mockRestore();
+        }
+    });
+
+    test('lock seen held, then Redis throws → EMAIL_LOCK_BUSY, never proceeds unlocked', async () => {
+        jest.useFakeTimers();
+        try {
+            const lock = {
+                tryAcquire: jest.fn().mockResolvedValueOnce(null).mockRejectedValue(new Error('redis not ready (status=reconnecting)')),
+                release: jest.fn(),
+            };
+            const reader = MailReader.createForTest(() => new ConfigurableImap() as any, lock);
+            const op = jest.fn();
+            const settled = reader.runExclusive(op).then(() => 'ran', (e) => e);
+            await jest.advanceTimersByTimeAsync(5_000);
+            expect(String(await settled)).toMatch(/^EmailCodeError: EMAIL_LOCK_BUSY: lock was held elsewhere, then the lock store failed/);
+            expect(op).not.toHaveBeenCalled();
+            expect(lock.release).not.toHaveBeenCalled();
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    test('lock held elsewhere for a while → waits, then proceeds once it is free', async () => {
+        jest.useFakeTimers();
+        try {
+            const lock = new InMemoryMailboxLock();
+            const other = await lock.tryAcquire(300_000);
+            setTimeout(() => void lock.release(other!), 30_000);
+            const reader = MailReader.createForTest(() => new ConfigurableImap() as any, lock);
+            const settled = reader.runExclusive(async () => 'ran').then((v) => v, (e) => e);
+            await jest.advanceTimersByTimeAsync(35_000);
+            expect(await settled).toBe('ran');
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    test('lock held elsewhere for longer than the wait → EMAIL_LOCK_BUSY, operation never runs', async () => {
+        jest.useFakeTimers();
+        try {
+            const lock = { tryAcquire: jest.fn().mockResolvedValue(null), release: jest.fn() };
+            const reader = MailReader.createForTest(() => new ConfigurableImap() as any, lock);
+            const op = jest.fn();
+            const settled = reader.runExclusive(op).then(() => 'ok', (e) => e);
+            await jest.advanceTimersByTimeAsync(3 * 60_000 + 5_000);
+            expect(String(await settled)).toMatch(/EMAIL_LOCK_BUSY/);
+            expect(op).not.toHaveBeenCalled();
+            expect(lock.tryAcquire.mock.calls.length).toBeGreaterThan(10);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    test('a failed lock release is logged, not thrown (TTL frees it)', async () => {
+        const lock = { tryAcquire: jest.fn().mockResolvedValue('t'), release: jest.fn().mockRejectedValue(new Error('redis blip')) };
+        const reader = MailReader.createForTest(() => new ConfigurableImap() as any, lock);
+        expect(await reader.runExclusive(async () => 'ok')).toBe('ok');
+        expect(lock.release).toHaveBeenCalledWith('t');
     });
 });
 
-describe('mail helpers', () => {
-    test('extractTelegramCode honors the expected length', () => {
-        expect(extractTelegramCode('Codes: 12345 and 999999', 5)).toBe('12345');
-        expect(extractTelegramCode('Codes: 12345 and 999999', 6)).toBe('999999');
+describe('RedisMailboxLock', () => {
+    test('acquires with SET NX PX and releases only its own token', async () => {
+        const redis = { status: 'ready', set: jest.fn().mockResolvedValue('OK'), eval: jest.fn().mockResolvedValue(1) };
+        const lock = new RedisMailboxLock(() => redis as any);
+        const token = await lock.tryAcquire(300_000);
+        expect(token).toEqual(expect.any(String));
+        expect(redis.set).toHaveBeenCalledWith(MAILBOX_LOCK_KEY, token, 'PX', 300_000, 'NX');
+        await lock.release(token!);
+        expect(redis.eval).toHaveBeenCalledWith(expect.stringContaining("redis.call('get', KEYS[1]) == ARGV[1]"), 1, MAILBOX_LOCK_KEY, token);
     });
 
-    test('isMailFreshEnough rejects stale mail beyond the allowed clock skew', () => {
-        const startedAt = new Date('2026-04-11T10:00:00.000Z');
-        expect(isMailFreshEnough(new Date('2026-04-11T09:58:30.000Z'), startedAt)).toBe(false);
-        expect(isMailFreshEnough(new Date('2026-04-11T09:59:30.000Z'), startedAt)).toBe(true);
+    test('returns null when another holder has the key', async () => {
+        const lock = new RedisMailboxLock(() => ({ status: 'ready', set: jest.fn().mockResolvedValue(null), eval: jest.fn() }) as any);
+        expect(await lock.tryAcquire(1000)).toBeNull();
+    });
+
+    test('a hung Redis command times out instead of blocking set2fa', async () => {
+        jest.useFakeTimers();
+        try {
+            const lock = new RedisMailboxLock(() => ({ status: 'ready', set: () => new Promise(() => undefined), eval: jest.fn().mockResolvedValue(0) }) as any);
+            const settled = lock.tryAcquire(1000).then(() => 'ok', (e) => e);
+            await jest.advanceTimersByTimeAsync(5_001);
+            expect(String(await settled)).toMatch(/mailbox lock acquire timed out/);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    test('Redis not ready → throws without sending SET (nothing parked in the offline queue)', async () => {
+        for (const status of ['reconnecting', 'connecting', 'end', 'wait']) {
+            const redis = { status, set: jest.fn(), eval: jest.fn() };
+            await expect(new RedisMailboxLock(() => redis as any).tryAcquire(1000)).rejects.toThrow(`redis not ready (status=${status})`);
+            expect(redis.set).not.toHaveBeenCalled();
+        }
+    });
+
+    test('a SET that times out but lands later leaves no held lock (owner release queued behind it)', async () => {
+        jest.useFakeTimers();
+        try {
+            // Fake Redis that answers in order, late: models ioredis resending unanswered commands after a stall.
+            const store = new Map<string, string>();
+            const pending: Array<() => void> = [];
+            const redis = {
+                status: 'ready',
+                set: (key: string, value: string) => new Promise((resolve) => pending.push(() => {
+                    if (store.has(key)) return resolve(null);
+                    store.set(key, value);
+                    resolve('OK');
+                })),
+                eval: (_script: string, _n: number, key: string, token: string) => new Promise((resolve) => pending.push(() => {
+                    if (store.get(key) === token) {
+                        store.delete(key);
+                        return resolve(1);
+                    }
+                    resolve(0);
+                })),
+            };
+            const lock = new RedisMailboxLock(() => redis as any);
+            const settled = lock.tryAcquire(300_000).then(() => 'ok', (e) => e);
+            await jest.advanceTimersByTimeAsync(5_001);
+            expect(String(await settled)).toMatch(/mailbox lock acquire timed out/);
+
+            while (pending.length) pending.shift()!(); // the stalled connection drains: SET, then the release
+            await Promise.resolve();
+            expect(store.has(MAILBOX_LOCK_KEY)).toBe(false);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    test('in-memory lock: expires after its TTL, ignores a stale token on release', async () => {
+        const lock = new InMemoryMailboxLock();
+        const t1 = await lock.tryAcquire(10);
+        expect(await lock.tryAcquire(10)).toBeNull();
+        await new Promise((r) => setTimeout(r, 15));
+        const t2 = await lock.tryAcquire(1000);
+        expect(t2).not.toBeNull();
+        await lock.release(t1!); // stale token: no effect
+        expect(await lock.tryAcquire(1000)).toBeNull();
+        await lock.release(t2!);
+        expect(await lock.tryAcquire(1000)).not.toBeNull();
     });
 });

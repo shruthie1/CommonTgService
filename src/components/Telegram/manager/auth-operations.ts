@@ -7,8 +7,12 @@ import { parseError } from '../../../utils/parseError';
 import { sendBotNotice } from '../../../utils/bot-notice';
 import { generateTGConfig } from '../utils/generateTGConfig';
 import { getAuthProtectionReason, isAuthFingerprintMatch } from '../utils/tg-config';
-import { MailReader } from '../../../IMap/IMap';
+import { EmailCodeError, MailReader, emailCodeLog } from '../../../IMap/IMap';
 import { maskMobile } from '../../monitor/monitor-util';
+
+/** Poll budget for Telegram's 2FA mail after the request: Gmail shows it ~13 s after Telegram sends it. */
+const EMAIL_CODE_POLLS = 6;
+const EMAIL_CODE_POLL_INTERVAL_MS = 10_000;
 
 export function isOwnAuth(mobile: string, auth: Api.Authorization): boolean {
     // PRIMARY CHECK: Telegram flags the session making the API call as current.
@@ -174,37 +178,57 @@ export async function set2fa(ctx: TgContext): Promise<{ email: string; hint: str
             newPassword: 'Ajtdmwajt1@',
         };
 
+        const logTag = maskMobile(ctx.phoneNumber) || 'unknown';
+
         return imapService.runExclusive(async () => {
             ctx.logger.info(ctx.phoneNumber, 'Waiting for exclusive access to 2FA mailbox');
-            await imapService.connectToMail(30_000);
-
-            ctx.logger.info(ctx.phoneNumber, 'Mail is ready, setting 2FA');
-            const verificationStartedAt = new Date();
             try {
+                await imapService.connectToMail(30_000);
+            } catch (error) {
+                emailCodeLog('failed', { reason: 'connect_failed', mobile: logTag });
+                throw error;
+            }
+
+            try {
+                // Snapshot BEFORE Telegram is asked to mail a code: only mails after this point can
+                // carry this attempt's code (see MailReader.snapshotMailbox).
+                const snapshot = await imapService.snapshotMailbox(logTag);
+                ctx.logger.info(ctx.phoneNumber, 'Mail is ready, setting 2FA');
+                const requestStartedAt = new Date();
+                let codeRequests = 0;
+
                 await ctx.client.updateTwoFaSettings({
                     isCheckPassword: false,
                     email: twoFaDetails.email,
                     hint: twoFaDetails.hint,
                     newPassword: twoFaDetails.newPassword,
                     emailCodeCallback: async (length: number) => {
-                        ctx.logger.info(ctx.phoneNumber, `Email code requested by Telegram (length=${length})`);
-                        const maxRetries = 4;
-                        for (let retry = 0; retry < maxRetries; retry++) {
-                            await new Promise(r => setTimeout(r, 10_000));
-                            ctx.logger.info(ctx.phoneNumber, `Checking for email code (attempt ${retry + 1}/${maxRetries})`);
+                        codeRequests++;
+                        ctx.logger.info(ctx.phoneNumber, `Email code requested by Telegram (length=${length}, request=${codeRequests})`);
+                        if (codeRequests > 1) {
+                            // gramjs only re-asks after onEmailCodeError, which throws. Never read a
+                            // second code inside one attempt: the first mail may still be unread.
+                            emailCodeLog('failed', { reason: 'second_request', mobile: logTag });
+                            throw new EmailCodeError('EMAIL_CODE_SECOND_REQUEST', 'Telegram asked for a code twice in one attempt');
+                        }
+                        for (let poll = 1; poll <= EMAIL_CODE_POLLS; poll++) {
+                            await new Promise((r) => setTimeout(r, EMAIL_CODE_POLL_INTERVAL_MS));
+                            ctx.logger.info(ctx.phoneNumber, `Checking for email code (attempt ${poll}/${EMAIL_CODE_POLLS})`);
                             if (!(await imapService.isMailReady())) {
+                                emailCodeLog('failed', { reason: 'connection_lost', mobile: logTag });
                                 throw new Error('Mail connection lost while waiting for code');
                             }
-                            const code = await imapService.getCode({
-                                expectedLength: length,
-                                minReceivedAt: verificationStartedAt,
-                            });
+                            const code = await imapService.getCode({ snapshot, expectedLength: length, requestStartedAt, logTag });
                             if (code) {
                                 ctx.logger.info(ctx.phoneNumber, 'Got email code');
                                 return code;
                             }
                         }
-                        throw new Error(`Failed to retrieve email code after ${maxRetries} attempts`);
+                        emailCodeLog('timeout', { reason: 'no_fresh_code', mobile: logTag, uid: snapshot.sinceUid });
+                        throw new EmailCodeError(
+                            'EMAIL_CODE_TIMEOUT',
+                            `no fresh 2FA mail after ${EMAIL_CODE_POLLS} polls (${(EMAIL_CODE_POLLS * EMAIL_CODE_POLL_INTERVAL_MS) / 1000}s)`,
+                        );
                     },
                     onEmailCodeError: (e: Error): never => {
                         // gramjs 2.26 (client/2fa.js) calls this SYNCHRONOUSLY inside a
@@ -222,7 +246,7 @@ export async function set2fa(ctx: TgContext): Promise<{ email: string; hint: str
 
             ctx.logger.info(ctx.phoneNumber, '2FA set successfully');
             return twoFaDetails;
-        });
+        }, logTag);
     } else {
         ctx.logger.info(ctx.phoneNumber, 'Password already exists');
     }

@@ -58,6 +58,7 @@ describe('set2fa', () => {
         const fakeMailReader = {
             runExclusive: jest.fn(async (operation: () => Promise<unknown>) => operation()),
             connectToMail: jest.fn().mockResolvedValue(undefined),
+            snapshotMailbox: jest.fn().mockResolvedValue({ sinceUid: 14_200, uidValidity: 1 }),
             isMailReady: jest.fn().mockResolvedValue(true),
             getCode: jest
                 .fn()
@@ -78,14 +79,16 @@ describe('set2fa', () => {
                 1,
                 expect.objectContaining({
                     expectedLength: 5,
-                    minReceivedAt: expect.any(Date),
+                    snapshot: { sinceUid: 14_200, uidValidity: 1 },
+                    requestStartedAt: expect.any(Date),
                 }),
             );
             expect(fakeMailReader.getCode).toHaveBeenNthCalledWith(
                 2,
                 expect.objectContaining({
                     expectedLength: 5,
-                    minReceivedAt: expect.any(Date),
+                    snapshot: { sinceUid: 14_200, uidValidity: 1 },
+                    requestStartedAt: expect.any(Date),
                 }),
             );
         });
@@ -121,6 +124,7 @@ describe('set2fa', () => {
         const fakeMailReader = {
             runExclusive: jest.fn(async (operation: () => Promise<unknown>) => operation()),
             connectToMail: jest.fn().mockResolvedValue(undefined),
+            snapshotMailbox: jest.fn().mockResolvedValue({ sinceUid: 14_200, uidValidity: 1 }),
             isMailReady: jest.fn().mockResolvedValue(true),
             getCode: jest.fn(),
             disconnectFromMail: jest.fn().mockResolvedValue(undefined),
@@ -151,6 +155,7 @@ describe('set2fa', () => {
         const fakeMailReader = {
             runExclusive: jest.fn(async (operation: () => Promise<unknown>) => operation()),
             connectToMail: jest.fn().mockResolvedValue(undefined),
+            snapshotMailbox: jest.fn().mockResolvedValue({ sinceUid: 14_200, uidValidity: 1 }),
             isMailReady: jest.fn().mockResolvedValue(true),
             getCode: jest.fn().mockResolvedValue('12345'),
             disconnectFromMail: jest.fn().mockResolvedValue(undefined),
@@ -206,6 +211,7 @@ describe('set2fa', () => {
         const fakeMailReader = {
             runExclusive: jest.fn(async (operation: () => Promise<unknown>) => operation()),
             connectToMail: jest.fn().mockResolvedValue(undefined),
+            snapshotMailbox: jest.fn().mockResolvedValue({ sinceUid: 14_200, uidValidity: 1 }),
             isMailReady: jest.fn().mockResolvedValue(true),
             getCode: jest.fn(),
             disconnectFromMail: jest.fn().mockResolvedValue(undefined),
