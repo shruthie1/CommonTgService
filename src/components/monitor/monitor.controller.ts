@@ -35,11 +35,11 @@ export function parseUpiWindow(window?: string): UpiWindow {
   throw new BadRequestException(`window must be one of ${UPI_WINDOWS.join('|')} (paymentProofs keep 7 days)`);
 }
 
-/** A row key of GET /monitor/upi-revenue ('other' or 'u' + 12 hex). 400 otherwise. */
+/** A row key of GET /monitor/upi-revenue ('other', 'laxmi', 'l' + label, or 'u' + 12 hex). 400 otherwise. */
 export function parseUpiRowKey(key?: string): string {
   const k = String(key ?? '').trim();
   if (UPI_ROW_KEY.test(k)) return k;
-  throw new BadRequestException('key must be a row key of /monitor/upi-revenue (other, or u + 12 hex)');
+  throw new BadRequestException('key must be a row key of /monitor/upi-revenue (other, laxmi, l + label, or u + 12 hex)');
 }
 
 export function parseDays(days?: string): 7 | 30 {
@@ -242,7 +242,8 @@ export class MonitorController {
   }
 
   /**
-   * Credited revenue by receiving UPI id, one row per id (masked), today IST or the last 7 IST days. Owner revenue
+   * Credited revenue by owner label (upi-labels; its ids inside), else by receiving UPI id (masked), today IST or the
+   * last 7 IST days. "Laxmi" payee credits sit apart in one flagged row. Owner revenue
    * rules applied (no fake-marked chats, no credit of ₹1,000+). 400 on a bad window, 503 when Mongo fails.
    */
   @Get('upi-revenue')
@@ -258,7 +259,7 @@ export class MonitorController {
    */
   @Get('upi-revenue/items')
   @ApiQuery({ name: 'window', required: false, enum: UPI_WINDOWS })
-  @ApiQuery({ name: 'key', required: true, description: "row key from /monitor/upi-revenue ('other' or u + 12 hex)" })
+  @ApiQuery({ name: 'key', required: true, description: "row key from /monitor/upi-revenue ('other', 'laxmi', l + label, or u + 12 hex)" })
   upiRevenueItems(@Query('window') window?: string, @Query('key') key?: string) {
     return this.service.upiRevenueItems(parseUpiWindow(window), parseUpiRowKey(key));
   }

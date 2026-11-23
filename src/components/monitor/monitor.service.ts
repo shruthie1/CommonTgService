@@ -300,7 +300,9 @@ export interface ClientDay {
 /** Paid chats: closed days are fixed once written (late sink rows aside), so up to 30 days are kept. */
 export const PAID_HIST_KEYS = 30;
 /** One window's UPI fold, the credits it counted (row key each) and clientId -> clients.repl, cached together. */
-interface UpiRevenueSnapshot { fold: UpiRevenueFold; credits: UpiCountedCredit[]; hosts: Map<string, string> }
+interface UpiRevenueSnapshot { fold: UpiRevenueFold; credits: UpiCountedCredit[]; hosts: Map<string, string>; labelsFailed: boolean }
+/** Note on the table and drill-down when the upi-labels read failed (the fold fell back to one row per id). */
+export const UPI_LABELS_FAILED_NOTE = 'Labels unavailable, showing one row per UPI id.';
 
 /** Max chat ids sent to the one userData username lookup per request. */
 export const PAID_ENRICH_MAX = 1000;
@@ -3076,9 +3078,9 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
   // ---------------------------------------------------------------- revenue by receiving UPI id (read-only)
 
   /**
-   * Credited revenue of today (IST) or the last 7 IST days incl. today, one row per receiving UPI id (logic and
-   * owner rules: monitor-upi.ts). Mongo only: paymentProofs (7-day TTL, so 7 days is the longest window; image and
-   * ocr never read), userData fakePaymentAt, upi-ids, clients qrId/gpayId. Ids are masked here. Mongo failure = 503.
+   * Credited revenue of today (IST) or the last 7 IST days incl. today, one row per owner label (its ids inside), else
+   * per receiving UPI id (logic and owner rules: monitor-upi.ts). Mongo only: paymentProofs (7-day TTL, so 7 days is
+   * the longest window; image and ocr never read), userData fakePaymentAt, upi-ids, upi-labels, clients qrId/gpayId. Ids are masked here. Mongo failure = 503.
    */
   async upiRevenue(window: UpiWindow) {
     const { meta, snap } = await this.upiRevenueSnapshot(window);
@@ -3088,6 +3090,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       notes: [
         'Excludes proofs voided by Uncredit, every credit of chats marked fake, and any credit of ₹1,000 or more.',
         "Name-matched: no UPI id read, so the banking name read picks the id (the client's qrId, else gpayId, on that account; else the account's one id).",
+        ...(snap.labelsFailed ? [UPI_LABELS_FAILED_NOTE] : []),
       ],
     };
   }
@@ -3099,10 +3102,11 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
    */
   async upiRevenueItems(window: UpiWindow, key: string) {
     const { meta, snap } = await this.upiRevenueSnapshot(window);
-    const row = snap.fold.rows.find((r) => r.key === key);
+    // A label row, or one id row inside a label row (its own split).
+    const row = snap.fold.rows.find((r) => r.key === key) ?? snap.fold.rows.flatMap((r) => r.upis ?? []).find((r) => r.key === key);
     if (!row) throw new NotFoundException(`no row ${key} in the ${window} window`);
     const items = upiRowItems(snap.credits, key, snap.hosts);
-    const notes: string[] = [];
+    const notes: string[] = snap.labelsFailed ? [UPI_LABELS_FAILED_NOTE] : [];
     await this.addUsernames(items, notes);
     return {
       ...meta,
@@ -3129,10 +3133,19 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
           // 7 days are read for both windows: the id accounts for the name match come from the last 7 days.
           const start = istDayStart(from);
           const end = new Date(istDayStart(addDays(today, 1)));
-          const [proofs7, upiDocs, clients] = await Promise.all([
+          let labelsFailed = false;
+          const [proofs7, upiDocs, clients, labels] = await Promise.all([
             this.mongoFind('paymentProofs', { servedAt: { $gte: new Date(istDayStart(from7)), $lt: end } }, UPI_PROOF_PROJECTION, 'mongo.paymentProofs_upi', timings),
             this.mongoFind('upi-ids', {}, {}, 'mongo.upiIds', timings),
             this.mongoFind('clients', {}, { clientId: 1, qrId: 1, gpayId: 1, repl: 1 }, 'mongo.clients_upi', timings),
+            // Owner labels of ids ({ upiId, label }); missing collection = no rows = one row per id as before. A failed
+            // read is the same: one row per id (totals unchanged), never a failed table.
+            this.mongoFind('upi-labels', {}, { upiId: 1, label: 1 }, 'mongo.upiLabels', timings).catch((err) => {
+              const msg = String((err as Error)?.message ?? err).replace(/mongodb(\+srv)?:\/\/\S+/gi, '<uri>').slice(0, 200);
+              this.logger.warn(`upi-labels kind=read_failed window=${window} err=${msg}`);
+              labelsFailed = true;
+              return [] as any[];
+            }),
           ]);
           const proofs = proofs7.filter((p: any) => new Date(p.servedAt).getTime() >= start);
           const chats = [...new Set(proofs.map((p: any) => String(p.chatId ?? '')).filter(Boolean))];
@@ -3143,8 +3156,12 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
           }
           const hosts = new Map<string, string>();
           for (const c of clients) if (typeof c.clientId === 'string' && typeof c.repl === 'string' && c.repl) hosts.set(c.clientId, c.repl);
-          const { fold, credits } = foldUpiRevenueWithCredits({ proofs, accountProofs: proofs7, fakeChats, upiDocs, clients });
-          return { value: { fold, credits, hosts }, asOf, timings };
+          const { fold, credits } = foldUpiRevenueWithCredits({ proofs, accountProofs: proofs7, fakeChats, upiDocs, clients, labels });
+          const labelRows = fold.rows.filter((r) => r.kind === 'label').length;
+          const unlabelled = fold.rows.filter((r) => r.kind !== 'label' && r.kind !== 'laxmi' && r.kind !== 'other').length;
+          const laxmiCredits = fold.rows.find((r) => r.kind === 'laxmi')?.credits ?? 0;
+          this.logger.log(`upi-labels kind=fold window=${window} labels=${labels.length} labelRows=${labelRows} unlabelled=${unlabelled} laxmiCredits=${laxmiCredits}`);
+          return { value: { fold, credits, hosts, labelsFailed }, asOf, timings };
         },
         istDayStart(addDays(today, 1)),
       );
