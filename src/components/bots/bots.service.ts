@@ -2426,8 +2426,9 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             if (!perms || (me as any)?.rank === 'creator') return desired;
             const capped: Record<string, boolean> = {};
             for (const [k, v] of Object.entries(desired)) {
-                // Grant a right only if desired AND the promoter holds it (anonymous is cosmetic — keep).
-                capped[k] = k === 'anonymous' ? v : Boolean(v && perms[k]);
+                // Grant a right only if desired AND the promoter holds it. anonymous too: EditAdmin returns
+                // RIGHT_FORBIDDEN for it when the promoter is not anonymous (2026-11-27, CHANNEL_NOTIFICATIONS).
+                capped[k] = Boolean(v && perms[k]);
             }
             return capped;
         } catch {

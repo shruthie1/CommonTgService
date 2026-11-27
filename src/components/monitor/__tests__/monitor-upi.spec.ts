@@ -364,6 +364,19 @@ describe('drill-down: the credits of each row (GET /monitor/upi-revenue/items)',
     expect(() => parseUpiRowKey(undefined)).toThrow(BadRequestException);
   });
 
+  it('2026-11-27 payeeIdOurs: true when the payee id read is one of ours, also on Laxmi-row items', () => {
+    const lx = [
+      p({ chatId: 'lx1', payeeUpiId: RL, payeeName: 'Laxmi Devi', creditAmount: 40, servedAt: t(8) }),
+      p({ chatId: 'lx2', payeeUpiId: 'stranger9876@ybl', payeeName: 'Laxmi Devi', creditAmount: 30, servedAt: t(9) }),
+      p({ chatId: 'lx3', payeeUpiId: null, payeeName: 'Laxmi Devi', creditAmount: 20, servedAt: t(10) }),
+    ];
+    const r = foldUpiRevenueWithCredits({ proofs: [...proofs, ...lx], fakeChats: new Set(['fake']), upiDocs: docs, clients: cl });
+    expect(upiRowItems(r.credits, 'laxmi').map((i) => [i.chatId, i.payeeIdOurs])).toEqual([['lx3', false], ['lx2', false], ['lx1', true]]);
+    const rl = r.fold.rows.find((x) => x.id === '****2345@fbpe')!;
+    expect(upiRowItems(r.credits, rl.key).map((i) => [i.chatId, i.match, i.payeeIdOurs])).toEqual([['b', 'id', true], ['c', 'name', false], ['a', 'id', true]]);
+    expect(upiRowItems(r.credits, 'other').every((i) => i.payeeIdOurs === false)).toBe(true);
+  });
+
   it('the table response carries keys and no items', () => {
     expect(foldUpiRevenue({ proofs, fakeChats: new Set(), upiDocs: docs, clients: cl })).not.toHaveProperty('credits');
   });

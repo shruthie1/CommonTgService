@@ -1813,6 +1813,38 @@ describe('BotsService - reconcilePendingAdminBotsNow (promote existing pending b
     await service.reconcilePendingAdminBotsNow({ pendingLimit: 50 });
     expect(await model.countDocuments({ lifecycle: 'active_verified' })).toBe(10);
   });
+
+  test('2026-11-27 promoter without is_anonymous: bot is not asked for anonymous, so EditAdmin passes and the pending_rights block clears', async () => {
+    const tg = wire();
+    // Prod: promoter has addAdmins but is_anonymous=false. Telegram refuses any right the promoter lacks.
+    const promoterPerms = { changeInfo: true, postMessages: true, editMessages: true, deleteMessages: true, banUsers: true, inviteUsers: true, pinMessages: true, addAdmins: true, anonymous: false, manageCall: true };
+    tg.getGroupAdmins.mockImplementation(async () => [
+      { userId: ADMIN.tgId, rank: 'admin', permissions: promoterPerms },
+      ...promoted.map(id => ({ userId: id })),
+    ] as any);
+    // intersectWithPromoterRights looks the promoter up by plain mobile.
+    const usersSvc = mockModuleRef.get({ name: 'UsersService' } as any);
+    const baseSearch = usersSvc.search;
+    usersSvc.search = jest.fn(async (q: any) => (q?.mobile === ADMIN.mobile ? [ADMIN] : baseSearch(q)));
+    const asked: Array<Record<string, boolean>> = [];
+    tg.promoteBotInChannel.mockImplementation((async (_m: string, _c: string, botId: string, _u: string, rights: Record<string, boolean>) => {
+      asked.push(rights);
+      if (Object.entries(rights).some(([k, v]) => v && !(promoterPerms as any)[k])) throw new Error('403: RIGHT_FORBIDDEN (caused by channels.EditAdmin)');
+      promoted.push(botId);
+    }) as any);
+    const RIGHTS_REASON = 'admin setup failed: 403: RIGHT_FORBIDDEN (caused by channels.EditAdmin)';
+    for (let i = 0; i < 2; i++) await seedBot({ category: ChannelCategory.CHANNEL_NOTIFICATIONS, channelId: '-100cn', token: `cn${i}`, lifecycle: 'pending_admin', status: 'inactive', lifecycleReason: RIGHTS_REASON } as any);
+
+    const res = await service.reconcilePendingAdminBotsNow({ pendingLimit: 10, pendingCategory: ChannelCategory.CHANNEL_NOTIFICATIONS });
+
+    expect(asked.length).toBeGreaterThan(0);
+    expect(asked.every(r => r.anonymous === false)).toBe(true);
+    expect(res.failures).toEqual([]);
+    expect(await model.countDocuments({ category: ChannelCategory.CHANNEL_NOTIFICATIONS, lifecycle: 'active_verified', status: 'active' })).toBe(2);
+    // 862a62b5 mint_skipped reason=pending_rights: active rows no longer count as rights-blocked pending supply.
+    const rows = await model.find({ category: ChannelCategory.CHANNEL_NOTIFICATIONS }).lean();
+    expect((service as any).rightsBlockedPending(rows, '-100cn')).toBe(0);
+  });
 });
 
 describe('BotsService - Bot API rich messages', () => {

@@ -373,6 +373,8 @@ export interface UpiCountedCredit {
   rupees: number;
   /** 'id' = the payee id read matched one of ours; 'name' = put on the id by the banking name read; 'none' = other row. */
   match: 'id' | 'name' | 'none';
+  /** The payee id read is one of ours (matchUpi), whatever row the credit went to (Laxmi rows included). */
+  idOurs: boolean;
 }
 
 /** The fold plus every credit it counted, each with its row key: the credits of a row sum to its ₹ and count. */
@@ -412,15 +414,16 @@ export function foldUpiRevenueWithCredits(input: UpiFoldInput): { fold: UpiReven
     allPayers.add(chat);
     rupees += amt;
     credits++;
+    const ourId = matchUpi(r.payeeUpiId, known);
     if (isLaxmiName(r.payeeName)) {
       laxmi.rupees += amt;
       laxmi.credits++;
       laxmi.payers.add(chat);
-      counted.push({ key: UPI_LAXMI_KEY, row: UPI_LAXMI_KEY, proof: r, rupees: amt, match: 'none' });
+      counted.push({ key: UPI_LAXMI_KEY, row: UPI_LAXMI_KEY, proof: r, rupees: amt, match: 'none', idOurs: ourId !== null });
       continue;
     }
     const tag = bankingTag(r.payeeName);
-    let key = matchUpi(r.payeeUpiId, known);
+    let key = ourId;
     const byName = key === null && tag !== null && (key = nameMatchedId(tag, clientById.get(String(r.clientId ?? '')), accounts)) !== null;
     const a = acc.get(key) ?? newAcc();
     a.rupees += amt;
@@ -430,7 +433,7 @@ export function foldUpiRevenueWithCredits(input: UpiFoldInput): { fold: UpiReven
     if (tag) a.tags.set(tag, (a.tags.get(tag) ?? 0) + 1);
     acc.set(key, a);
     const label = key === null ? undefined : labelOf.get(key);
-    counted.push({ key: upiRowKey(key), row: label ? upiLabelKey(label) : upiRowKey(key), proof: r, rupees: amt, match: key === null ? 'none' : byName ? 'name' : 'id' });
+    counted.push({ key: upiRowKey(key), row: label ? upiLabelKey(label) : upiRowKey(key), proof: r, rupees: amt, match: key === null ? 'none' : byName ? 'name' : 'id', idOurs: ourId !== null });
   }
   for (const id of qrOf.keys()) if (!acc.has(id)) acc.set(id, newAcc());
   const share = (v: number) => (rupees > 0 ? Math.round((v / rupees) * 10_000) / 10_000 : 0);
@@ -520,6 +523,8 @@ export interface UpiRevenueItem {
   payeeTag: string | null;
   /** A payee name was read at all (ours or not). The name itself is never sent. */
   payeeNameRead: boolean;
+  /** The payee id read is one of ours. On a Laxmi-row item it shows the id is ours too. */
+  payeeIdOurs: boolean;
   /** Row from before tg-aut wrote verdicts (no archived screenshot). */
   legacy: boolean;
   /** clients.repl of the proof's client (serves the screenshot); null when unknown. */
@@ -539,7 +544,7 @@ const iso = (v: unknown): string | null => {
 export function upiRowItems(credits: UpiCountedCredit[], key: string, hosts: Map<string, string> = new Map()): UpiRevenueItem[] {
   return credits
     .filter((c) => c.key === key || c.row === key)
-    .map(({ proof: r, rupees, match }) => {
+    .map(({ proof: r, rupees, match, idOurs }) => {
       const read = normUpi(r.payeeUpiId);
       const tel = Number(r.telegramMsgId);
       return {
@@ -555,6 +560,7 @@ export function upiRowItems(credits: UpiCountedCredit[], key: string, hosts: Map
         payeeUpi: read ? maskUpi(read) : null,
         payeeTag: bankingTag(r.payeeName),
         payeeNameRead: String(r.payeeName ?? '').trim() !== '',
+        payeeIdOurs: idOurs,
         legacy: !(typeof r.verdict?.outcome === 'string' && r.verdict.outcome),
         clientHost: hosts.get(String(r.clientId ?? '')) ?? null,
         username: null,
