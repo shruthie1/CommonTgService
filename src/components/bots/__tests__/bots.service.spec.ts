@@ -1113,7 +1113,7 @@ describe('BotsService - validateAndReplaceBots + min-healthy top-up', () => {
   });
 
   test('categoryTopUpChannelId: live bot wins; with none live, the newest doc wins over the oldest', () => {
-    const pick = (list: any[]) => (service as any).categoryTopUpChannelId(list);
+    const pick = (list: any[]) => (service as any).categoryTopUpChannelId('CLIENT_UPDATES', list);
     const logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
     expect(pick([
       { category: 'CLIENT_UPDATES', channelId: '-100old', lifecycle: 'manual_attention', status: 'inactive', createdAt: new Date('2025-01-01') },
@@ -1129,6 +1129,110 @@ describe('BotsService - validateAndReplaceBots + min-healthy top-up', () => {
       '[BotHealth] kind=topup_channel category=CLIENT_UPDATES channel=-100new source=newest',
     ]);
     logSpy.mockRestore();
+  });
+
+  test('2026-11-27: the category\'s TELEGRAM_CHANNEL_CONFIG_* channel wins; else the most recently verified live bot', () => {
+    const pick = (category: string, list: any[]) => (service as any).categoryTopUpChannelId(category, list);
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    const live = [
+      // Oldest doc first (Mongo order): verified long ago.
+      { category: 'CHANNEL_NOTIFICATIONS', channelId: '-100stale', lifecycle: 'active_verified', status: 'active', createdAt: new Date('2025-09-21'), lastAdminVerifiedAt: new Date('2026-10-01') },
+      { category: 'CHANNEL_NOTIFICATIONS', channelId: '-100fresh', lifecycle: 'active_verified', status: 'active', createdAt: new Date('2025-09-20'), lastAdminVerifiedAt: new Date('2026-11-26') },
+    ];
+    try {
+      expect(pick('CHANNEL_NOTIFICATIONS', live)).toBe('-100fresh');
+      // Env key name differs from the category (prod: TELEGRAM_CHANNEL_CONFIG_CHANNEL_NOTIFIZ); the value names it.
+      process.env.TELEGRAM_CHANNEL_CONFIG_CHANNEL_NOTIFIZ = '-100cfg::CHANNEL_NOTIFICATIONS::1:a,2:b';
+      process.env.TELEGRAM_CHANNEL_CONFIG_OTHER = '-100other::USER_WARNINGS::3:c';
+      expect(pick('CHANNEL_NOTIFICATIONS', live)).toBe('-100cfg');
+      expect(pick('USER_WARNINGS', [])).toBe('-100other');
+      expect(pick('UNVDS', [])).toBeUndefined();
+      const lines = logSpy.mock.calls.map(c => String(c[0])).filter(l => l.includes('kind=topup_channel'));
+      expect(lines).toEqual([
+        '[BotHealth] kind=topup_channel category=CHANNEL_NOTIFICATIONS channel=-100fresh source=live',
+        '[BotHealth] kind=topup_channel category=CHANNEL_NOTIFICATIONS channel=-100cfg source=config',
+        '[BotHealth] kind=topup_channel category=USER_WARNINGS channel=-100other source=config',
+      ]);
+    } finally {
+      delete process.env.TELEGRAM_CHANNEL_CONFIG_CHANNEL_NOTIFIZ;
+      delete process.env.TELEGRAM_CHANNEL_CONFIG_OTHER;
+      logSpy.mockRestore();
+    }
+  });
+
+  describe('2026-11-27 CHANNEL_NOTIFICATIONS mint loop: no new bot while rights-refused bots are pending', () => {
+    const RIGHTS_REASON = 'admin setup failed: 403: RIGHT_FORBIDDEN (caused by channels.EditAdmin)';
+    function wireRightsRefused() {
+      const deps = wireHealthyDeps();
+      // Prod: the promoting admin lacks a right we ask for, so EditAdmin is refused for every bot.
+      deps.telegramService.promoteBotInChannel = jest.fn(async () => { throw new Error('403: RIGHT_FORBIDDEN (caused by channels.EditAdmin)'); });
+      deps.telegramService.getGroupAdmins = jest.fn(async () => [
+        { userId: MANAGER.tgId, rank: 'manager', permissions: { addAdmins: true, postMessages: true } },
+      ]);
+      return deps;
+    }
+
+    test('dead-bot replacement is skipped and logged when a rights-refused bot is pending', async () => {
+      process.env.channelManagerPrimary = MANAGER.mobile;
+      const { telegramService } = wireRightsRefused();
+      const logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+      mockedAxios.get.mockImplementation(async (url: string) => {
+        if (url.includes('cn_dead')) throw { response: { status: 401 } };
+        return { status: 200, data: { ok: true, result: { username: 'gm_bot' } } } as any;
+      });
+      await seedBot({ token: 'cn_dead', username: 'CHANNEL_NOTIFICATIONS_t3q_bot', category: ChannelCategory.CHANNEL_NOTIFICATIONS, channelId: '-100cn', status: 'inactive', lifecycle: 'dead_token' } as any);
+      await seedBot({ category: ChannelCategory.CHANNEL_NOTIFICATIONS, channelId: '-100cn', status: 'active', lifecycle: 'active_verified' } as any);
+      await seedBot({ category: ChannelCategory.CHANNEL_NOTIFICATIONS, channelId: '-100cn', status: 'active', lifecycle: 'active_verified' } as any);
+      await seedBot({ username: 'channelnotifications_hed_bot', category: ChannelCategory.CHANNEL_NOTIFICATIONS, channelId: '-100cn', status: 'inactive', lifecycle: 'pending_admin', lifecycleReason: RIGHTS_REASON, repairAttempts: 1, nextRepairAt: new Date(Date.now() + 864e5) } as any);
+
+      const res = await service.validateAndReplaceBots();
+
+      expect(telegramService.createBot).not.toHaveBeenCalled();
+      expect(res.replaced).toBe(0);
+      expect(await model.countDocuments({ category: ChannelCategory.CHANNEL_NOTIFICATIONS })).toBe(4);
+      const lines = logSpy.mock.calls.map(c => String(c[0]));
+      expect(lines).toContain('[BotHealth] kind=mint_skipped reason=pending_rights path=replace category=CHANNEL_NOTIFICATIONS channel=-100cn pending=1 bot=@CHANNEL_NOTIFICATIONS_t3q_bot');
+      expect(res.failures.some(f => f.startsWith('CHANNEL_NOTIFICATIONS: 1 minted bot(s) still pending_admin after a rights refusal'))).toBe(true);
+      logSpy.mockRestore();
+      delete process.env.channelManagerPrimary;
+    });
+
+    test('top-up below the floor does not mint while a rights-refused bot is pending', async () => {
+      process.env.channelManagerPrimary = MANAGER.mobile;
+      const { telegramService } = wireRightsRefused();
+      const logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+      await seedBot({ category: ChannelCategory.CHANNEL_NOTIFICATIONS, channelId: '-100cn', status: 'active', lifecycle: 'active_verified' } as any);
+      await seedBot({ username: 'channelnotifications_mo2_bot', category: ChannelCategory.CHANNEL_NOTIFICATIONS, channelId: '-100cn', status: 'inactive', lifecycle: 'pending_admin', lifecycleReason: RIGHTS_REASON, repairAttempts: 1 } as any);
+      // Another category at its floor so nothing else mints.
+      await seedBot({ category: ChannelCategory.USER_WARNINGS, channelId: '-100uw', status: 'active', lifecycle: 'active_verified' } as any);
+      await seedBot({ category: ChannelCategory.USER_WARNINGS, channelId: '-100uw', status: 'active', lifecycle: 'active_verified' } as any);
+
+      const res = await service.validateAndReplaceBots();
+
+      expect(telegramService.createBot).not.toHaveBeenCalled();
+      expect(res.toppedUp).toBe(0);
+      const lines = logSpy.mock.calls.map(c => String(c[0]));
+      expect(lines).toContain('[BotHealth] kind=mint_skipped reason=pending_rights path=topup category=CHANNEL_NOTIFICATIONS channel=-100cn pending=1');
+      logSpy.mockRestore();
+      delete process.env.channelManagerPrimary;
+    });
+
+    test('a pending bot that is not rights-refused does not block a replacement', async () => {
+      process.env.channelManagerPrimary = MANAGER.mobile;
+      const { telegramService } = wireHealthyDeps();
+      mockedAxios.get.mockImplementation(async (url: string) => {
+        if (url.includes('cn_dead')) throw { response: { status: 401 } };
+        return { status: 200, data: { ok: true, result: { username: 'gm_bot' } } } as any;
+      });
+      await seedBot({ token: 'cn_dead', category: ChannelCategory.CHANNEL_NOTIFICATIONS, channelId: '-100cn', status: 'inactive', lifecycle: 'dead_token' } as any);
+      await seedBot({ category: ChannelCategory.CHANNEL_NOTIFICATIONS, channelId: '-100cn', status: 'active', lifecycle: 'active_verified' } as any);
+      await seedBot({ category: ChannelCategory.CHANNEL_NOTIFICATIONS, channelId: '-100cn', status: 'inactive', lifecycle: 'pending_admin', lifecycleReason: 'awaiting channel-admin add', nextRepairAt: new Date(Date.now() + 864e5) } as any);
+
+      await service.validateAndReplaceBots();
+
+      expect(telegramService.createBot).toHaveBeenCalled();
+      delete process.env.channelManagerPrimary;
+    });
   });
 
   test('category below floor (1 live) → tops up to 2 by provisioning a new bot', async () => {

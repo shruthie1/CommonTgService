@@ -71,3 +71,19 @@ export function ppplTarget(chatId?: string, botToken?: string) {
     if (!botToken) notePpplSource('bot_tokens', target);
     return nextTarget(target, botToken);
 }
+
+/**
+ * Retry token for a send that `failed` was rejected on: the token after it in that chat's own list (the
+ * CLIENT_UPDATES bots for a pppl send to their channel, else BOT_TOKENS), never the failed one. Reads no shared
+ * rotation index, so a concurrent send cannot hand back the failed token. null when the list has no other token.
+ */
+export function retryTarget(target: 'notif' | 'pppl', failed: { token: string; chatId: string }): { token: string; chatId: string } | null {
+    const cu = target === 'pppl' ? clientUpdatesConfig() : null;
+    const tokens = cu && failed.chatId === cu.chatId ? cu.tokens : initializeBotTokens();
+    const start = tokens.indexOf(failed.token);
+    for (let i = 1; i <= tokens.length; i++) {
+        const token = tokens[(Math.max(start, 0) + i) % tokens.length];
+        if (token !== failed.token) return { token, chatId: failed.chatId };
+    }
+    return null;
+}

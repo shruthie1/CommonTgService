@@ -116,6 +116,41 @@ describe('sendBotNotice', () => {
     warn.mockRestore();
   });
 
+  test('2026-11-27: a concurrent send moving the shared rotation never hands the retry back the failed token', async () => {
+    const ax = require('axios') as jest.Mocked<typeof axios>;
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    ax.post.mockImplementation(async (url: string) => {
+      if (url.includes('bottok1/')) throw rejection(400, 'Bad Request: PEER_ID_INVALID');
+      return { data: { ok: true } };
+    });
+    // A takes tok1, B takes tok2 before A's retry: the shared index now points at tok1 again.
+    const [a, b] = await Promise.all([sendBotNotice('notif', { title: 'A' }), sendBotNotice('notif', { title: 'B' })]);
+    expect(a.sent).toBe(true);
+    expect(b.sent).toBe(true);
+    const urls = ax.post.mock.calls.map((c: any[]) => c[0]);
+    expect(urls.filter((u: string) => u.includes('bottok1/'))).toHaveLength(1); // the failed token is never retried
+    const lines = warn.mock.calls.map((c) => String(c[0]));
+    expect(lines).toEqual([expect.stringContaining('kind=retry_next_token target=notif chat=-1001801844217 failed_bot=tok1 next_bot=tok2')]);
+    warn.mockRestore();
+  });
+
+  test('2026-11-27: the retry token is the one after the failed one in its own list, whatever the rotation did', async () => {
+    const ax = require('axios') as jest.Mocked<typeof axios>;
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    process.env.TELEGRAM_CHANNEL_CONFIG_CLIENT_UPDATES = '-100777::CLIENT_UPDATES::11:cuA,22:cuB,33:cuC';
+    delete process.env.updatesChannel;
+    ax.post.mockImplementation(async (url: string) => {
+      if (url.includes('bot11:cuA/')) throw rejection(403, 'Forbidden: bot is not a member of the channel chat');
+      return { data: { ok: true } };
+    });
+    const sends = await Promise.all([1, 2, 3].map(() => sendBotNotice('pppl', { title: 'x' })));
+    expect(sends.every(s => s.sent)).toBe(true);
+    const lines = warn.mock.calls.map((c) => String(c[0]));
+    expect(lines).toEqual([expect.stringContaining('failed_bot=11 next_bot=22')]);
+    warn.mockRestore();
+  });
+
   test('2026-11-23 review: an explicit token is never swapped; a payload 400 still falls back with the same token', async () => {
     const ax = require('axios') as jest.Mocked<typeof axios>;
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);

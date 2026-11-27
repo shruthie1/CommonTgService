@@ -29,8 +29,10 @@
  * "Laxmi" (owner 2026-11-23): a payee name read with the "Laxmi" spelling means a fake receipt. Such credits never go
  * under an id or a label: they form one flagged row (kind 'laxmi', key 'laxmi'). Totals are unchanged by both.
  *
- * Output never carries a full UPI id, chat id or name: ids are cut to the last 4 of the local part plus the
+ * Output never carries a full UPI id or a payee name: ids are cut to the last 4 of the local part plus the
  * handle ("****3302@fbpe"); the tag is the initials of the banking name read most often on that id's receipts.
+ * Row summaries carry no chat id. Drill-down items (upiRowItems, GET /monitor/upi-revenue/items) do carry the
+ * full chatId, with clientId, telegramMsgId and username, so the UI can link each credit to its chat.
  * Only main QR ids get a tag (some client's qrId now, or a qrId* key of the upi-ids doc): on low-count gpay ids
  * the most frequent name read is noise (owner 2026-11-22), so gpay-only and other ids stay untagged.
  */

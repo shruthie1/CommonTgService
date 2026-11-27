@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { notifTarget, ppplTarget } from './logbots';
+import { notifTarget, ppplTarget, retryTarget } from './logbots';
 import { formatClassicNotificationHtml, formatRichMessageHtml, notificationKeyboard } from './rich-message';
 import type { RichNotificationInput } from './rich-message';
 
@@ -72,9 +72,9 @@ async function sendWithToken(t: { token: string; chatId: string }, input: RichNo
 /**
  * Raw-token notices as a Bot API rich message (sendRichMessage) to the accounts / updates chat with the token
  * rotation of that chat (BOT_TOKENS, or the CLIENT_UPDATES bots for that channel). When Telegram rejects the token or
- * its access to the chat (401/403, PEER_ID_INVALID, chat not found, frozen...), the next token of the same rotation is
- * tried once. An explicit opts.token is never swapped. Never throws; deliberately does not use fetchWithTimeout (its
- * failure alerts would recurse here).
+ * its access to the chat (401/403, PEER_ID_INVALID, chat not found, frozen...), the token after the failed one in that
+ * chat's list is tried once (never the failed one). An explicit opts.token is never swapped. Never throws;
+ * deliberately does not use fetchWithTimeout (its failure alerts would recurse here).
  */
 export async function sendBotNotice(
     target: 'notif' | 'pppl',
@@ -96,8 +96,14 @@ export async function sendBotNotice(
         console.warn(`[bot-notice] kind=all_tokens_failed reason=explicit_token target=${target} chat=${t.chatId} bot=${botId(t.token)}`);
         return { sent: false, data: first.data };
     }
-    const next = pick();
-    if (next.token === t.token) {
+    let next: { token: string; chatId: string } | null;
+    try {
+        next = retryTarget(target, t);
+    } catch (error) {
+        console.error('Bot notice retry skipped (no bot token):', (error as Error)?.message);
+        return { sent: false, data: first.data };
+    }
+    if (!next) {
         console.warn(`[bot-notice] kind=all_tokens_failed reason=single_token target=${target} chat=${t.chatId} bot=${botId(t.token)}`);
         return { sent: false, data: first.data };
     }

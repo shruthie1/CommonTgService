@@ -31,6 +31,21 @@ export interface DeadBotInfo {
 /** Rows that were not sending before they died: replacing them would mint bots for records, not for live slots. */
 const NEVER_REPLACED_LIFECYCLES = new Set(['manual_attention', 'pending_admin']);
 
+/**
+ * Telegram refused the admin promotion because of the promoting account's rights (or the channel's admin cap).
+ * A freshly minted bot hits the same wall: 2026-10-25..11-26, 27 CHANNEL_NOTIFICATIONS bots, one per night.
+ */
+const RIGHTS_REFUSAL = /RIGHT_FORBIDDEN|CHAT_ADMIN_REQUIRED|not enough rights|ADMINS_TOO_MUCH/i;
+
+/** Channel of a category in the current remote config: TELEGRAM_CHANNEL_CONFIG_<KEY> = "<chat>::<CATEGORY>::<tokens>". */
+export function configuredCategoryChannelId(category: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
+    for (const key of Object.keys(env).filter(k => k.startsWith('TELEGRAM_CHANNEL_CONFIG_')).sort()) {
+        const [chat = '', cat = ''] = String(env[key] || '').split('::');
+        if (cat.trim() === category && chat.trim()) return chat.trim();
+    }
+    return undefined;
+}
+
 interface TokenCheckResult {
     verdict: 'alive' | 'dead' | 'unknown';
     status?: number;
@@ -1333,9 +1348,15 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                     // Mint into the category's current channel (same source as the top-up), never blindly into the
                     // dead bot's: a category that moved channel keeps old rows on the old one.
                     const categoryBots = await this.botModel.find({ category: deadBot.category }).lean().exec();
-                    const channelId = this.categoryTopUpChannelId(categoryBots);
+                    const channelId = this.categoryTopUpChannelId(deadBot.category, categoryBots);
                     if (!channelId) {
                         console.log(`[BotHealth] kind=replace_skipped reason=no_channel category=${deadBot.category} bot=@${deadBot.username}`);
+                        continue;
+                    }
+                    const pendingRights = this.rightsBlockedPending(categoryBots, channelId);
+                    if (pendingRights > 0) {
+                        const note = this.noteMintSkippedPendingRights('replace', deadBot.category, channelId, pendingRights, deadBot.username);
+                        if (!failures.includes(note)) failures.push(note);
                         continue;
                     }
                     if (channelId !== deadBot.channelId) {
@@ -1807,7 +1828,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             // channelId for the new bot(s): the channel the category's live bots post to. A category moved to a new
             // channel (CLIENT_UPDATES 2026-11-23) keeps its retired rows on the old one, so list[0] (the oldest doc)
             // would mint bots into the dead channel. Fall back to the newest doc when no bot is live.
-            const channelId = this.categoryTopUpChannelId(list);
+            const channelId = this.categoryTopUpChannelId(category, list);
             if (!channelId) {
                 topUpFailures.push(`${category}: below floor (${liveCount}/${this.minHealthyBotsPerCategory}) but no channelId known — skipped`);
                 continue;
@@ -1822,6 +1843,12 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             const remainingDeficit = deficit - reuse.reused;
             if (remainingDeficit <= 0) {
                 if (reuse.reused > 0) console.log(`[BotHealth] ${category}: deficit met by REUSING ${reuse.reused} existing bot(s) — no creation`);
+                continue;
+            }
+            // Re-read: reuse may have activated some of the pending rows.
+            const pendingRights = this.rightsBlockedPending(await this.botModel.find({ category }).lean().exec(), channelId);
+            if (pendingRights > 0) {
+                topUpFailures.push(this.noteMintSkippedPendingRights('topup', category, channelId, pendingRights));
                 continue;
             }
 
@@ -1885,22 +1912,52 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         return { toppedUp, creationAttempts, topUpFailures, proposedActions, stopPrivilegedWork };
     }
 
-    /** Channel for a category's new bots: a live bot's channel, else the newest doc's (never the oldest retired row's). */
-    private categoryTopUpChannelId(list: Array<Partial<Bot> & { createdAt?: Date | string; _id?: any }>): string | undefined {
-        const live = list.find(b => this.isSelectable(b) && b.channelId);
-        if (live) {
-            console.log(`[BotHealth] kind=topup_channel category=${live.category} channel=${live.channelId} source=live`);
-            return live.channelId;
+    /**
+     * Channel for a category's new bots: the category's TELEGRAM_CHANNEL_CONFIG_* channel (current config), else the
+     * most recently verified live bot's, else the newest doc's (never the oldest retired row's).
+     */
+    private categoryTopUpChannelId(category: string, list: Array<Partial<Bot> & { createdAt?: Date | string; _id?: any }>): string | undefined {
+        const configured = configuredCategoryChannelId(category);
+        if (configured) {
+            console.log(`[BotHealth] kind=topup_channel category=${category} channel=${configured} source=config`);
+            return configured;
         }
+        const ms = (d?: Date | string) => {
+            const t = d ? new Date(d).getTime() : NaN;
+            return Number.isFinite(t) ? t : 0;
+        };
         const time = (b: { createdAt?: Date | string; _id?: any }) => {
-            const t = b.createdAt ? new Date(b.createdAt).getTime() : NaN;
-            if (Number.isFinite(t)) return t;
+            const t = ms(b.createdAt);
+            if (t) return t;
             const ts = typeof b._id?.getTimestamp === 'function' ? b._id.getTimestamp().getTime() : NaN;
             return Number.isFinite(ts) ? ts : 0;
         };
+        const verified = (b: Partial<Bot>) => ms(b.lastAdminVerifiedAt) || ms(b.lastValidatedAt);
+        const live = list.filter(b => this.isSelectable(b) && b.channelId)
+            .sort((a, b) => verified(b) - verified(a) || time(b) - time(a))[0];
+        if (live) {
+            console.log(`[BotHealth] kind=topup_channel category=${category} channel=${live.channelId} source=live`);
+            return live.channelId;
+        }
         const newest = list.filter(b => b.channelId).sort((a, b) => time(b) - time(a))[0];
-        if (newest) console.log(`[BotHealth] kind=topup_channel category=${newest.category} channel=${newest.channelId} source=newest`);
+        if (newest) console.log(`[BotHealth] kind=topup_channel category=${category} channel=${newest.channelId} source=newest`);
         return newest?.channelId;
+    }
+
+    /**
+     * Bots already minted for this category and channel that sit in pending_admin after a rights refusal. They are
+     * pending supply: a new bot would be refused the same way, so no bot is minted while any of them is left.
+     */
+    private rightsBlockedPending(list: Array<Partial<Bot>>, channelId: string): number {
+        return list.filter(b => b.channelId === channelId
+            && this.lifecycleOf(b) === 'pending_admin'
+            && RIGHTS_REFUSAL.test(String(b.lifecycleReason || ''))).length;
+    }
+
+    /** Log + summary line for a mint skipped because rights-refused bots are still pending. */
+    private noteMintSkippedPendingRights(path: 'replace' | 'topup', category: string, channelId: string, pending: number, bot?: string): string {
+        console.log(`[BotHealth] kind=mint_skipped reason=pending_rights path=${path} category=${category} channel=${channelId} pending=${pending}${bot ? ` bot=@${bot}` : ''}`);
+        return `${category}: ${pending} minted bot(s) still pending_admin after a rights refusal in ${channelId}; no new bot minted. Fix the promoting admin's rights; reconcile then activates them.`;
     }
 
     /**
