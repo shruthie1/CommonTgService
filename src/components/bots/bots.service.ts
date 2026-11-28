@@ -1490,12 +1490,16 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         const pending = due
             .map((bot, order) => ({ bot, order, live: liveByCategory.get(String(bot.category)) || 0 }))
             .sort((a, b) => a.live - b.live || a.order - b.order)
-            .slice(0, pendingLimit)
             .map(entry => entry.bot);
 
+        // pendingLimit counts handled rows only. Rows skipped for an uncontrollable channel do not use a slot,
+        // so they cannot starve other categories (2026-11-28: 3 SAVED_MESSAGES rows blocked 27 others nightly).
+        let handled = 0;
         for (const bot of pending) {
+            if (handled >= pendingLimit) break;
             const attempts = bot.repairAttempts || 0;
             if (attempts >= this.maxPendingAdminRepairAttempts) {
+                handled++;
                 proposedActions.push(`move @${bot.username} to manual_attention after ${attempts} failed admin repairs`);
                 if (!options.dryRun) {
                     await this.botModel.updateOne({ _id: bot._id, lifecycle: 'pending_admin' }, {
@@ -1510,6 +1514,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                 // real run would attempt. Do not connect accounts, query channel admins, trigger
                 // fetchWithTimeout notifications, or perform any Telegram mutation (so the
                 // controllability scan below is deliberately NOT run in dry-run).
+                handled++;
                 proposedActions.push(`reconcile pending-admin @${bot.username} in ${bot.channelId}`);
                 continue;
             }
@@ -1520,8 +1525,13 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             // top-up circuit-breaker raises the one alert. (Cache: at most one scan per channel/run.)
             if (!(await this.resolveChannelAdminCached(bot.channelId, controllability))) {
                 proposedActions.push(`skip pending-admin @${bot.username}: channel ${bot.channelId} not controllable (no re-add possible)`);
+                // Wait a day before checking this row again; repairAttempts stays unchanged.
+                await this.botModel.updateOne({ _id: bot._id, lifecycle: 'pending_admin' }, {
+                    $set: { nextRepairAt: new Date(now.getTime() + 24 * 60 * 60 * 1000) },
+                }).exec();
                 continue;
             }
+            handled++;
             try {
                 const info = await this.telegramService.getBotInfo(bot.token);
                 const botId = String(info?.id || '');
@@ -2408,22 +2418,26 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
      * Telegram's EditAdmin returns RIGHT_FORBIDDEN if you grant a right you don't have — e.g. our
      * manager has addAdmins but not postMessages in some channels, so a blanket postMessages:true
      * fails the whole promotion. A creator (all rights) passes everything through unchanged.
+     * When the promoter's rights cannot be read, try the desired set without anonymous: EditAdmin
+     * refuses anonymous unless the promoter holds it, and the bot does not need it.
      */
     private async intersectWithPromoterRights(
         promoterMobile: string,
         channelId: string,
         desired: Record<string, boolean>,
     ): Promise<Record<string, boolean>> {
+        const withoutAnonymous = { ...desired, anonymous: false };
         try {
             const promoterUser = (await this.usersService.search({ mobile: promoterMobile }))[0];
             const promoterTgId = promoterUser?.tgId ? String(promoterUser.tgId) : null;
-            if (!promoterTgId) return desired;
+            if (!promoterTgId) return withoutAnonymous;
             const viaBots = await this.readChannelViaBots(channelId);
             const admins = viaBots?.admins.length ? viaBots.admins : await this.telegramService.getGroupAdmins(promoterMobile, channelId);
             const me = (Array.isArray(admins) ? admins : []).find((a: any) => String(a?.userId ?? a?.id) === promoterTgId);
             // Creator (rank 'creator' or all-perms) → keep desired as-is.
+            if ((me as any)?.rank === 'creator') return desired;
             const perms = (me as any)?.permissions;
-            if (!perms || (me as any)?.rank === 'creator') return desired;
+            if (!perms) return withoutAnonymous;
             const capped: Record<string, boolean> = {};
             for (const [k, v] of Object.entries(desired)) {
                 // Grant a right only if desired AND the promoter holds it. anonymous too: EditAdmin returns
@@ -2432,7 +2446,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             }
             return capped;
         } catch {
-            return desired; // best-effort — if we can't read rights, try the full set
+            return withoutAnonymous;
         }
     }
 

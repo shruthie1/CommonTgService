@@ -1845,6 +1845,91 @@ describe('BotsService - reconcilePendingAdminBotsNow (promote existing pending b
     const rows = await model.find({ category: ChannelCategory.CHANNEL_NOTIFICATIONS }).lean();
     expect((service as any).rightsBlockedPending(rows, '-100cn')).toBe(0);
   });
+
+  // 2026-11-28 starvation: 3 SAVED_MESSAGES rows on an uncontrollable channel took all 3 slots every
+  // night, so 27 CHANNEL_NOTIFICATIONS rows were never tried.
+  async function seedStarvation() {
+    const past = new Date(Date.now() - 60 * 60 * 1000);
+    for (let i = 0; i < 3; i++) {
+      await seedBot({ category: ChannelCategory.SAVED_MESSAGES, channelId: '-100sm', token: `sm${i}`, lifecycle: 'pending_admin', status: 'inactive', nextRepairAt: past } as any);
+    }
+    await seedBot({ category: ChannelCategory.CHANNEL_NOTIFICATIONS, channelId: '-100cn', token: 'cn0', lifecycle: 'pending_admin', status: 'inactive', nextRepairAt: new Date(Date.now() - 60 * 1000) } as any);
+    const original = (service as any).resolveChannelAdminMobile.bind(service);
+    const resolve = jest.fn(async (channelId: string) => (channelId === '-100sm' ? null : original(channelId)));
+    (service as any).resolveChannelAdminMobile = resolve;
+    return resolve;
+  }
+
+  test('2026-11-28 uncontrollable rows do not use the per-run limit and wait 24h; the controllable row is attempted', async () => {
+    wire();
+    await seedStarvation();
+    const before = Date.now();
+
+    const res = await service.reconcilePendingAdminBotsNow({});
+
+    expect(res.failures).toEqual([]);
+    expect(await model.countDocuments({ category: ChannelCategory.CHANNEL_NOTIFICATIONS, lifecycle: 'active_verified', status: 'active' })).toBe(1);
+    const skipped = await model.find({ category: ChannelCategory.SAVED_MESSAGES }).lean();
+    expect(skipped).toHaveLength(3);
+    for (const row of skipped) {
+      expect(row.lifecycle).toBe('pending_admin');
+      expect(row.repairAttempts || 0).toBe(0);
+      const at = new Date(row.nextRepairAt).getTime();
+      expect(at).toBeGreaterThanOrEqual(before + 24 * 60 * 60 * 1000 - 1000);
+      expect(at).toBeLessThanOrEqual(Date.now() + 24 * 60 * 60 * 1000 + 1000);
+    }
+  });
+
+  test('2026-11-28 dryRun on the starvation set writes nothing and checks no controllability', async () => {
+    wire();
+    const resolve = await seedStarvation();
+    const snapshot = JSON.stringify(await model.find({}).sort({ token: 1 }).lean());
+
+    const res = await service.reconcilePendingAdminBotsNow({ dryRun: true });
+
+    expect(res.dryRun).toBe(true);
+    expect(res.proposedActions).toHaveLength(3);
+    expect(resolve).not.toHaveBeenCalled();
+    expect(JSON.stringify(await model.find({}).sort({ token: 1 }).lean())).toBe(snapshot);
+  });
+
+  describe('intersectWithPromoterRights fallbacks never ask for anonymous (RIGHT_FORBIDDEN)', () => {
+    const desired = { postMessages: true, addAdmins: true, anonymous: true };
+    const expected = { postMessages: true, addAdmins: true, anonymous: false };
+
+    test('no promoter tgId', async () => {
+      wire();
+      mockModuleRef.get({ name: 'UsersService' } as any).search = jest.fn(async () => []);
+      expect(await (service as any).intersectWithPromoterRights(ADMIN.mobile, '-100cn', desired)).toEqual(expected);
+    });
+
+    test('promoter not in the admin list', async () => {
+      const tg = wire();
+      mockModuleRef.get({ name: 'UsersService' } as any).search = jest.fn(async () => [ADMIN]);
+      tg.getGroupAdmins.mockImplementation(async () => []);
+      expect(await (service as any).intersectWithPromoterRights(ADMIN.mobile, '-100cn', desired)).toEqual(expected);
+    });
+
+    test('promoter listed without permissions', async () => {
+      const tg = wire();
+      mockModuleRef.get({ name: 'UsersService' } as any).search = jest.fn(async () => [ADMIN]);
+      tg.getGroupAdmins.mockImplementation(async () => [{ userId: ADMIN.tgId, rank: 'admin' }] as any);
+      expect(await (service as any).intersectWithPromoterRights(ADMIN.mobile, '-100cn', desired)).toEqual(expected);
+    });
+
+    test('rights lookup throws', async () => {
+      wire();
+      mockModuleRef.get({ name: 'UsersService' } as any).search = jest.fn(async () => { throw new Error('db down'); });
+      expect(await (service as any).intersectWithPromoterRights(ADMIN.mobile, '-100cn', desired)).toEqual(expected);
+    });
+
+    test('creator still gets the desired set unchanged', async () => {
+      const tg = wire();
+      mockModuleRef.get({ name: 'UsersService' } as any).search = jest.fn(async () => [ADMIN]);
+      tg.getGroupAdmins.mockImplementation(async () => [{ userId: ADMIN.tgId, rank: 'creator', permissions: {} }] as any);
+      expect(await (service as any).intersectWithPromoterRights(ADMIN.mobile, '-100cn', desired)).toEqual(desired);
+    });
+  });
 });
 
 describe('BotsService - Bot API rich messages', () => {
